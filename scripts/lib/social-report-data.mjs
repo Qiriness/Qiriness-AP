@@ -76,7 +76,7 @@ export function adaptSocialReport({ companyId, timezone, endMonth, asOf, account
         // Base counts and insights are overwritten independently. Use the later observation conservatively.
         const observed = [p.fetched_at, p.insights_at].filter(Boolean).sort().at(-1);
         const postTags = links.filter(l => l.accountId === p.account_id && l.postId === p.external_id).map(l => tags.find(t => t.id === l.tagId)?.name).filter(Boolean);
-        return { id: p.account_id + ':' + p.external_id, accountId: p.account_id, publishedAt: dateInZone(p.published_at, timezone),
+        return { id: p.account_id + ':' + p.external_id, accountId: p.account_id, publishedAt: dateInZone(p.published_at, timezone), publishedAtTimestamp: p.published_at,
           observedAt: observed ? dateInZone(observed, timezone) : asOf, caption: p.caption_excerpt ?? '', format: p.media_type ?? '', pillar: postTags.join(' · '),
           views: number(p.views), reach: number(p.reach), likes: number(p.likes), comments: number(p.comments), shares: number(p.shares), saves: number(p.saves),
           interactions: number(p.engagement), follows: number(p.follows), nonFollowerShare: number(p.non_followers_pct) === null ? null : Number(p.non_followers_pct)/100, nonFollowerBasis: number(p.non_followers_pct) === null ? null : 'manual', metricScope: 'lifetime-at-snapshot' };

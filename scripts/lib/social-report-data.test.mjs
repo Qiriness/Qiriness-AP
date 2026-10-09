@@ -89,7 +89,10 @@ test('report embeds only supplied company, escapes scripts, preserves CSS and re
   const embedded = JSON.parse(html.match(/<script id="saved-state" type="application\/json">([\s\S]*?)<\/script>/)[1]);
   assert.equal(embedded.companies.length, 1);
   assert.equal(embedded.companies[0].brand.name, state.companies[0].brand.name);
-  assert.equal(html.match(/<style>[\s\S]*?<\/style>/)[0], template.match(/<style>[\s\S]*?<\/style>/)[0]);
+  const baseStyle=template.match(/<style>([\s\S]*?)<\/style>/)[1];
+  assert.ok(html.match(/<style>([\s\S]*?)<\/style>/)[1].startsWith(baseStyle));
+  assert.ok(!html.includes('reportAvailability'));
+  assert.ok(!html.includes('reportCities'));
   assert.throws(() => socialReportState(data, { name: 'Dummy', endMonth: '2026-09', platforms: [] }));
   for (const match of html.matchAll(/<script>([\s\S]*?)<\/script>/g)) assert.doesNotThrow(() => new Function(match[1]));
 });

@@ -21,7 +21,9 @@ try{
  await render(fixture);
  const audience=page.locator('.audience-grid').first();
  assert.match(await audience.textContent(),/Female/);assert.match(await audience.textContent(),/25-34/);assert.match(await audience.textContent(),/FR/);
- assert.match(await audience.textContent(),/Paris/);
+ assert.doesNotMatch(await audience.textContent(),/Paris|Cities/);
+ assert.equal(await page.locator('.data-availability').count(),0);
+ assert.doesNotMatch(await page.locator('#report').textContent(),/Historical follower totals cannot be reconstructed|No follower snapshot on or before/);
  assert.match(await page.locator('.post-table').textContent(),/75/);
  assert.match(await page.locator('#report').textContent(),/latest available; after the reporting period/);
  for(const [months,start,previousStart,previousEnd] of [[1,'2025-12-01','2025-11-01','2025-11-30'],[6,'2025-07-01','2025-01-01','2025-06-30'],[12,'2025-01-01','2024-01-01','2024-12-31']]){
@@ -36,5 +38,24 @@ try{
   assert.equal(await page.locator('.overfull').count(),0);
  }
  assert.deepEqual(errors,[]);
- console.log('PASS: dated audience, followers, signed net changes, actual 1/6/12-month totals, period boundaries, trend length and blank explanations.');
+ const slots=[[2,9,59],[3,9,83],[4,9,47],[1,9,39],[10,11,57],[11,11,45],[9,10,59],[17,10,31]];
+ const postingFixture={...fixture,posts:slots.map(([day,hour,engagement],i)=>({account_id:'a',external_id:'post-'+i,published_at:'2025-12-'+String(day).padStart(2,'0')+'T'+String(hour).padStart(2,'0')+':00:00Z',fetched_at:'2026-10-08T12:00:00Z',caption_excerpt:'A very long post caption '.repeat(30),engagement,views:100}))};
+ await render(postingFixture);
+ const activity=await page.locator('.posting-times').textContent();
+ assert.match(activity,/10:00–11:0057 avg. engagement · 4 posts/);
+ assert.match(activity,/12:00–13:0051 avg. engagement · 2 posts/);
+ assert.match(activity,/11:00–12:0045 avg. engagement · 2 posts/);
+ assert.match(activity,/Tuesday59 avg. engagement · 2 posts/);
+ assert.match(activity,/Wednesday57 avg. engagement · 3 posts/);
+ assert.match(activity,/Thursday46 avg. engagement · 2 posts/);
+ assert.equal(await page.locator('.overfull').count(),0);
+ const caption=await page.locator('.post-name').first().evaluate(el=>({width:el.clientWidth,scroll:el.scrollWidth,height:el.getBoundingClientRect().height,lineHeight:parseFloat(getComputedStyle(el).lineHeight),overflow:getComputedStyle(el).textOverflow,whiteSpace:getComputedStyle(el).whiteSpace,title:el.title}));
+ assert.ok(caption.width>0&&caption.scroll>caption.width);
+ assert.ok(caption.height<=caption.lineHeight+1);
+ assert.equal(caption.overflow,'ellipsis');assert.equal(caption.whiteSpace,'nowrap');assert.equal(caption.title,postingFixture.posts[0].caption_excerpt);
+ await page.evaluate(async()=>{await SocialReport.setContext({endMonth:'2025-11'});});
+ assert.doesNotMatch(await page.locator('.posting-times').textContent(),/57 avg/);
+ assert.equal(await page.locator('.overfull').count(),0);
+ assert.deepEqual(errors,[]);
+ console.log('PASS: comparison totals, country-only audience, period-aware posting times, single-line ellipsis and removed availability text.');
 }finally{await browser.close();}
