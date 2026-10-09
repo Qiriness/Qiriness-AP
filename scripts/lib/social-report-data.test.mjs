@@ -43,7 +43,7 @@ test('complete month totals preserve zero, null, exact followers and platform se
   assert.equal(month.followersEnd, 130);
   assert.deepEqual(data.platforms[0].nativePeriodMetrics, []);
   assert.equal(data.platforms[0].posts[0].publishedAt, '2026-10-01');
-  assert.equal(data.platforms[0].audienceSnapshots.length, 1);
+  assert.equal(data.platforms[0].audienceSnapshots.length, 2);
   assert.deepEqual(data.platforms[0].audienceSnapshots[0].countries, [{ label: 'Other', value: 100 }]);
   assert.deepEqual(data.platforms[0].bandRules.views, { mode: 'absolute', low: 20, high: 100 });
 });

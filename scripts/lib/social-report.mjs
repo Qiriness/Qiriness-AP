@@ -1,5 +1,6 @@
 import template from './social-report-template.mjs';
 import { bandOf, median } from './social-bands.mjs';
+import { reportPeriodTotals, reportMissingReasons } from './social-report-availability.mjs';
 
 const sections = [ ['cover', 'Cover'], ['overview', 'Executive overview'], ['performance', 'Platform performance'], ['audience', 'Audience insights'], ['content', 'Content performance'], ['strategy', 'Concluding summary'], ['method', 'Definitions & colour coding'] ];
 export function socialReportState(data, { name, locale = 'en-GB', months = 1, endMonth, platforms }) {
@@ -28,11 +29,35 @@ export function renderSocialReport(state) {
   html = html.replace('syncControls();window.SocialReport.ready=render();', handler + '\nsyncControls();window.SocialReport.ready=render();');
   // An invalid stored draft must never fall back to the illustrative company's results.
   html = html.replace('catch(e){state=initialState()}', 'catch(e){state=clone(embedded)}');
+  const aggregateStart=html.indexOf('function aggregate(p,r){');
+  const aggregateEnd=html.indexOf('function aggregatePaid(',aggregateStart);
+  html=html.slice(0,aggregateStart)+'const reportPeriodTotals='+reportPeriodTotals.toString()+';\nfunction aggregate(p,r){return reportPeriodTotals(p,r,state.settings.erBasis);}\n'+html.slice(aggregateEnd);
+  html=html.replace('s.asOf<=r.current.end',"s.asOf<=(company().data.audienceObservationPolicy==='latest-available'?company().data.asOf:r.current.end)");
+  html=html.replace("!['views','reach'].includes(x.nonFollowerBasis)","!['views','reach','manual'].includes(x.nonFollowerBasis)");
+  html=html.replace("snapshot.asOf<r.current.start?' (before the reporting period)':''", "snapshot.asOf>r.current.end?' (latest available; after the reporting period)':snapshot.asOf<r.current.start?' (before the reporting period)':''");
+  html=html.replace('Activity times unavailable.', 'The connector does not provide audience activity times. Dashboard posting-time analysis describes when posts were published, not when followers were online.');
+  html=html.replace('const months=monthList(state.settings.endMonth,6)', 'const months=monthList(state.settings.endMonth,+state.settings.months===12?12:6)');
+  html=html.replace('x=i=>L+i*(W-L-R)/5', 'x=i=>L+i*(W-L-R)/(months.length-1)');
+  html=html.replace('Organic views over the six months ending', 'Views over the ${months.length} months ending');
+  html=html.replace('Organic views · last six months', 'Views · last ${+state.settings.months===12?12:6} months');
+  html=html.replace("monthShift(state.settings.endMonth,-5)+'-01'", "monthShift(state.settings.endMonth,-(+state.settings.months===12?11:5))+'-01'");
+  html=html.replace('The trend chart always shows the last six calendar months, ending with the report.', 'The trend shows twelve months for annual reports and six months otherwise, ending with the report.');
+  html=html.replace('No audience snapshot available as of the reporting period end.', 'No demographic snapshot is stored for this platform. The provider may not support it or access may have been refused.');
+  const cityScript="function reportCities(snapshot){if(company().data.audienceObservationPolicy!=='latest-available')return '';const rows=(snapshot?.cities||[]).map(x=>'<div><dt>'+esc(x.label)+'</dt><dd>'+fmt(x.value,1)+'%</dd></div>').join('');return '<h3>Cities</h3>'+(rows?'<dl class=\"country-list\">'+rows+'</dl>':'<p class=\"caption\">No city breakdown is stored in this audience snapshot.</p>');}";
+  html=html.replace('function audienceChapter(p)',cityScript+'\nfunction audienceChapter(p)');
+  html=html.replace("Country breakdown unavailable.</p>'}</div>","No country breakdown is stored in this audience snapshot.</p>'}${reportCities(snapshot)}</div>");
+  const availabilityScript='const reportMissingReasons='+reportMissingReasons.toString()+`;function reportAvailability(p,a,b,r){const sections=[['Current period',a,r.current],['Previous period',b,r.previous]].map(([label,totals,period])=>{const missing=reportMissingReasons(p,totals,period);return '<h3>'+esc(label)+' · '+esc(periodFmt(period))+'</h3>'+missing.map(([name,reason])=>'<p class="note"><b>'+esc(name)+':</b> '+esc(reason)+'</p>').join('')});const latest=p.latestFollowers;const latestNote=latest&&numeric(latest.value)?'<p class="note">Latest stored follower count: '+fmt(latest.value)+' · observed '+esc(latest.day)+'. This is separate from historical period-end totals.</p>':'';return block('<h2 class="prose-title">Data availability</h2>'+latestNote+sections.join(''),'data-availability');}`;
+  html=html.replace('function performanceChapter(p)',availabilityScript+'\nfunction performanceChapter(p)');
+  html=html.replace(")+editorialColumns(k,'What the results tell us'", ")+reportAvailability(p,a,b,r)+editorialColumns(k,'What the results tell us'");
+  html=html.replace('net follows in the period</div>', '${a.netFollowsBasis===\'Measured follows minus unfollows\'?\'net follows in the period\':\'change between snapshots\'}</div><div class="qualifier">${esc(a.netFollowsBasis)}${a.followersEndDay?\' · follower count observed \'+esc(a.followersEndDay):\'\'}</div>');
+  html=html.replace('Followers are the final snapshot; net growth is end minus start.', 'Followers use the latest dated snapshot on/before the period end, independently of activity coverage. Net follows uses complete measured follows minus unfollows; otherwise it uses a labeled change between dated snapshots.');
+  html=html.replace('Demographics use a dated snapshot.', 'Connected reports show the latest stored demographic snapshot with its observation date; it may be after a historical reporting period. Imported historical-snapshot data retains its period-end cutoff.');
+  html=html.replace('Latest snapshot on/before period end; lifetime-to-snapshot metrics, not account-period totals.', 'Connected post tables use latest stored lifetime figures with observation dates; imported historical-snapshot datasets retain their cutoff. Post lifetime metrics are not account-period totals.');
 
   // Publication belongs to the period; lifetime counters belong to their observation.
   // Imported historical-snapshot datasets retain revision 6's strict cutoff.
   html = html.replace('x.observedAt<=r.current.end', "(company().data.postObservationPolicy==='latest-available'?x.observedAt<=company().data.asOf:x.observedAt<=r.current.end)");
-  const snapshotNote = "function postSnapshotNote(posts){if(company().data.postObservationPolicy!=='latest-available'||!posts.length)return '';const dates=[...new Set(posts.map(x=>x.observedAt))].sort();const observed=dates.length===1?dates[0]:dates[0]+' to '+dates.at(-1);return '<p class=\"caption\">Posts published in the selected period. Lifetime figures observed '+esc(observed)+'; these are not activity totals for the selected period.</p>';}";
+  const snapshotNote = "function postSnapshotNote(posts){if(company().data.postObservationPolicy!=='latest-available'||!posts.length)return '';const dates=[...new Set(posts.map(x=>x.observedAt))].sort();const observed=dates.length===1?dates[0]:dates[0]+' to '+dates.at(-1);return '<p class=\"caption\">Posts published in the selected period. Lifetime figures observed '+esc(observed)+'; these are not activity totals for the selected period. A dash means the provider did not supply that post metric, insights have not been synced, or no manual non-follower percentage was entered. Manual percentages retain their entered value; a views/reach basis is not recorded.</p>';}";
   html = html.replace('function contentChapter(p)', snapshotNote + '\nfunction contentChapter(p)');
   html = html.replace("${posts.length?`<div class=\"table-wrap\"><table class=\"post-table\">", "${postSnapshotNote(posts)}${posts.length?`<div class=\"table-wrap\"><table class=\"post-table\">");
   html = html.replace('<span class="post-tags"><span class="post-tag">${esc(x.format)}</span>', '<span class="post-tags"><span class="post-tag">Published ${esc(x.publishedAt)}</span><span class="post-tag">${esc(x.format)}</span>');

@@ -583,6 +583,9 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # status on social_connections)
 |       |-- social-report-data.mjs      # dated, complete-month snapshot adapter; full paged
 |       |                               # source inventory, no historical metrics substitution
+|       |-- social-report-availability.mjs # pure period totals, dated follower endpoints,
+|       |                               # measured net changes and per-metric missing reasons;
+|       |                               # shared with the offline HTML renderer
 |       |-- social-report.mjs           # company-scoped snapshot + saved platform bands ->
 |       |                               # supplied revision 6 editor (social-report-template.mjs)
 |       |-- social-figures.mjs           # pure: organic / paid totals, series sums,
@@ -1430,6 +1433,8 @@ From `agent/`. Every pass has a standalone runner, most with `:dry-run`.
 | `eval:categorise` · `eval:retrieval` · `eval:diagnose` · `eval:exemplars` (`-- --authored-only` drops the translations, for a same-corpus A/B) · `review:sample` · `review:compare` | every measurement — indexed in **`agent/eval/README.md`**, which says what each is judged against (three labelled sets, two proxies) |
 
 ### Social report flow
+
+The service includes daily `follows`/`unfollows`, latest audience snapshots through download date, and manual post non-follower percentages. `social-report-availability.mjs` calculates adjacent 1/6/12-month totals independently of follower snapshot availability and supplies reasons for missing current/previous figures. Audience gender/age/country/city snapshots remain clearly dated; historical follower totals never use later counts. Annual trend charts show 12 months. `node web/scripts/verify-report-wiring.mjs` checks rendered values, audience, manual percentages, boundary dates and trend length against dummy fixtures.
 
 `Social_Media_Report_HTML/` supplies revision 6 HTML and the synthetic JSON contract. `social-report-template.mjs` bundles the HTML verbatim. `SocialReportDownload` → authenticated `/api/insights/social/report` → `social-report-service.ts` → paged account/day/post/audience reads + live tags/bands → `social-report-data.mjs` → `social-report.mjs` → editable offline HTML. Single-account Instagram exact-period reach reuses `getSocialReportReach` where supported. Snapshots carry platform bands, post ER bases and dated per-account follower counts. Connected exports carry `postObservationPolicy: latest-available`: post tables select by publication date and show latest lifetime figures with observation dates; daily totals remain period-only. Imported historical-snapshot datasets retain their strict observation cutoff. No schema change or customer data. Browser QA: `cd web; npm run report:social:verify` (synthetic fixtures; PDF/screenshots in `.next/social-report-validation/`); `node web/scripts/verify-report-history.mjs` reproduces the December publication/later-sync boundary.
 
