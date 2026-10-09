@@ -257,8 +257,6 @@ export function driverSummary(drivers) {
   return exposureUp ? 'exposureUpRateDown' : 'exposureDownRateUp';
 }
 
-export const PEAK_TOP = 3;
-export const PEAK_MIN_POSTS = 2;
 
 /**
  * What a set of posts says about the content itself: how many of each media
@@ -278,6 +276,10 @@ export const PEAK_MIN_POSTS = 2;
  * @param {string} tz IANA timezone
  */
 export function postActivity(posts, tags = [], links = [], tz = 'UTC') {
+  // Keep every dependency inside the function: reports serialize this function
+  // after Next's production minifier has renamed identifiers.
+  const PEAK_TOP = 3;
+  const PEAK_MIN_POSTS = 2;
   const count = (keys) => {
     const map = new Map();
     for (const key of keys) map.set(key, (map.get(key) ?? 0) + 1);

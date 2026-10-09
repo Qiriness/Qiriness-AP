@@ -5062,3 +5062,8 @@ Two new investigation tools, plus the attachment metadata that makes the second 
 - Post captions use one-line ellipsis with full text on hover. Original report styles remain intact with scoped overrides.
 - Best posting hours/days share the dashboard calculation and update with the offline report period using publication timestamps, timezone, average engagement and post counts.
 - Verified 19 focused tests, browser report checks, editor/PDF/pagination, lint and TypeScript. Deployment and a fresh authenticated export remain pending.
+## Production blank-report repair (2026-10-09)
+
+- Reproduced fresh production-generated HTML failing with `w is not defined`: minification renamed external posting-time constants that were missing from the embedded script.
+- Moved those constants inside the shared posting calculation so its serialized function contains all dependencies. Added a maintained production-bundle browser regression covering rendered posts, activity and period controls.
+- The exact production regression now passes, as do 19 focused tests, source browser wiring, lint, TypeScript and production build. Deployed verification follows the repair merge.

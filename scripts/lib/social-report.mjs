@@ -1,7 +1,7 @@
 import template from './social-report-template.mjs';
 import { bandOf, median } from './social-bands.mjs';
 import { reportPeriodTotals } from './social-report-availability.mjs';
-import { postActivity, PEAK_TOP, PEAK_MIN_POSTS } from './social-figures.mjs';
+import { postActivity } from './social-figures.mjs';
 
 const sections = [ ['cover', 'Cover'], ['overview', 'Executive overview'], ['performance', 'Platform performance'], ['audience', 'Audience insights'], ['content', 'Content performance'], ['strategy', 'Concluding summary'], ['method', 'Definitions & colour coding'] ];
 export function socialReportState(data, { name, locale = 'en-GB', months = 1, endMonth, platforms }) {
@@ -36,7 +36,7 @@ export function renderSocialReport(state) {
   html=html.replace('s.asOf<=r.current.end',"s.asOf<=(company().data.audienceObservationPolicy==='latest-available'?company().data.asOf:r.current.end)");
   html=html.replace("!['views','reach'].includes(x.nonFollowerBasis)","!['views','reach','manual'].includes(x.nonFollowerBasis)");
   html=html.replace("snapshot.asOf<r.current.start?' (before the reporting period)':''", "snapshot.asOf>r.current.end?' (latest available; after the reporting period)':snapshot.asOf<r.current.start?' (before the reporting period)':''");
-  const activityScript = `const PEAK_TOP=${PEAK_TOP},PEAK_MIN_POSTS=${PEAK_MIN_POSTS};const dashboardPostActivity=${postActivity.toString()};
+  const activityScript = `const dashboardPostActivity=${postActivity.toString()};
 function reportPostingActivity(p){
   const posts=rankedPosts(p).filter(x=>x.publishedAtTimestamp&&Number.isFinite(Date.parse(x.publishedAtTimestamp))).map(x=>({id:x.id,accountId:x.accountId,publishedAt:x.publishedAtTimestamp,engagement:x.interactions,mediaType:x.format}));
   const activity=dashboardPostActivity(posts,[],[],company().data.timezone||'UTC');

@@ -5519,6 +5519,8 @@ The previous exact-boundary follower rule is replaced by **latest measured snaps
 
 ### Report presentation and posting times (2026-10-09)
 
+Production-only blank-report regression: Next minified the module-level posting constants to `h`/`w`, while the report embedded their original names alongside `postActivity.toString()`. Fresh compiled HTML threw `w is not defined`; source tests missed it. Posting constants now live inside the shared function, so serialization retains every dependency even after minification. A maintained browser check invokes the actual production bundle and was observed failing before the fix. Source-only browser checks are insufficient evidence for generated report scripts.
+
 The owner requested removal of the current/previous availability paragraphs and cities from the Countries card. Missing figures still remain unavailable without filling them with estimates; diagnostic explanations are no longer rendered. Post captions stay on one line with ellipsis and a full-caption hover title, using scoped CSS overrides to revision 6. The audience chapter now displays Best hours/days to post using the dashboard's exact `postActivity` calculation, average measured engagement and post counts. Full publication timestamps are preserved, so the offline editor recalculates these rankings for each selected period in the company timezone. These rankings describe posting performance; native follower-online windows remain unavailable. The previous city/availability/activity-empty presentation described above is superseded.
 
 ### Report shading uses the platform rules, with the denominator shown
