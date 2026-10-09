@@ -139,7 +139,7 @@ below. `llm_usage` holds 2174 calls.
 
 ## Next Steps
 
-**Historical reports (2026-10-09):** deploy the post-table, audience and follower/comparison corrections and download fresh reports. Stored December counts and 1/6/12-month calculations have been verified in the renderer; reconciliation against the Meta UI/export remains open in VALIDATION_LOG. Each platform's current/previous availability notes explain missing data.
+**Historical reports (2026-10-09):** deploy the post-table, audience and follower/comparison corrections and download fresh reports. Stored December counts and 1/6/12-month calculations have been verified in the renderer; reconciliation against the Meta UI/export remains open in VALIDATION_LOG. Reports show country-only audience cards, single-line post captions and the dashboard's best posting hours/days for the selected period; lengthy availability sections are removed.
 
 **TikTok (2026-10-09):** connector and worker integration are implemented; migration 85 is applied and verified on Qiriness Supabase. Configure the TikTok app credentials on Vercel/Render/GitHub Actions, deploy web/worker changes, and complete the remaining live checks in `VALIDATION_LOG.md` → TikTok. TikTok app approval, live OAuth and deployment remain unverified.
 

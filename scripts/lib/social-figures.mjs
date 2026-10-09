@@ -257,8 +257,8 @@ export function driverSummary(drivers) {
   return exposureUp ? 'exposureUpRateDown' : 'exposureDownRateUp';
 }
 
-const PEAK_TOP = 3;
-const PEAK_MIN_POSTS = 2;
+export const PEAK_TOP = 3;
+export const PEAK_MIN_POSTS = 2;
 
 /**
  * What a set of posts says about the content itself: how many of each media
