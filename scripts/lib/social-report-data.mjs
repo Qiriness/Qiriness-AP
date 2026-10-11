@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import { effectiveRules } from './social-bands.mjs';
+import { applyManualPost } from './social-post-manual.mjs';
+import {manualAudienceReport} from './social-audience-manual.mjs';
 
 export const shiftMonth = (month, delta) => {
   const [y, m] = month.split('-').map(Number);
@@ -20,9 +22,9 @@ const sum = values => values.length && values.every(v => v !== null) ? values.re
  * @typedef {{account_id: string, captured_on: string, dimension: string, key: string, value: number}} Audience
  */
 /**
- * @param {{companyId: string, timezone: string, endMonth: string, asOf: string, accounts: Account[], days: Day[], posts: Post[], audience: Audience[], tags?: {id: string, name: string}[], links?: {accountId: string, postId: string, tagId: string}[], bands?: {kind: string, metric: string, mode: string, low: number|null, high: number|null}[]}} input
+ * @param {{companyId: string, timezone: string, endMonth: string, asOf: string, accounts: Account[], days: Day[], posts: Post[], audience: Audience[], tags?: {id: string, name: string}[], links?: {accountId: string, postId: string, tagId: string}[], bands?: {kind: string, metric: string, mode: string, low: number|null, high: number|null}[], manualPosts?: Record<string,{metric:string,value:number,basis:string|null}[]>|null, manualAudience?: {kind:string,dimension:string,captured_on:string,entries:{key:string,value:number}[]}[]}} input
  * Complete daily totals plus explicitly dated latest audience/post snapshots. No summed unique reach or capped post inventory. */
-export function adaptSocialReport({ companyId, timezone, endMonth, asOf, accounts, days, posts, audience, tags = [], links = [], bands = [] }) {
+export function adaptSocialReport({ companyId, timezone, endMonth, asOf, accounts, days, posts, audience, tags = [], links = [], bands = [], manualPosts = null, manualAudience = [] }) {
   const enabled = accounts.filter(a => a.enabled && ['instagram', 'facebook', 'tiktok'].includes(a.kind));
   const platforms = [...new Set(enabled.map(a => a.kind))].map(kind => {
     const group = enabled.filter(a => a.kind === kind);
@@ -71,15 +73,24 @@ export function adaptSocialReport({ companyId, timezone, endMonth, asOf, account
       bandRules: effectiveRules(bands.filter(b => b.kind === kind)),
       followersByMonth: Object.fromEntries(monthly.map(m => [m.month, followerSnapshot(endOfMonth(m.month)).byAccount])),
       latestFollowers: followerSnapshot(asOf),
-      nativePeriodMetrics: /** @type {{start: string, end: string, reach: number|null, accountsEngaged: number|null, nonFollowerShare: number|null, nonFollowerBasis: string|null, provenance: string}[]} */ ([]), audienceSnapshots,
+      nativePeriodMetrics: /** @type {{start: string, end: string, reach: number|null, accountsEngaged: number|null, nonFollowerShare: number|null, nonFollowerBasis: string|null, provenance: string}[]} */ ([]), audienceSnapshots:manualAudienceReport(audienceSnapshots,manualAudience.filter(r=>r.kind===kind),asOf),
       posts: posts.filter(p => ids.has(p.account_id)).map(p => {
+        const basis = group[0].engagement_basis ?? 'reach';
+        const filled = applyManualPost({ views: number(p.views), reach: number(p.reach), engagement: number(p.engagement),
+          likes: number(p.likes), comments: number(p.comments), shares: number(p.shares), follows: number(p.follows),
+          nonFollowersPct: manualPosts === null ? number(p.non_followers_pct) : null, engagementRate: null },
+          manualPosts?.[`${p.account_id}|${p.external_id}`] ?? [], basis);
         // Base counts and insights are overwritten independently. Use the later observation conservatively.
         const observed = [p.fetched_at, p.insights_at].filter(Boolean).sort().at(-1);
         const postTags = links.filter(l => l.accountId === p.account_id && l.postId === p.external_id).map(l => tags.find(t => t.id === l.tagId)?.name).filter(Boolean);
         return { id: p.account_id + ':' + p.external_id, accountId: p.account_id, publishedAt: dateInZone(p.published_at, timezone), publishedAtTimestamp: p.published_at,
           observedAt: observed ? dateInZone(observed, timezone) : asOf, caption: p.caption_excerpt ?? '', format: p.media_type ?? '', pillar: postTags.join(' · '),
-          views: number(p.views), reach: number(p.reach), likes: number(p.likes), comments: number(p.comments), shares: number(p.shares), saves: number(p.saves),
-          interactions: number(p.engagement), follows: number(p.follows), nonFollowerShare: number(p.non_followers_pct) === null ? null : Number(p.non_followers_pct)/100, nonFollowerBasis: number(p.non_followers_pct) === null ? null : 'manual', metricScope: 'lifetime-at-snapshot' };
+          views: filled.views, reach: filled.reach, likes: filled.likes, comments: filled.comments, shares: filled.shares, saves: number(p.saves),
+          interactions: filled.engagement, follows: filled.follows, nonFollowerShare: filled.nonFollowersPct === null ? null : filled.nonFollowersPct/100,
+          nonFollowerBasis: filled.nonFollowersPct === null ? null : 'manual',
+          manualEngagementRate: filled.engagementRate === null ? null : filled.engagementRate/100,
+          manualMetrics: filled.manualMetrics.map(metric => metric === 'engagement' ? 'interactions' : metric === 'nonFollowersPct' ? 'nonFollowerShare' : metric),
+          metricScope: 'lifetime-at-snapshot' };
       }), activityTimes: null };
   });
   const data = { schemaVersion: 1, companyId, isDemo: false, source: 'Connected dashboard · provider-reported account activity (paid activity is not separately identified). Daily metrics use the provider clock; post dates use the company timezone. Historical post observations are not retained; only observations on or before the report end are eligible. Exact-period reach is available only for a single Instagram account over a complete period of at most 30 days. Account follower splits and audience activity windows are unavailable.', asOf, timezone, currency: 'EUR', platforms };

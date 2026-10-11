@@ -48,7 +48,7 @@ export function SocialHeader({
   const title =
     network === "all" ? t(mode === "organic" ? "insights.social.title.organicAll" : "insights.social.title.paidAll") : t(`insights.social.kind.${network}`);
   const subtitle =
-    network === "all" ? t(mode === "organic" ? "insights.social.subtitle.organicAll" : "insights.social.subtitle.paidAll") : t(`insights.social.subtitle.${network}`);
+    network === "all" ? t(mode === "organic" ? "insights.social.subtitle.organicAll" : "insights.social.subtitle.paidAll") : '';
 
   return (
     <>
@@ -73,7 +73,7 @@ export function SocialHeader({
       <div className={styles.header}>
         <div className={styles.titleBlock}>
           <h2>{title}</h2>
-          <span>{subtitle}</span>
+          {network === 'all' ? <span>{subtitle}</span> : null}
         </div>
         <div className={styles.headerRight}>
         <div className={styles.controls}>
@@ -103,18 +103,18 @@ export function SocialHeader({
           />
           <Button onClick={() => navigate({ connections: "1" })}>{t("insights.social.connections.open")}</Button>
         </div>
-        {engagementBasis && mode === "organic" && network !== "all" ? <EngagementBasisSelect kind={network as OrganicKind} basis={engagementBasis} /> : null}
         </div>
       </div>
 
       {mode === "organic" && network !== "all" ? (
-        <div className={styles.subtabs}>
+        <div className={styles.viewControls}>
           <Segmented
             options={(["profile", "content", "posts"] as OrganicView[]).map((id) => ({ id, label: t(`insights.social.view.${id}`) }))}
             value={view}
             onChange={(next) => navigate({ view: next === "profile" ? null : next })}
             label={t("insights.social.view.label")}
           />
+          {engagementBasis ? <EngagementBasisSelect kind={network as OrganicKind} basis={engagementBasis} /> : null}
         </div>
       ) : null}
 

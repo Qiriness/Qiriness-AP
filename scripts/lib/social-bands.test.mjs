@@ -61,3 +61,15 @@ test('bandPosts: each post gets its own colour, medians come from the posts give
   assert.deepEqual(out[1], { views: 'medium', reach: 'medium', engagementRate: 'low' }, 'reach 200 % of followers');
   assert.deepEqual(out[2], { views: 'high', engagementRate: 'medium' }, 'no reach, no reach band');
 });
+
+test('non-follower percentages support fixed and median bands without dividing by followers', () => {
+  assert.equal(effectiveRules().nonFollowersPct.mode,'off');
+  assert.equal(validateRule('nonFollowersPct',{mode:'followers',low:20,high:60}).ok,false);
+  assert.equal(validateRule('nonFollowersPct',{mode:'absolute',low:20,high:101}).ok,false);
+  assert.equal(validateRule('nonFollowersPct',{mode:'median',low:50,high:150}).ok,true);
+  const rules=effectiveRules([{metric:'nonFollowersPct',mode:'absolute',low:30,high:60}]);
+  const posts=[null,0,29,30,59,60,100].map(nonFollowersPct=>({accountId:'a',nonFollowersPct}));
+  assert.deepEqual(bandPosts(posts,rules,new Map()).map(b=>b.nonFollowersPct??null),[null,'low','low','medium','medium','high','high']);
+  const medianRules=effectiveRules([{metric:'nonFollowersPct',mode:'median',low:50,high:150}]);
+  assert.deepEqual(bandPosts([10,40,80].map(nonFollowersPct=>({accountId:'a',nonFollowersPct})),medianRules,new Map()).map(b=>b.nonFollowersPct),['low','medium','high']);
+});

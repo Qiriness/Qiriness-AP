@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/client";
 import type { BandMetric, BandMode, BandRule, OrganicKind } from "@/lib/social-types";
 import styles from "./SocialView.module.css";
+import { modesFor as metricModes } from '../../../scripts/lib/social-bands.mjs';
 
-const METRICS: BandMetric[] = ["views", "reach", "engagementRate", "likes", "comments", "shares", "follows", "engagement"];
+const METRICS: BandMetric[] = ["views", "reach", "engagementRate", "likes", "comments", "shares", "follows", "engagement", "nonFollowersPct"];
 /** A rate is already a ratio, so « % of followers » is not offered for it (as social-bands.mjs `modesFor`). */
-const modesFor = (metric: BandMetric): BandMode[] => (metric === "engagementRate" ? ["off", "absolute", "median"] : ["off", "absolute", "followers", "median"]);
+const modesFor = (metric: BandMetric): BandMode[] => metricModes(metric) as BandMode[];
 
 type Draft = Record<BandMetric, { mode: BandMode; low: string; high: string }>;
 
@@ -68,7 +69,7 @@ export function BandsEditor({ kind, rules, custom }: { kind: OrganicKind; rules:
       <div className={styles.bandRows}>
         {METRICS.map((metric) => {
           const row = draft[metric];
-          const unit = row.mode === "absolute" ? (metric === "engagementRate" ? "%" : "") : "%";
+          const unit = row.mode === "absolute" ? (metric === "engagementRate" || metric === "nonFollowersPct" ? "%" : "") : "%";
           return (
             <div key={metric} className={styles.bandRow}>
               <span className={styles.bandMetric}>{tr(`insights.social.posts.col.${metric}`)}</span>

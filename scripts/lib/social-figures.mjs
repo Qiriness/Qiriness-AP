@@ -60,6 +60,14 @@ export function organicTotals({ series = [], followers = [], postTotals = [] }, 
   const days = pick(series, kinds);
   const posts = pick(postTotals, kinds);
   const ends = pick(followers, kinds);
+  const selectedKinds = kinds ?? [...new Set([...days, ...posts, ...ends].map(row => row.kind))];
+  const hasTikTok = selectedKinds.includes('tiktok');
+  const tikTokOnly = hasTikTok && selectedKinds.every(kind => kind === 'tiktok');
+  // Display API counters belong to videos, not account days. Never pool those
+  // lifetime counters with another platform's period activity.
+  const activityTotal = field => hasTikTok
+    ? (tikTokOnly ? sumKnown(posts.map(row => row[field])) : null)
+    : sumKnown(days.map(row => row[field]));
 
   const byAccount = new Map();
   for (const row of days) {
@@ -86,8 +94,8 @@ export function organicTotals({ series = [], followers = [], postTotals = [] }, 
   const postCount = posts.length ? sumKnown(posts.map((p) => p.posts)) : days.length ? 0 : null;
 
   return {
-    views: sumKnown(days.map((r) => r.views)),
-    engagement: sumKnown(days.map((r) => r.engagement)),
+    views: activityTotal('views'),
+    engagement: activityTotal('engagement'),
     profileVisits: sumKnown(days.map((r) => r.profile_visits)),
     linkTaps: sumKnown(days.map((r) => r.link_taps)),
     posts: postCount,

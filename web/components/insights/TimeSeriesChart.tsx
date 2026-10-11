@@ -253,7 +253,7 @@ export function TimeSeriesChart({
       ) : null}
 
       {/* The table view: every value reachable without hovering. */}
-      <table className={styles.srOnly}>
+      <div className={styles.srOnly}><table>
         <caption>{ariaLabel}</caption>
         <tbody>
           {points.map((p) => (
@@ -263,7 +263,7 @@ export function TimeSeriesChart({
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div>
     </div>
   );
 }

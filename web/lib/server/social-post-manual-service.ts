@@ -1,51 +1,33 @@
-/**
- * Figures a person types in for a post because the API will not give them:
- * today the percentage of non-followers reached (84_post_non_followers.sql).
- *
- * Read live, never through the Insights cache, so an entry shows on the next
- * render. The sync never writes this column.
- *
- * Server-only.
- */
-
-import { supabaseSelectAll, supabaseUpdate } from "../../../scripts/lib/supabase-rest-client.mjs";
-import { SOCIAL_T } from "../../../scripts/lib/tables.mjs";
-import { getSupabaseClient } from "./insights/shared";
-import { getShopId } from "./knowledge-service";
-
-/** `accountId|postId` -> percent, for the posts that have one. Empty, never a throw, when the column is missing. */
-export async function readNonFollowers(shopId: string): Promise<Map<string, number>> {
-  try {
-    const rows = (await supabaseSelectAll(
-      getSupabaseClient(),
-      SOCIAL_T.POSTS,
-      { shop_id: shopId, non_followers_pct: { operator: "not.is", value: "null" } },
-      "account_id,external_id,non_followers_pct",
-      { order: "external_id.asc" }
-    )) as { account_id: string; external_id: string; non_followers_pct: number | string }[];
-    return new Map(rows.map((r) => [`${r.account_id}|${r.external_id}`, Number(r.non_followers_pct)]));
-  } catch {
-    return new Map();
+import 'server-only';
+import { supabaseSelectAll, supabaseSelect, supabaseUpsert, supabaseDelete } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { checkManualMetric } from '../../../scripts/lib/social-post-manual.mjs';
+import { getSupabaseClient } from './insights/shared';
+import { getShopId } from './knowledge-service';
+export { checkManualMetric } from '../../../scripts/lib/social-post-manual.mjs';
+export interface ManualPostEntry { account_id: string; post_id: string; metric: string; value: number; basis: string | null }
+const TABLE = 'social_post_manual_metrics';
+export async function readManualPosts(shopId: string): Promise<Map<string, ManualPostEntry[]>> {
+  const rows = await supabaseSelectAll(getSupabaseClient(), TABLE, { shop_id: shopId }, 'account_id,post_id,metric,value,basis', { order: 'account_id.asc,post_id.asc,metric.asc' }) as ManualPostEntry[];
+  const result = new Map<string, ManualPostEntry[]>();
+  for (const row of rows) { const key = `${row.account_id}|${row.post_id}`; result.set(key, [...(result.get(key) ?? []), row]); }
+  return result;
+}
+export async function setManualPost(accountId: string, postId: string, metric: string, value: number | null) {
+  const shopId = await getShopId();
+  const client = getSupabaseClient();
+  const [post] = await supabaseSelect(client, 'social_posts', { shop_id: shopId, account_id: accountId, external_id: postId }, 'views,reach,engagement,likes,comments,shares,follows', { limit: 1 });
+  if (!post) return false;
+  if (value !== null && metric in post && post[metric] !== null) throw new Error('The platform already reports this metric');
+  const filters = { shop_id: shopId, account_id: accountId, post_id: postId, metric };
+  if (value === null) await supabaseDelete(client, TABLE, filters);
+  else {
+    const [account] = await supabaseSelect(client, 'social_accounts', { shop_id: shopId, id: accountId }, 'engagement_basis', { limit: 1 });
+    await supabaseUpsert(client, TABLE, [{ ...filters, value, basis: metric === 'engagementRate' ? account.engagement_basis ?? 'reach' : null, updated_at: new Date().toISOString() }], 'shop_id,account_id,post_id,metric');
   }
+  return true;
 }
-
-/** A percentage of 0–100 (empty clears it), or the reason it is not one. */
-export function checkPercent(value: unknown): { ok: true; percent: number | null } | { ok: false; error: string } {
-  if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) return { ok: true, percent: null };
-  const percent = typeof value === "number" ? value : Number(String(value).trim().replace(",", ".").replace(/%$/, ""));
-  if (!Number.isFinite(percent)) return { ok: false, error: "percent must be a number" };
-  if (percent < 0 || percent > 100) return { ok: false, error: "percent must be between 0 and 100" };
-  return { ok: true, percent: Math.round(percent * 100) / 100 };
+export function checkPercent(value: unknown) {
+  const checked = checkManualMetric('nonFollowersPct', value ?? null);
+  return checked.ok ? { ok: true as const, percent: checked.value as number | null } : { ok: false as const, error: checked.error as string };
 }
-
-/** Sets (or clears) a post's share of non-followers. False when the shop has no such post. */
-export async function setNonFollowers(accountId: string, postId: string, percent: number | null): Promise<boolean> {
-  const rows = await supabaseUpdate(
-    getSupabaseClient(),
-    SOCIAL_T.POSTS,
-    { shop_id: await getShopId(), account_id: accountId, external_id: postId },
-    { non_followers_pct: percent },
-    { select: "external_id" }
-  );
-  return rows.length > 0;
-}
+export const setNonFollowers = (accountId: string, postId: string, percent: number | null) => setManualPost(accountId, postId, 'nonFollowersPct', percent);

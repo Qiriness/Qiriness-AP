@@ -43,6 +43,16 @@ test('no stored day and no post: posts are unknown, not zero', () => {
   assert.equal(organicTotals({ series }, ['instagram']).posts, 0);
 });
 
+test('TikTok summaries use lifetime video counters without double counting or pooling period metrics', () => {
+  const videos=[{kind:'tiktok',account_id:'tt',posts:4,views:1251,engagement:85,rated_views_engagement:85,rated_views:1251}];
+  const tt=organicTotals({postTotals:videos,series:[{kind:'tiktok',views:999,engagement:999}]},['tiktok'],{tiktok:'views'});
+  assert.equal(tt.views,1251);assert.equal(tt.engagement,85);assert.equal(tt.posts,4);
+  assert.equal(tt.growth,null);assert.equal(tt.engagementRate,85/1251*100);
+  const mixed=organicTotals({series,postTotals:[...postTotals,...videos]},['instagram','tiktok']);
+  assert.equal(mixed.views,null);assert.equal(mixed.engagement,null);
+  assert.equal(organicTotals({postTotals:[{kind:'tiktok',posts:1,views:null,engagement:null}]},['tiktok']).views,null);
+});
+
 test('series sum accounts per bucket and keep unmeasured buckets null', () => {
   assert.deepEqual(bucketSeries(series, 'engagement'), [
     { bucket: '2026-09-01T00:00:00', value: 14 },

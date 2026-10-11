@@ -11,7 +11,6 @@ import type {
   PaidTotals,
   PostActivity,
   SocialPost,
-  SocialAudience,
   SocialPanel,
 } from "@/lib/social-types";
 import { BarList, BlockedCard, Caption, Card, DeltaChip, Grid, KpiCard, type Polarity } from "./InsightsKit";
@@ -20,6 +19,7 @@ import { BandsEditor } from "./BandsEditor";
 import { MetricIcon, PlatformIcon } from "./PlatformIcon";
 import { PaidCampaignsTable } from "./PaidCampaignsTable";
 import { PaidTrend } from "./PaidTrend";
+import { SocialAudience } from "./SocialAudience";
 import { SocialPostsTable } from "./SocialPostsTable";
 import { SocialTrend } from "./SocialTrend";
 import { SocialReportDownload, type SocialReportOptions } from "./SocialReportDownload";
@@ -103,7 +103,6 @@ function Organic({
   if (view === "posts" && network !== "all") {
     return (
       <>
-        {network === "tiktok" ? <p className={o.chartBlocked}>{tr("insights.social.tiktok.coverage")}</p> : null}
         {panel.bandRules[network] ? <BandsEditor kind={network} rules={panel.bandRules[network]!} custom={Boolean(panel.bandsCustom[network])} /> : null}
         <Card title={tr("insights.social.posts.title")} aside={<span>{tr("insights.social.posts.aside")}</span>}>
           <SocialPostsTable posts={panel.posts} capped={panel.postsCapped} tags={panel.postTags} links={panel.postTagLinks} />
@@ -114,15 +113,14 @@ function Organic({
 
   return (
     <div className={network === "all" ? undefined : styles.tinted} data-kind={network === "all" ? undefined : network}>
-      {network === "tiktok" ? <p className={o.chartBlocked}>{tr("insights.social.tiktok.coverage")}</p> : null}
       <OrganicKpis panel={panel} network={network} compareLabel={compareLabel} />
 
       <Grid min={26} pin="social-trend" label={tr("insights.social.trend.title")}>
-        <Card title={tr("insights.social.trend.title")} span={2} aside={<span>{tr("insights.kit.vs", { label: compareLabel })}</span>}>
+        <Card title={tr("insights.social.trend.title")} span={2} aside={<span>{panel.videoLifetime ? tr("insights.social.videoPublication") : tr("insights.kit.vs", { label: compareLabel })}</span>}>
           {panel.series ? (
-            <SocialTrend series={panel.series} />
+            <SocialTrend series={panel.series} videoLifetime={panel.videoLifetime} />
           ) : (
-            <p className={o.chartBlocked}>{tr("insights.social.hourly")}</p>
+            <p className={o.chartBlocked}>{tr(panel.seriesBlockedReason ?? "insights.social.hourly")}</p>
           )}
         </Card>
         <Card title={tr("insights.social.drivers.title")}>
@@ -132,7 +130,7 @@ function Organic({
 
       {network === "all" ? <PlatformCards panel={panel} /> : null}
       {network === "all" ? <TopPosts panel={panel} /> : null}
-      {view === "profile" && network === "instagram" ? <Audience audience={panel.audience} /> : null}
+      {view === "profile" && network !== "all" ? <SocialAudience audience={panel.audience} kind={network} /> : null}
       {view === "profile" && network !== "all" && panel.activity ? <ContentActivity activity={panel.activity} /> : null}
     </div>
   );
@@ -146,12 +144,26 @@ function OrganicKpis({ panel, network, compareLabel }: { panel: OrganicPanel; ne
   const count = (v: number | null) => (v === null ? "—" : integer(v));
   const kpi = (label: string, key: keyof OrganicTotals, polarity: Polarity = "up", reason = "insights.social.notAnswered") => {
     const value = c[key];
-    if (value === null) return <BlockedCard key={key} label={label} reason={reason} />;
+    if (value === null)
+      return (
+        <BlockedCard
+          key={key}
+          label={label}
+          reason={
+            panel.videoLifetime && key === "growth"
+              ? "insights.social.growthNeedsHistory"
+              : network === "all" && panel.kinds.includes("tiktok") && !panel.videoLifetime && ["views", "engagement"].includes(key)
+                ? "insights.social.mixedActivityBasis"
+                : reason
+          }
+        />
+      );
     return (
       <KpiCard
         key={key}
         label={label}
         value={key === "engagementRate" ? percentOf(value, 2) : key === "growth" ? signed(value, integer) : integer(value)}
+        unit={panel.videoLifetime && ["views", "engagement"].includes(key) ? tr("insights.social.lifetimeSelected") : undefined}
         delta={<DeltaChip current={value} previous={p?.[key]} polarity={polarity} points={key === "engagementRate"} compareLabel={compareLabel} />}
       />
     );
@@ -252,9 +264,9 @@ function PlatformCards({ panel }: { panel: OrganicPanel }) {
             <PlatformCardLink key={kind} kind={kind} label={tr(`insights.social.kind.${kind}`)}>
               <dl className={styles.miniGrid}>
                 <Mini label={tr("insights.social.kpi.followers")} value={count(c.followers)} />
-                <Mini label={tr("insights.social.kpi.views")} value={count(c.views)} />
+                <Mini label={tr("insights.social.kpi.views") + (kind === "tiktok" ? tr("insights.social.lifetimeSuffix") : "")} value={count(c.views)} />
                 <Mini label={tr("insights.social.kpi.posts")} value={count(c.posts)} />
-                <Mini label={tr("insights.social.kpi.engagement")} value={count(c.engagement)} />
+                <Mini label={tr("insights.social.kpi.engagement") + (kind === "tiktok" ? tr("insights.social.lifetimeSuffix") : "")} value={count(c.engagement)} />
                 <Mini label={`${tr("insights.social.kpi.rate")} · ${tr(`insights.social.rateBasis.${panel.engagementBases[kind] ?? "reach"}.short`)}`} value={c.engagementRate === null ? "—" : percentOf(c.engagementRate, 1)} />
                 <Mini label={tr("insights.social.kpi.reach")} value={count(reach)} />
               </dl>
@@ -358,47 +370,6 @@ function Mini({ label, value }: { label: string; value: ReactNode }) {
       <dt>{label}</dt>
       <dd>{value}</dd>
     </div>
-  );
-}
-
-function Audience({ audience }: { audience: SocialAudience | null }) {
-  const tr = getT();
-  const { percentOf, integer } = getFormat();
-  if (!audience) {
-    return (
-      <Card title={tr("insights.social.audience.title")}>
-        <p className={t.muted}>{tr("insights.social.audience.none")}</p>
-      </Card>
-    );
-  }
-  const dims = ["gender", "age", "country", "city"] as const;
-  return (
-    <>
-      <h2 className={styles.sectionTitle}>
-        {tr("insights.social.audience.title")} <span className={styles.asOf}>{tr("insights.social.audience.asOf", { date: audience.capturedOn ?? "—" })}</span>
-      </h2>
-      <Grid min={14} pin="social-audience" label={tr("insights.social.audience.title")}>
-        {dims.map((dim) => (
-          <Card key={dim} title={tr(`insights.social.audience.${dim}`)}>
-            {audience[dim].length ? (
-              <BarList
-                ariaLabel={tr(`insights.social.audience.${dim}`)}
-                data={audience[dim].map((b) => ({
-                  key: b.key,
-                  label: dim === "gender" ? tr(`insights.social.audience.gender.${b.key}`) : b.key,
-                  value: b.share,
-                  display: percentOf(b.share, 1),
-                  title: integer(b.value),
-                }))}
-              />
-            ) : (
-              <p className={t.muted}>{tr("insights.social.audience.dimNone")}</p>
-            )}
-          </Card>
-        ))}
-      </Grid>
-      <Caption>{tr("insights.social.audience.caption")}</Caption>
-    </>
   );
 }
 

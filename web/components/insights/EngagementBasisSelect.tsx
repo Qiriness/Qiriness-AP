@@ -53,7 +53,21 @@ export function EngagementBasisSelect({ kind, basis }: { kind: OrganicKind; basi
           ))}
         </select>
       </label>
-      <span className={styles.basisHint}>{error ?? tr(`insights.social.rateBasis.${value}.hint`)}</span>
+      <details className={styles.basisInfo} onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.currentTarget.open = false;
+          event.currentTarget.querySelector("summary")?.focus();
+        }
+      }}>
+        <summary aria-label={tr("insights.social.rateBasis.info")}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 11v6M12 7v1" />
+          </svg>
+        </summary>
+        <p className={styles.basisHint}>{tr(`insights.social.rateBasis.${value}.hint`)}</p>
+      </details>
+      {error && <span role="alert">{error}</span>}
     </div>
   );
 }

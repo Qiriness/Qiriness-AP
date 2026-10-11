@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { foldForSearch } from "@/lib/insights-format";
 import { useFormat, useLocale, useT } from "@/lib/i18n/client";
 import { formatDayL } from "@/lib/insights-labels";
-import type { Band, BandMetric, SocialPost, SocialTag, SocialTagLink } from "@/lib/social-types";
+import type { Band, BandMetric, SocialPost, SocialTag, SocialTagLink, ManualPostMetric } from "@/lib/social-types";
+import { ManualMetricCell } from "./ManualMetricCell";
+import { applySavedPostMetrics } from '../../../scripts/lib/social-post-manual.mjs';
 import t from "./tables.module.css";
 import styles from "./SocialView.module.css";
 
@@ -55,13 +57,10 @@ export function SocialPostsTable({
   const [links, setLinks] = useState(initialLinks);
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [manual, setManual] = useState<Record<string, number | null>>({});
-
-  // A typed-in share of non-followers shows and sorts at once, before the page re-reads it.
-  const posts = useMemo(
-    () => listed.map((p) => (postKey(p.accountId, p.id) in manual ? { ...p, nonFollowersPct: manual[postKey(p.accountId, p.id)] } : p)),
-    [listed, manual]
-  );
+  const [savedMetrics,setSavedMetrics] = useState<Record<string,Partial<Record<ManualPostMetric,{value:number|null;basis:SocialPost['engagementBasis']}>>>>({});
+  const posts = useMemo(() => listed.map(post => applySavedPostMetrics(post,
+    Object.entries(savedMetrics[postKey(post.accountId,post.id)] ?? {}).map(([metric,entry]) => ({metric,...entry}))
+  ) as SocialPost),[listed,savedMetrics]);
 
   useEffect(() => setTags(initialTags), [initialTags]);
   useEffect(() => setLinks(initialLinks), [initialLinks]);
@@ -110,7 +109,7 @@ export function SocialPostsTable({
       if (!response.ok) throw new Error(body?.error ?? `HTTP ${response.status}`);
       return body;
     } catch (e) {
-      setError(tr("insights.social.posts.tags.failed", { reason: e instanceof Error ? e.message : String(e) }));
+      setError(tr("insights.social.posts.changeFailed", { reason: e instanceof Error ? e.message : String(e) }));
       return null;
     }
   }
@@ -125,10 +124,12 @@ export function SocialPostsTable({
     else router.refresh();
   }
 
-  async function saveNonFollowers(post: SocialPost, percent: number | null): Promise<boolean> {
-    const body = await call("/api/insights/social/non-followers", { method: "PUT", body: JSON.stringify({ accountId: post.accountId, postId: post.id, percent }) });
+  async function saveMetric(post: SocialPost, metric: ManualPostMetric, value: number | null): Promise<boolean> {
+    const body = await call("/api/insights/social/manual-metrics", { method: "PUT", body: JSON.stringify({ accountId: post.accountId, postId: post.id, metric, value }) });
     if (!body) return false;
-    setManual((m) => ({ ...m, [postKey(post.accountId, post.id)]: (body.percent as number | null) ?? null }));
+    const key=postKey(post.accountId,post.id);
+    setSavedMetrics(current=>({...current,[key]:{...current[key],[metric]:{value:body.value as number|null,basis:post.engagementBasis}}}));
+    router.refresh();
     return true;
   }
 
@@ -150,17 +151,19 @@ export function SocialPostsTable({
   }
 
   const typeLabel = (value: string) => (TYPE_LABELS[value] ? tr(TYPE_LABELS[value]) : value);
-  const n = (value: number | null) => (value === null ? "—" : integer(value));
   const BAND_CLASS: Record<Band, string> = { low: styles.bandLow, medium: styles.bandMedium, high: styles.bandHigh };
-  /** A metric cell, coloured by the platform's bands; the band is also said in words, for a reader who cannot see the colour. */
-  const cell = (post: SocialPost, metric: BandMetric, shown: string) => {
-    const band = post.bands[metric];
-    return (
-      <td className={`${t.n} ${band ? BAND_CLASS[band] : ""}`} title={band ? tr(`insights.social.band.${band}`) : undefined}>
-        {shown}
-        {band ? <span className={t.srOnly}> ({tr(`insights.social.band.${band}`)})</span> : null}
-      </td>
-    );
+  const cell = (post: SocialPost, metric: MetricKey) => {
+    const band = post.bands[metric as BandMetric];
+    const manual = post.manualMetrics?.includes(metric) ?? false;
+    const percentage = metric === "engagementRate" || metric === "nonFollowersPct";
+    const value = post[metric];
+    const display = value === null ? "—" : percentage ? percentOf(value, 1) : integer(value);
+    return <ManualMetricCell key={metric} metric={metric} value={value} display={display}
+      manual={manual || (metric === 'engagementRate' && !!post.rateFromManual)}
+      editable={value === null || manual}
+      className={`${t.n} ${band ? BAND_CLASS[band] : ""}`}
+      bandLabel={band ? tr(`insights.social.band.${band}`) : undefined}
+      onSave={(next) => saveMetric(post, metric, next)} />;
   };
   const sortHeader = (key: SortKey, label: string, className?: string) => (
     <th key={key} className={className} aria-sort={sort === key ? (desc ? "descending" : "ascending") : "none"}>
@@ -284,15 +287,7 @@ export function SocialPostsTable({
                       />
                     </span>
                   </td>
-                  {cell(post, "views", n(post.views))}
-                  {cell(post, "reach", n(post.reach))}
-                  {cell(post, "engagementRate", post.engagementRate === null ? "—" : percentOf(post.engagementRate, 1))}
-                  {cell(post, "likes", n(post.likes))}
-                  {cell(post, "comments", n(post.comments))}
-                  {cell(post, "shares", n(post.shares))}
-                  {cell(post, "follows", n(post.follows))}
-                  {cell(post, "engagement", n(post.engagement))}
-                  <NonFollowersCell value={post.nonFollowersPct} onSave={(percent) => saveNonFollowers(post, percent)} />
+                  {METRICS.map((metric) => cell(post, metric))}
                 </tr>
               );
             })}
@@ -301,72 +296,6 @@ export function SocialPostsTable({
       </div>
       {capped ? <p className={t.muted}>{tr("insights.social.posts.capped", { n: posts.length })}</p> : null}
     </>
-  );
-}
-
-/**
- * The share of non-followers a post reached, typed in by hand: Meta gives no
- * per-post figure, so a person copies it from the platform's own app. Click to
- * edit, Enter or leaving the box saves, Escape cancels, an empty box clears it.
- */
-function NonFollowersCell({ value, onSave }: { value: number | null; onSave: (percent: number | null) => Promise<boolean> }) {
-  const tr = useT();
-  const { percentOf } = useFormat();
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  async function commit() {
-    if (saving) return;
-    const text = draft.trim().replace(",", ".").replace(/%$/, "");
-    const next = text === "" ? null : Number(text);
-    if (next !== null && (!Number.isFinite(next) || next < 0 || next > 100)) {
-      setEditing(false);
-      return;
-    }
-    if (next === value) {
-      setEditing(false);
-      return;
-    }
-    setSaving(true);
-    const ok = await onSave(next);
-    setSaving(false);
-    if (ok) setEditing(false);
-  }
-
-  return (
-    <td className={t.n}>
-      {editing ? (
-        <input
-          className={styles.manualInput}
-          type="text"
-          inputMode="decimal"
-          autoFocus
-          disabled={saving}
-          value={draft}
-          aria-label={tr("insights.social.posts.col.nonFollowersPct")}
-          placeholder="0–100"
-          onChange={(e) => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
-            if (e.key === "Escape") setEditing(false);
-          }}
-        />
-      ) : (
-        <button
-          type="button"
-          className={styles.manualCell}
-          title={tr("insights.social.posts.nonFollowers.edit")}
-          onClick={() => {
-            setDraft(value === null ? "" : String(value));
-            setEditing(true);
-          }}
-        >
-          {value === null ? <span className={styles.manualEmpty}>{tr("insights.social.posts.nonFollowers.add")}</span> : percentOf(value, 1)}
-        </button>
-      )}
-    </td>
   );
 }
 

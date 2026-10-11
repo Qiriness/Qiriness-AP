@@ -61,7 +61,7 @@
 
 .titleBlock h2 {
   margin: 0;
-  font-size: var(--text-xl);
+  font-size: max(28px, 1.75rem);
   color: var(--text-strong);
 }
 
@@ -76,6 +76,12 @@
   align-items: center;
   gap: var(--space-3);
 }
+
+.viewControls{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:var(--space-3);margin-bottom:var(--space-4)}
+.viewControls .basisBar{margin:0}
+.viewControls > [role=group],.trendControls > [role=group]{max-width:100%;flex-wrap:wrap}
+.viewControls .basisLabel{flex-wrap:wrap;max-width:100%}
+.trendControls{display:flex;justify-content:flex-end;margin-bottom:var(--space-3);max-width:100%}
 
 .networkLabel {
   display: inline-flex;
@@ -702,6 +708,7 @@
 /* --- engagement-rate basis, and the top-posts cards ---------------------- */
 
 .basisBar {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -721,6 +728,38 @@
 .basisHint {
   font-size: var(--text-caption);
   color: var(--text-subtle);
+}
+
+.basisInfo { flex-shrink: 0; }
+.manualLabel { display: block; font-size: var(--text-caption); color: var(--text-muted); }
+.basisInfo summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+}
+.basisInfo summary::-webkit-details-marker { display: none; }
+.basisInfo summary:hover { background: var(--mist-050); color: var(--text-strong); }
+.basisInfo summary:focus-visible { outline: 2px solid var(--teal-ink); outline-offset: 2px; }
+.basisInfo .basisHint {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  right: 0;
+  width: min(280px, 100%);
+  margin: var(--space-1) 0 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-default);
+  line-height: 1.5;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 10%);
 }
 
 .topGrid {

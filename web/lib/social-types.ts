@@ -85,15 +85,19 @@ export interface AudienceBucket {
 }
 
 export interface SocialAudience {
+  companyId?: string;
+  today?: string;
+  dimensionMeta?: Partial<Record<AudienceDimension,{source:'manual'|'platform';capturedOn:string}>>;
   capturedOn: string | null;
   gender: AudienceBucket[];
   age: AudienceBucket[];
   country: AudienceBucket[];
   city: AudienceBucket[];
 }
+export type AudienceDimension = 'gender'|'age'|'country'|'city';
 
 /** The post metrics that can be colour-banded (83), and a post's band in each. */
-export type BandMetric = "views" | "reach" | "engagement" | "engagementRate" | "likes" | "comments" | "shares" | "follows";
+export type BandMetric = "views" | "reach" | "engagement" | "engagementRate" | "likes" | "comments" | "shares" | "follows" | "nonFollowersPct";
 export type Band = "low" | "medium" | "high";
 export type BandMode = "off" | "absolute" | "followers" | "median";
 
@@ -107,7 +111,11 @@ export interface BandRule {
 /** What interactions are divided by for a platform's engagement rate (82). */
 export type EngagementBasis = "followers" | "reach" | "views";
 
+export type ManualPostMetric = BandMetric | 'nonFollowersPct';
 export interface SocialPost {
+  /** Effective user-entered values; provider values always take precedence. */
+  manualMetrics?: ManualPostMetric[];
+  rateFromManual?: boolean;
   id: string;
   /** The `social_accounts` row; with `id`, what a tag is put on. */
   accountId: string;
@@ -123,7 +131,7 @@ export interface SocialPost {
   /** Percent, under `engagementBasis`: this post's platform's choice. */
   engagementRate: number | null;
   engagementBasis: EngagementBasis;
-  /** Percent (0-100) of the people reached who do not follow, typed in by hand (84); null = not entered. */
+  /** Percent (0-100) of the people reached who do not follow; generic manual annotation, null = not entered. */
   nonFollowersPct: number | null;
   /** Low / medium / high per metric under the platform's bands; a metric with no colour is absent. */
   bands: Partial<Record<BandMetric, Band>>;
@@ -135,6 +143,9 @@ export interface SocialPost {
 }
 
 export interface OrganicPanel {
+  /** Views/interactions are lifetime video counters for selected publication dates. */
+  videoLifetime: boolean;
+  seriesBlockedReason: string | null;
   /** Organic kinds with at least one tracked account. */
   kinds: OrganicKind[];
   totals: Compared<OrganicTotals>;

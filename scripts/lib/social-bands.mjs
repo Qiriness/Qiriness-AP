@@ -11,12 +11,12 @@
 //
 // Pure, so it is tested without a database or a screen.
 
-export const BAND_METRICS = ['views', 'reach', 'engagement', 'engagementRate', 'likes', 'comments', 'shares', 'follows'];
+export const BAND_METRICS = ['views', 'reach', 'engagement', 'engagementRate', 'likes', 'comments', 'shares', 'follows', 'nonFollowersPct'];
 export const BAND_MODES = ['off', 'absolute', 'followers', 'median'];
 
 /** The engagement rate is already a ratio, so « % of followers » would divide a percentage. */
 export function modesFor(metric) {
-  return metric === 'engagementRate' ? ['off', 'absolute', 'median'] : BAND_MODES;
+  return metric === 'engagementRate' || metric === 'nonFollowersPct' ? ['off', 'absolute', 'median'] : BAND_MODES;
 }
 
 /** Suggested rules; a metric not listed starts off. */
@@ -55,6 +55,7 @@ export function validateRule(metric, input) {
   }
   if (low < 0 || high < 0) return { ok: false, error: `${metric}: limits cannot be negative` };
   if (low > high) return { ok: false, error: `${metric}: the low limit is above the high limit` };
+  if (metric === 'nonFollowersPct' && mode === 'absolute' && high > 100) return { ok: false, error: 'nonFollowersPct: percentage limits cannot exceed 100' };
   return { ok: true, rule: { mode, low, high } };
 }
 

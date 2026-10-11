@@ -14,6 +14,22 @@ function fixture() {
     bands: [{ kind: 'instagram', metric: 'views', mode: 'absolute', low: 20, high: 100 }],
   };
 }
+test('Manual audience report snapshots retain partial percentages, dates and native precedence',()=>{
+ const input=fixture();input.manualAudience=[{kind:'instagram',dimension:'gender',captured_on:'2026-10-02',entries:[{key:'female',value:60},{key:'male',value:20}]},{kind:'tiktok',dimension:'city',captured_on:'2026-10-02',entries:[{key:'Foreign',value:80}]}];
+ const data=adaptSocialReport(input),snapshot=data.platforms[0].audienceSnapshots.at(-1);
+ assert.deepEqual(snapshot.gender,[{label:'Female',value:60},{label:'Male',value:20}]);assert.equal(snapshot.countries[0].label,'FR');assert.deepEqual(snapshot.cities,[]);assert.equal(snapshot.dimensionDates.gender,'2026-10-02');
+ const html=renderSocialReport(socialReportState(data,{name:'Dummy',endMonth:'2026-09'}));assert.ok(html.includes('Manual audience data:'));assert.ok(html.includes("manualDimensions?.includes('gender')?snapshot.gender"));
+});
+
+test('Reports retain manual annotations, preserve native values and distinguish cleared legacy percentages', () => {
+ const input=fixture();input.posts[0].reach=null;input.posts[0].non_followers_pct=50;
+ input.manualPosts={'ig|post':[{metric:'reach',value:25,basis:null},{metric:'views',value:999,basis:null},{metric:'engagementRate',value:12,basis:'views'}]};
+ const data=adaptSocialReport(input),post=data.platforms[0].posts[0];
+ assert.equal(post.reach,25);assert.equal(post.views,10);assert.equal(post.nonFollowerShare,null);
+ assert.deepEqual(post.manualMetrics,['reach','engagementRate']);assert.equal(post.manualEngagementRate,.12);
+ const html=renderSocialReport(socialReportState(data,{name:'Dummy',endMonth:'2026-09'}));
+ assert.ok(html.includes('Manually entered values are labelled Manual'));assert.ok(html.includes('x.manualMetrics?.includes(key)'));
+});
 
 test('TikTok reports keep lifetime video counters separate from unavailable daily activity', () => {
   const input = fixture();

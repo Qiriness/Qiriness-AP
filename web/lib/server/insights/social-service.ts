@@ -1,3 +1,8 @@
+import {fillManualAudience} from "../../../../scripts/lib/social-audience-manual.mjs";
+import {dateInZone} from "../../../../scripts/lib/social-report-data.mjs";
+import {readManualAudience} from "../social-audience-manual-service";
+import { applyManualPost } from '../../../../scripts/lib/social-post-manual.mjs';
+import type { ManualPostMetric } from '@/lib/social-types';
 /**
  * The Social media panel: organic (Instagram, Facebook Page) or paid (Meta
  * Ads, Google Ads), over the URL's range, for one network or all of them.
@@ -60,7 +65,7 @@ import type { InsightsRange, SeriesPoint } from "../../types";
 import { getSocialConnections } from "../social-connections-service";
 import { readSocialTags } from "../social-tags-service";
 import { readBandRows } from "../social-bands-service";
-import { readNonFollowers } from "../social-post-manual-service";
+import { readManualPosts } from "../social-post-manual-service";
 import { bandPosts, effectiveRules } from "../../../../scripts/lib/social-bands.mjs";
 import type { InsightsContext, SearchParams } from "./context";
 import { callRpc, getSupabaseClient } from "./shared";
@@ -153,7 +158,8 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
   const coverage = await coverageOf(SOCIAL_T.ACCOUNT_DAYS, ctx.shopId);
   const compare = previousCovered(ctx.range, coverage);
 
-  const [current, previous, audienceRows, postRows, reach, tags, bases, bandRows, nonFollowers] = await Promise.all([
+  const videoLifetime = selected.length === 1 && selected[0] === 'tiktok';
+  const [current, previous, audienceRows, postRows, reach, tags, bases, bandRows, manualPosts, videoSeries, manualAudience] = await Promise.all([
     readOrganicRows(ctx, ctx.range),
     compare ? readOrganicRows(ctx, ctx.range.previous) : Promise.resolve(null),
     callRpc<{ kind: string; captured_on: string; dimension: string; key: string; value: number }>(SOCIAL_RPC.AUDIENCE, { p_shop: ctx.shopId }),
@@ -162,7 +168,9 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     readSocialTags(ctx.shopId),
     readEngagementBases(ctx.shopId),
     readBandRows(ctx.shopId),
-    readNonFollowers(ctx.shopId),
+    readManualPosts(ctx.shopId),
+    videoLifetime ? callRpc<DayRow>('insights_tiktok_post_series', { p_shop: ctx.shopId, p_from: ctx.range.from, p_to: ctx.range.to, p_tz: ctx.tz, p_grain: ctx.range.grain }).catch(() => null) : Promise.resolve([]),
+    readManualAudience(ctx.shopId),
   ]);
 
   const totalsFor = (only: OrganicKind[]): Compared<OrganicTotals> => ({
@@ -177,7 +185,14 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
   );
   const listed = postRows
     .filter((p) => (selected as string[]).includes(p.kind as string))
-    .map((row) => toPost(row, bases, followersByAccount));
+    .map((row) => {
+      const entries = manualPosts.get(`${row.account_id}|${row.external_id}`) ?? [];
+      const original = toPost(row, bases, followersByAccount);
+      const filled = applyManualPost(original, entries.filter(e => e.metric !== 'engagementRate')) as SocialPost;
+      filled.engagementRate = postEngagementRate(filled, filled.engagementBasis, followersByAccount.get(filled.accountId) ?? null);
+      filled.rateFromManual = filled.engagementRate !== null && ['engagement',filled.engagementBasis].some(metric => filled.manualMetrics?.includes(metric as ManualPostMetric));
+      return applyManualPost(filled, entries.filter(e => e.metric === 'engagementRate')) as SocialPost;
+    });
   const bandRules = Object.fromEntries(
     kinds.map((kind) => [kind, effectiveRules(bandRows.filter((r) => r.kind === kind))])
   ) as Record<OrganicKind, Record<BandMetric, BandRule>>;
@@ -187,18 +202,20 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     const ofKind = listed.filter((p) => p.kind === kind);
     bandPosts(ofKind, bandRules[kind], followersByAccount).forEach((bands: Partial<Record<BandMetric, Band>>, i: number) => bandOfPost.set(ofKind[i], bands));
   }
-  const posts = listed.map((p) => ({ ...p, bands: bandOfPost.get(p) ?? {}, nonFollowersPct: nonFollowers.get(`${p.accountId}|${p.id}`) ?? null }));
+  const posts = listed.map((p) => ({ ...p, bands: bandOfPost.get(p) ?? {} }));
   const publishedCount = sumKnown(current.postTotals.filter((p) => (selected as string[]).includes(p.kind as string)).map((p) => p.posts as number)) ?? 0;
 
   return {
+    videoLifetime,
+    seriesBlockedReason: videoLifetime && videoSeries === null ? 'insights.social.trendUnavailable' : ctx.range.grain === 'hour' && !videoLifetime ? 'insights.social.hourly' : null,
     kinds,
     totals,
     byKind: kinds.map((kind) => ({ kind, totals: totalsFor([kind]) })),
     reach,
-    series: ctx.range.grain === "hour" ? null : organicSeries(ctx.range, current.series, selected, coverage),
+    series: videoLifetime ? videoSeries === null ? null : videoPublicationSeries(ctx.range, videoSeries) : ctx.range.grain === "hour" ? null : organicSeries(ctx.range, current.series, selected, coverage),
     drivers,
     driverSummary: driverSummary(drivers),
-    audience: selected.includes("instagram") ? toAudience(audienceRows.filter((r) => r.kind === "instagram")) : null,
+    audience: selected.length === 1 ? { ...fillManualAudience(toAudience(audienceRows.filter(r => r.kind === selected[0])), manualAudience.filter(r => r.kind === selected[0]), dateInZone(new Date(),ctx.tz)), companyId:ctx.shopId } as SocialAudience : null,
     posts,
     postsCapped: publishedCount > posts.length,
     engagementBases: Object.fromEntries(kinds.map((kind) => [kind, bases[kind] ?? DEFAULT_ENGAGEMENT_BASIS])) as OrganicPanel["engagementBases"],
@@ -208,6 +225,13 @@ async function readOrganic(ctx: InsightsContext, kinds: OrganicKind[], selected:
     postTagLinks: tags.links,
     activity: selected.length === 1 ? postActivity(posts, tags.tags, tags.links, ctx.tz) : null,
   };
+}
+
+function videoPublicationSeries(range: InsightsRange, rows: DayRow[]) {
+  const line = (field: string): SeriesPoint[] => toSeries(range, bucketSeries(rows, field, ['tiktok']), row => row?.value ?? null, { from: null, through: null })
+    .map(point => ({ ...point, state: point.value === null ? 'missing' as const : 'partial' as const }));
+  // Sparse publication buckets do not establish complete daily coverage.
+  return { views: line('views'), engagement: line('engagement'), posts: line('posts'), growth: line('growth') };
 }
 
 function organicSeries(range: InsightsRange, rows: DayRow[], kinds: OrganicKind[], coverage: Coverage) {
@@ -281,6 +305,7 @@ function toAudience(rows: { captured_on: string; dimension: string; key: string;
   };
   return {
     capturedOn: rows.map((r) => r.captured_on).sort().at(-1) ?? null,
+    dimensionMeta: Object.fromEntries(Object.keys(TOP).filter(dim=>rows.some(r=>r.dimension===dim)).map(dim=>[dim,{source:"platform",capturedOn:rows.filter(r=>r.dimension===dim).map(r=>r.captured_on).sort().at(-1)!}])),
     gender: dimension("gender"),
     age: dimension("age"),
     country: dimension("country"),

@@ -120,6 +120,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |   |       |-- insights/social/report/route.ts # GET ?month=&months=1|6|12&platforms=
 |   |       |                                  # authenticated editable HTML report download;
 |   |       |                                  # same roles as the Social panel
+|   |       |-- insights/social/manual-metrics  # PUT {accountId, postId, metric, value|null}: typed-in value for any of 9 missing post metrics (social-post-manual-service)
+|   |       |-- insights/social/manual-audience # PUT {kind, dimension, capturedOn, entries|null}: dated manual gender/age/country/city distribution (social-audience-manual-service)
 |   |       |-- insights/social/non-followers  # PUT {accountId, postId, percent}: the typed-in
 |   |       |                                  # share of non-followers (social-post-manual-service)
 |   |       |-- insights/social/bands        # PUT {kind, rules} or {kind, reset}: colour bands
@@ -1111,6 +1113,10 @@ Written by the worker and the CLIs, read only by the Insights panels.
 | `72_refund_notice.sql` | `support_answers.notify_on` (`refund_recorded`; marks a notice template) + `ticket_drafts.purpose` (`reply` / `refund_notice`). Copied from 05 / 07. No data. **Applied 2026-10-05** | 05, 07 |
 | `84_post_non_followers.sql` | `social_posts.non_followers_pct` + 0-100 check. No data. **Applied 2026-10-08** | 70 |
 | `85_tiktok.sql` | TikTok provider/kind/band constraints, follower RPC widened; `social_refresh_token` rotates Vault bundle and expiry, service role only. **Applied and verified 2026-10-09** | 70, 82, 83, 84 |
+| `87_tiktok_post_series.sql` | `insights_tiktok_post_series`: TikTok lifetime views/interactions of videos *published* in each bucket + follower-snapshot differences; service role only | 70, 85 |
+| `88_manual_post_metrics.sql` | `social_post_manual_metrics` (shop/account/post/metric; rate carries its `basis`), unique key on `social_posts(shop_id,account_id,external_id)`, copies `non_followers_pct` across | 70, 84 |
+| `89_manual_audience.sql` | `social_audience_manual` (latest dated distribution per shop/platform/dimension) + `valid_manual_audience()` | 70 |
+| `90_non_followers_bands.sql` | `nonFollowersPct` added to the band metric check (no `followers` mode, absolute <= 100) | 83 |
 | `83_social_metric_bands.sql` | `social_metric_bands` (`SOCIAL_BAND_T`). New table only. No data. **Applied 2026-10-08** | 01 |
 | `82_engagement_basis.sql` | `social_accounts.engagement_basis` + check; `insights_social_post_totals` dropped and recreated with three more columns (same args and grants). No data. **Applied 2026-10-08** | 70, 81 |
 | `81_social_post_tags.sql` | `social_posts.insights_at`; `social_post_tags` + `social_post_tag_links` (`SOCIAL_TAG_T`). New column and tables only. No data. **Applied 2026-10-08** | 70 |

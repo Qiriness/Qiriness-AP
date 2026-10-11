@@ -1,0 +1,10 @@
+.source,.help{font-size:var(--text-caption);color:var(--text-muted)}
+.form{display:grid;gap:var(--space-2);min-width:0}
+.form label{display:grid;gap:var(--space-1);font-size:var(--text-sm)}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 64px 28px;gap:var(--space-1);align-items:center}
+.form input,.form select{min-width:0;width:100%;padding:8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-default)}
+.actions{display:flex;flex-wrap:wrap;gap:var(--space-2)}
+.form button,.edit{padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface);color:var(--text-default);cursor:pointer;font-size:var(--text-sm)}
+.edit{margin-top:var(--space-3)}
+.form button:hover,.edit:hover{border-color:var(--teal);color:var(--teal-ink)}
+.form button:disabled{opacity:.5;cursor:default}

@@ -137,7 +137,7 @@
   --shadow-xs: 0 1px 2px rgba(15, 20, 27, 0.05);
   --shadow-sm: 0 1px 3px rgba(15, 20, 27, 0.08), 0 1px 2px rgba(15, 20, 27, 0.04);
   --shadow-md: 0 8px 24px rgba(15, 20, 27, 0.1);
-  --shadow-focus: 0 0 0 2px var(--teal);
+  --shadow-focus: 0 0 0 1px var(--teal);
 
   /* Layout */
   --container-max: 2400px;
