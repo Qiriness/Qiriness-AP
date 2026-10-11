@@ -228,16 +228,33 @@ const REQUIRED_TEXT_FIELDS = [
  * it applies to every reply rather than being retrieved for some of them.
  */
 export function createBrandVoiceStore(supabase) {
+  const filters = (shopId) => ({ shop_id: shopId, core_topic: 'brand', deleted_at: { operator: 'is', value: 'null' } });
+  // `loadIfChanged`'s copy: the row's `updated_at` when read, and the voice.
+  let cached = null;
   return {
     async load(shopId) {
-      const rows = await supabaseSelect(
-        supabase,
-        T.KNOWLEDGE_DOCUMENTS,
-        { shop_id: shopId, core_topic: 'brand', deleted_at: { operator: 'is', value: 'null' } },
-        'id,title,approval_status,voice_profile,content_text',
-        { limit: 1 }
-      );
+      const rows = await supabaseSelect(supabase, T.KNOWLEDGE_DOCUMENTS, filters(shopId), 'id,title,approval_status,voice_profile,content_text', {
+        limit: 1
+      });
       return rows[0] ? toBrandVoice(rows[0]) : null;
+    },
+
+    /**
+     * The same voice, re-read only when the row changed since the last call.
+     *
+     * The worker loads it every poll and it changes almost never: 6 kB a poll
+     * for the same text (2026-10-11). Asking for `updated_at` is ~100 bytes,
+     * and every edit moves it (`knowledge_documents_set_updated_at`), as do
+     * an approval, a deletion and a replacement document. So an edit in
+     * Settings is still read on the next poll, not later.
+     */
+    async loadIfChanged(shopId) {
+      const [row] = await supabaseSelect(supabase, T.KNOWLEDGE_DOCUMENTS, filters(shopId), 'id,updated_at', { limit: 1 });
+      const stamp = row ? `${row.id}@${row.updated_at}` : '';
+      if (cached && cached.shopId === shopId && cached.stamp === stamp) return cached.voice;
+      const voice = row ? await this.load(shopId) : null;
+      cached = { shopId, stamp, voice };
+      return voice;
     }
   };
 }

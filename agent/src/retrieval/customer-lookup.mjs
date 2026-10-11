@@ -1,5 +1,5 @@
 import { hashIdentifier, recordDataAccessEvent } from '../../../scripts/lib/compliance-audit.mjs';
-import { supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
+import { supabaseSelect, supabaseSelectAll } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { loadVipCustomers, loadVipRule } from '../../../scripts/lib/vip-rule.mjs';
 
 import { buildAccountState, buildCustomerContext, toPromptText } from './customer-context.mjs';
@@ -33,8 +33,16 @@ const COLUMNS = [
   'last_order_name', 'last_order_at', 'last_order_total', 'rfm_group'
 ].join(',');
 
-export function createCustomerLookup({ supabase, shopId, logger, audit = true }) {
+// How long a hash index may stand without a re-read, whatever the stamp says.
+// The stamp does not see a row DELETED outright (a redaction), only one changed.
+const INDEX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export function createCustomerLookup({ supabase, shopId, logger, audit = true, now = () => Date.now() }) {
   let hashIndexPromise = null;
+  // The customers' newest `updated_at` and the time when the index was last
+  // dropped by `refreshIfChanged`, which is what it compares against.
+  let indexStamp = null;
+  let indexAt = 0;
   let storefrontPromise = null;
   let vipRulePromise = null;
 
@@ -160,6 +168,43 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true })
     /** Drops the cached hash index — call after a customer sync. */
     refresh() {
       hashIndexPromise = null;
+    },
+
+    /**
+     * Drops the hash index only if a customer changed since it was read (or a
+     * day has passed). Returns whether it did.
+     *
+     * WHY. The resolution pass dropped it on every pass with a ticket to look
+     * up, and the rebuild is every customer's id and address: 4.7 MB for 62k
+     * customers, 4–6 times a day (measured 2026-10-11), almost always to read
+     * back the same index. The question is one indexed row
+     * (`customers_shop_updated_at_idx`), and a sync, a deletion or a new
+     * customer all move `updated_at`.
+     *
+     * The stamp is read BEFORE the rebuild, so a customer written during the
+     * scan moves it again and the next call rebuilds once more.
+     */
+    async refreshIfChanged() {
+      let stamp;
+      try {
+        const [row] = await supabaseSelect(supabase, 'customers', { shop_id: shopId }, 'updated_at', {
+          order: 'updated_at.desc.nullslast',
+          limit: 1
+        });
+        stamp = row?.updated_at ?? '';
+      } catch (error) {
+        // Could not tell: drop it, which is what every pass did before.
+        logger?.warn?.('customer.index_stamp_failed', { reason: error.message });
+        hashIndexPromise = null;
+        indexStamp = null;
+        return true;
+      }
+      const at = now();
+      if (hashIndexPromise && stamp === indexStamp && at - indexAt < INDEX_MAX_AGE_MS) return false;
+      hashIndexPromise = null;
+      indexStamp = stamp;
+      indexAt = at;
+      return true;
     },
 
     /**

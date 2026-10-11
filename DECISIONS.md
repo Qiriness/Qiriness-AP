@@ -358,6 +358,39 @@ Resolution now also reads every later inbound message. Only the customer's own w
 
 Measured over 492 unlinked tickets: **5 become confirmed** (4 by the sender's own address, 1 by an address in a later message) and nothing else moves.
 
+### An idle poll reads what could have changed: drafting refusals, the customer index, forwarding (2026-10-11)
+
+**Found by the egress bill, measured in production.** Egress was still ~450 MB a day after the 2026-10-06 changes. A one-hour `pg_stat_statements` comparison put the worker at ~120k PostgREST requests a day. Sizing each repeated read put the two drafting passes (replies and refund notices, `draft-runner.mjs`) at **210 kB a poll, ~270 MB a day**:
+
+- Every poll they read every case file of every case waiting on us (28), with all of its jsonb, before asking whether any still needed a draft.
+- Six of those cases are claimed every poll and refused every poll: 4 `not_customer_trigger`, 1 `not_open`, 1 `stale_case_file`. Each time the pass first read their full threads with bodies, their tickets and their case siblings.
+
+**The rules:**
+
+- **The queue is decided on keys.** `needingDraft` runs on `id, ticket_id, trigger_message_id, investigated_at`. The full case file (`investigationForDrafting`) is read by id only for the rows claimed.
+- **A refusal is remembered** (`createDraftRefusals`, one per pass in the worker). A candidate refused by a gate or by `draftDecision` is not claimed again while its key holds. The key is the ticket's `updated_at` (new mail, status, a pending pass and a recorded notice all move it), the case file's id and `investigated_at`, and the case version and `as_of_message_id`. Anything that moves outside those is caught by a **15-minute expiry**, the change gate's floor: a sibling thread of the case, or a rule or template edited in Agent Setup. A model failure is never remembered; it is retried next poll. The CLI and the rehearsal pass no memory and judge every candidate every time.
+- **The brand voice is read once a poll** and shared by both passes.
+
+**Measured on live data, sealed** (GET only, no model call), two consecutive polls each:
+
+| Code | First poll | Next poll |
+|---|---|---|
+| Before | 210 kB | 210 kB |
+| After | 153 kB | 24 kB |
+
+The same six refusals are counted, for the same reasons. At one refresh per 15 minutes that is ~43 MB a day instead of ~270.
+
+**The rest of an idle poll, the same day.** Run sealed as a whole worker (Supabase reads real; writes and RPCs answered fake; Graph an empty mailbox; OpenAI and Shopify refused):
+
+- **Customer index.** `refreshIfChanged` drops the 4.7 MB hash index only when the newest `customers.updated_at` moved since it was read, or after a day. A day is the backstop because a row deleted outright moves no stamp. If the stamp cannot be read, the index is dropped, as every pass did before.
+- **Forwarding is behind the change gate**, on `tickets`, `forwarding_destinations` and `forwarding_settings`. New mail, our own replies and a category all move `tickets`. A failed forward or acknowledgement is now retried on the 15-minute floor rather than every minute.
+- **The reply pass reads `case_current` without `obligations` and `pending_customer_inputs`.** Only a notice reads them.
+- **The mailbox cutover is read as one key** (`sync_cursors->>mail_ingest_cutover_at`), not the whole cursor object with both delta links.
+- **Saving a delta cursor returns nothing.** Before, each folder's save, every poll, downloaded the whole `shops` row.
+- **The brand voice is re-read only when its row's `updated_at` moved** (`loadIfChanged`). An edit is still read on the next poll.
+
+Measured with that harness: **41 kB → 33 kB a poll**, about 42 MB a day for an idle worker. The 3.8 MB first poll after a restart, and once a day after that, is the catch-up passes reading everything once. The paged reads still cost a second, empty request each: `supabaseSelectAll` stops on an empty page because it does not trust the server's page size.
+
 ### The other per-poll passes run on change, not on the clock (2026-10-06)
 
 **Measured with writes blocked, after the order-resolution fix:** an idle poll still downloaded about 720 kB. That is the change router 269 kB, the fold's staleness scan 264 kB, customer resolution 127 kB, order context 48 kB and auto-close 15 kB. Every one of them re-read its whole input to conclude that nothing had moved.

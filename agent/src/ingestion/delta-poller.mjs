@@ -427,8 +427,10 @@ export function createSupabaseCursorStore(supabase) {
     return rows[0]?.sync_cursors || {};
   }
 
+  // Nothing reads the row back: without `minimal` each folder's save, every
+  // poll, downloaded the whole `shops` row (2.4 kB).
   async function write(shopId, cursors) {
-    await supabaseUpdateById(supabase, 'shops', shopId, { sync_cursors: cursors });
+    await supabaseUpdateById(supabase, 'shops', shopId, { sync_cursors: cursors }, { returning: 'minimal' });
   }
 
   return {

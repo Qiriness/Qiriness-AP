@@ -153,3 +153,19 @@ test('the change gate is the only binding of its name in the worker', () => {
   assert.equal(declarations.length, 1, 'declared once, in main');
   assert.ok(!/\bgate\.run\(/.test(SOURCE), 'nothing calls the ambiguous `gate.run`');
 });
+
+test('forwarding runs behind the change gate, on tickets and its own two tables', () => {
+  // 2026-10-11: it re-read every inbound message since the switch, the ledger
+  // and the destinations each poll to find, almost always, nothing new.
+  assert.match(
+    SOURCE,
+    /changeGate\.run\('forward', \[T\.TICKETS, T\.FORWARDING_DESTINATIONS, T\.FORWARDING_SETTINGS\]/
+  );
+});
+
+test('each drafting pass keeps its own memory of refusals, outside the model rebuild', () => {
+  assert.match(SOURCE, /gates: 'poll',\s*refusals: draftRefusals/);
+  assert.match(SOURCE, /gates: 'notice',\s*refusals: noticeRefusals/);
+  const rebuild = SOURCE.match(/const buildModelStages = \(\) => \{([\s\S]*?)\n  \};/)?.[1] ?? '';
+  assert.ok(!/createDraftRefusals/.test(rebuild), 'a model change must not forget them');
+});

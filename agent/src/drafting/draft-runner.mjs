@@ -119,6 +119,10 @@ export async function runDrafting({
   // Count what would be drafted and call no model: the dry run before
   // DRAFT_IN_POLL is switched on (decided 2026-09-26).
   estimateOnly = false,
+  // The worker's memory of refused candidates (`createDraftRefusals`), one per
+  // pass. Absent everywhere else: the CLI and the rehearsal judge every
+  // candidate every time, as before.
+  refusals = null,
   onDraft
 } = {}) {
   const problem = brandVoiceProblem(brandVoice);
@@ -126,16 +130,17 @@ export async function runDrafting({
     throw new Error(problem);
   }
 
-  const candidates = await store.claimable({ shopId, limit, ticketId, redraft, gates, cutoverAt });
+  const candidates = await store.claimable({ shopId, limit, ticketId, redraft, gates, cutoverAt, refusals });
   const held =
     heldSituations ?? (candidates.length > 0 && store.heldSituations ? await store.heldSituations(shopId) : new Set());
   const parcelScopeForRun =
     parcelScope ?? (candidates.length > 0 && store.parcelScope ? await store.parcelScope(shopId) : null);
   const totals = { considered: candidates.length, drafted: 0, skipped: 0, failed: 0 };
   const skippedBy = {};
-  const skip = (reason) => {
+  const skip = (reason, candidate) => {
     totals.skipped += 1;
     skippedBy[reason] = (skippedBy[reason] || 0) + 1;
+    refusals?.add(candidate?.refusalKey);
   };
 
   for (const candidate of candidates) {
@@ -149,21 +154,21 @@ export async function runDrafting({
     if (gates === 'poll') {
       const gate = pollGate({ caseCurrent, ticket, investigation, conversation, cutoverAt });
       if (!gate.ok) {
-        skip(gate.reason);
+        skip(gate.reason, candidate);
         continue;
       }
     }
     if (gates === 'notice') {
       const gate = noticeGate({ caseCurrent, ticket, notice, conversation });
       if (!gate.ok) {
-        skip(gate.reason);
+        skip(gate.reason, candidate);
         continue;
       }
     }
 
     const decision = notice ? noticeDecision(caseCurrent) : draftDecision({ investigation, ticket, conversation, caseTarget });
     if (!decision.draft) {
-      skip(decision.reason);
+      skip(decision.reason, candidate);
       continue;
     }
 
@@ -511,11 +516,75 @@ export function needingDraft(investigations = [], drafts = [], versions = new Ma
 /** Ids per `in.()` request: the list travels in the URL (the HTTP 414 of 2026-09-27). */
 const ID_BATCH = 100;
 
+/** What the queue is decided on (`needingDraft`); the case file itself is read for the claimed only. */
+const INVESTIGATION_KEYS = 'id,ticket_id,trigger_message_id,investigated_at';
+
+/**
+ * Candidates the worker's gates refused, so the next poll does not claim them again.
+ *
+ * WHY. A case waiting on us whose case file the gates refuse (an older message,
+ * an internal sender, a decision to stay silent) stayed in the queue, and every
+ * poll read its case file and whole thread again to refuse it again: about
+ * 140 kB a minute between the two passes on 2026-10-11.
+ *
+ * WHAT A REFUSAL IS KEYED ON (`refusalKey`): the ticket's `updated_at` (a new
+ * message, a status, a pending pass, a recorded notice all move it), the case
+ * file read (id and `investigated_at`) and the case version (`case_current`).
+ * Any of them moving makes a new key, so the candidate is read again at once.
+ * What moves outside them — a sibling thread of the case, a rule or template
+ * edited in Agent Setup — is caught by the expiry, the 15 minutes the change
+ * gate uses (`createChangeGate`).
+ *
+ * In memory, per pass: a restart reads everything again. Only a gate or a
+ * decision is remembered, never a model failure, which is retried next poll.
+ */
+export function createDraftRefusals({ now = () => Date.now(), ttlMs = 15 * 60 * 1000 } = {}) {
+  const until = new Map();
+  return {
+    has(key) {
+      if (!key) return false;
+      const expires = until.get(key);
+      if (expires === undefined) return false;
+      if (now() < expires) return true;
+      until.delete(key);
+      return false;
+    },
+    add(key) {
+      if (!key) return;
+      const at = now();
+      for (const [stale, expires] of until) if (expires <= at) until.delete(stale);
+      until.set(key, at + ttlMs);
+    },
+    get size() {
+      return until.size;
+    }
+  };
+}
+
+/** The inputs a refusal depends on, as one string; null when one is unknown. */
+export function refusalKey({ investigation, ticketUpdatedAt, caseCurrent }) {
+  if (!investigation?.id || !ticketUpdatedAt) return null;
+  return [
+    investigation.ticket_id,
+    ticketUpdatedAt,
+    investigation.id,
+    investigation.investigated_at ?? '',
+    caseCurrent?.version ?? '',
+    caseCurrent?.as_of_message_id ?? ''
+  ].join('|');
+}
+
 /**
  * What drafting reads of `case_current`: the version and the next actor, and,
  * for a notice, whether anything is still owed (`noticeDecision`).
  */
 const CASE_CURRENT_FOR_DRAFTING = 'ticket_id,version,next_actor,as_of_message_id,as_of_at,obligations,pending_customer_inputs';
+
+/**
+ * The same without the two jsonb only a notice reads (`noticeDecision`): what
+ * the reply pass reads every poll for every case waiting on us.
+ */
+const CASE_CURRENT_FOR_REPLIES = 'ticket_id,version,next_actor,as_of_message_id,as_of_at';
 
 async function selectInBatches(supabase, table, column, ids, filters, columns, options) {
   const unique = [...new Set(ids.filter(Boolean))];
@@ -585,7 +654,7 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
       };
     },
 
-    async claimable({ shopId, limit, ticketId = null, redraft = false, gates = 'manual', cutoverAt = null }) {
+    async claimable({ shopId, limit, ticketId = null, redraft = false, gates = 'manual', cutoverAt = null, refusals = null }) {
       const filters = {
         shop_id: shopId,
         // All three verdicts produce text now. `needs_human` gets an
@@ -647,12 +716,17 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
             as_of_at: { operator: 'gte', value: new Date(cutover).toISOString() },
             ...(ticketId ? { ticket_id: ticketId } : {})
           },
-          CASE_CURRENT_FOR_DRAFTING,
+          CASE_CURRENT_FOR_REPLIES,
           { order: 'ticket_id.asc' }
         );
         if (caseRows.length === 0) return [];
       }
 
+      // THE QUEUE IS DECIDED ON THE KEYS, THE CASE FILES ARE READ FOR THE CLAIMED.
+      // Every case file of every case waiting on us, with all its jsonb, was read
+      // each poll — twice, replies and notices — before asking whether any of
+      // them still needed a draft: ~150 kB a minute on 2026-10-11, the largest
+      // share of the day's egress, to find almost always that none did.
       const investigations = caseRows
         ? await selectInBatches(
             supabase,
@@ -660,10 +734,10 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
             'ticket_id',
             caseRows.map((row) => row.ticket_id),
             filters,
-            COLUMNS.investigationForDrafting,
+            INVESTIGATION_KEYS,
             { order: 'investigated_at.desc' }
           )
-        : await supabaseSelect(supabase, T.TICKET_INVESTIGATIONS, filters, COLUMNS.investigationForDrafting, {
+        : await supabaseSelect(supabase, T.TICKET_INVESTIGATIONS, filters, INVESTIGATION_KEYS, {
             order: 'investigated_at.desc'
           });
       // Batches each come back newest first; the per-ticket pick below needs it overall.
@@ -671,21 +745,12 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
 
       // Newest first from the query, so the first row seen per ticket is the
       // one to keep.
-      //
-      // `handoff` IS REDUCED TO A BOOLEAN HERE, at the boundary, and that is the
-      // whole reason this loop rewrites the row rather than passing it through.
-      // The disposition needs to know WHETHER a human owes an action; the text
-      // of what they owe is internal — « rembourser le client et relancer le
-      // transporteur » — and the drafting projection excludes it precisely so it
-      // cannot be rendered into a reply. Selecting the column and dropping its
-      // contents one line later keeps both: the derivation gets its answer, and
-      // no internal prose ever reaches the runner, let alone the prompt.
       const latest = [];
       const seen = new Set();
       for (const row of investigations) {
         if (seen.has(row.ticket_id)) continue;
         seen.add(row.ticket_id);
-        latest.push({ ...row, handoff: Boolean(row.handoff) });
+        latest.push(row);
       }
 
       // The case each ticket is at, when a fold exists: the version a draft is
@@ -704,8 +769,55 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
       );
       const versions = new Map([...caseByTicket].map(([id, row]) => [id, row.version]));
 
-      const pending = redraft ? latest : await this.undrafted(shopId, latest, versions);
-      const claimed = typeof limit === 'number' ? pending.slice(0, limit) : pending;
+      const undrafted = redraft ? latest : await this.undrafted(shopId, latest, versions);
+
+      // REFUSED BEFORE, ON THE SAME INPUTS: not claimed again (`createDraftRefusals`).
+      // The key needs the ticket's `updated_at`, one narrow read.
+      let pending = undrafted;
+      const refusalKeys = new Map();
+      if (refusals && undrafted.length > 0) {
+        const stamps = await selectInBatches(
+          supabase,
+          T.TICKETS,
+          'id',
+          undrafted.map((row) => row.ticket_id),
+          { shop_id: shopId },
+          'id,updated_at'
+        );
+        const updatedAt = new Map(stamps.map((row) => [row.id, row.updated_at]));
+        for (const row of undrafted) {
+          refusalKeys.set(row.ticket_id, refusalKey({ investigation: row, ticketUpdatedAt: updatedAt.get(row.ticket_id), caseCurrent: caseByTicket.get(row.ticket_id) }));
+        }
+        pending = undrafted.filter((row) => !refusals.has(refusalKeys.get(row.ticket_id)));
+      }
+
+      const claimedKeys = typeof limit === 'number' ? pending.slice(0, limit) : pending;
+      if (claimedKeys.length === 0) {
+        return [];
+      }
+
+      // `handoff` IS REDUCED TO A BOOLEAN HERE, at the boundary, and that is the
+      // whole reason this rewrites the row rather than passing it through. The
+      // disposition needs to know WHETHER a human owes an action; the text of
+      // what they owe is internal — « rembourser le client et relancer le
+      // transporteur » — and the drafting projection excludes it precisely so it
+      // cannot be rendered into a reply. Selecting the column and dropping its
+      // contents one line later keeps both: the derivation gets its answer, and
+      // no internal prose ever reaches the runner, let alone the prompt.
+      const full = new Map(
+        (
+          await selectInBatches(
+            supabase,
+            T.TICKET_INVESTIGATIONS,
+            'id',
+            claimedKeys.map((row) => row.id),
+            { shop_id: shopId },
+            COLUMNS.investigationForDrafting
+          )
+        ).map((row) => [row.id, { ...row, handoff: Boolean(row.handoff) }])
+      );
+      // In the claimed order; a case file deleted between the two reads drops out.
+      const claimed = claimedKeys.map((row) => full.get(row.id)).filter(Boolean);
       if (claimed.length === 0) {
         return [];
       }
@@ -813,7 +925,9 @@ export function createDraftingStore(supabase, { caseStateStore = null } = {}) {
           // `case_current`: the version this draft is written against (stage 6).
           caseCurrent: caseByTicket.get(investigation.ticket_id) || null,
           // Notice mode only: the recorded notice and its template rule.
-          notice: noticeByTicket.get(investigation.ticket_id) ?? null
+          notice: noticeByTicket.get(investigation.ticket_id) ?? null,
+          // What a refusal is remembered under; null when no `refusals` was given.
+          refusalKey: refusalKeys.get(investigation.ticket_id) ?? null
         }))
         // A soft-deleted ticket or a purged message drops out here rather than
         // reaching the model as an undefined.

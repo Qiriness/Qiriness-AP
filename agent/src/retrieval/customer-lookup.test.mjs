@@ -278,3 +278,63 @@ test('a ticket already linked to a customer is answered from that link', async (
   assert.equal(result.matchedBy, 'customer_id');
   assert.equal(result.customerId, 'c1');
 });
+
+// --- refreshIfChanged: the 4.7 MB index is re-read only when a customer moved ---
+
+function stampedSupabase() {
+  const state = { stamp: '2026-10-11T08:00:00Z', fail: false, scans: 0 };
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    const parsed = new URL(String(url));
+    const from = Number(String(init?.headers?.Range || '0-999').split('-')[0]);
+    if (from > 0) return { ok: true, json: async () => [] };
+    if (parsed.searchParams.get('select') === 'updated_at') {
+      if (state.fail) return { ok: false, status: 503, json: async () => ({ message: 'unavailable' }) };
+      return { ok: true, json: async () => [{ updated_at: state.stamp }] };
+    }
+    if (parsed.searchParams.get('select') === 'id,email') {
+      state.scans += 1;
+      return { ok: true, json: async () => CUSTOMERS.map(({ id, email }) => ({ id, email })) };
+    }
+    return { ok: true, json: async () => CUSTOMERS.filter((c) => c.id === parsed.searchParams.get('id')?.replace('eq.', '')) };
+  };
+  return { state, client: { baseUrl: 'https://example.test/rest/v1', key: 'test-key' }, restore: () => { globalThis.fetch = originalFetch; } };
+}
+
+test('the hash index is re-read only when a customer changed since it was read', async (t) => {
+  const sb = stampedSupabase();
+  t.after(sb.restore);
+  let clock = 0;
+  const lookup = createCustomerLookup({ supabase: sb.client, shopId: 's1', audit: false, now: () => clock });
+  const marie = hashIdentifier('marie.martin@example.test');
+
+  assert.equal(await lookup.refreshIfChanged(), true, 'nothing read yet');
+  await lookup.findByEmailHash(marie);
+  assert.equal(sb.state.scans, 1);
+
+  assert.equal(await lookup.refreshIfChanged(), false, 'same stamp: kept');
+  await lookup.findByEmailHash(marie);
+  assert.equal(sb.state.scans, 1);
+
+  sb.state.stamp = '2026-10-11T09:00:00Z';
+  assert.equal(await lookup.refreshIfChanged(), true, 'a customer moved: dropped');
+  await lookup.findByEmailHash(marie);
+  assert.equal(sb.state.scans, 2);
+
+  // A row deleted outright moves no stamp: a day is the longest an index stands.
+  clock = 24 * 60 * 60 * 1000;
+  assert.equal(await lookup.refreshIfChanged(), true);
+});
+
+test('when the stamp cannot be read the index is dropped, as every pass did before', async (t) => {
+  const sb = stampedSupabase();
+  t.after(sb.restore);
+  const lookup = createCustomerLookup({ supabase: sb.client, shopId: 's1', audit: false });
+  await lookup.refreshIfChanged();
+  await lookup.findByEmailHash(hashIdentifier('marie.martin@example.test'));
+  sb.state.fail = true;
+  assert.equal(await lookup.refreshIfChanged(), true);
+  sb.state.fail = false;
+  await lookup.findByEmailHash(hashIdentifier('marie.martin@example.test'));
+  assert.equal(sb.state.scans, 2);
+});

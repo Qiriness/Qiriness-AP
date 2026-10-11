@@ -261,3 +261,33 @@ test('the approved text itself still travels, in every language', () => {
     assert.ok(prompt.includes(APPROVED.closingLine), language);
   }
 });
+
+// --- loadIfChanged: the worker re-reads the voice only when the row moved ------
+
+test('the brand voice is re-read only when its row changed', async (t) => {
+  const row = { id: 'k1', updated_at: '2026-10-11T08:00:00Z', title: 'Brand', approval_status: 'approved', voice_profile: { roleDescription: 'Agent' }, content_text: 'Contexte' };
+  const full = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const select = new URL(String(url)).searchParams.get('select');
+    if (select !== 'id,updated_at') full.push(select);
+    const columns = select.split(',');
+    return { ok: true, json: async () => (row.deleted ? [] : [Object.fromEntries(columns.map((c) => [c, row[c]]))]) };
+  };
+  t.after(() => { globalThis.fetch = originalFetch; });
+
+  const { createBrandVoiceStore } = await import('./brand-voice.mjs');
+  const store = createBrandVoiceStore({ baseUrl: 'https://example.test/rest/v1', key: 'k' });
+  const first = await store.loadIfChanged('s1');
+  assert.equal(first.approvalStatus, 'approved');
+  assert.equal(await store.loadIfChanged('s1'), first, 'unchanged: the same voice, not read again');
+  assert.equal(full.length, 1);
+
+  row.updated_at = '2026-10-11T09:00:00Z';
+  row.approval_status = 'draft';
+  assert.equal((await store.loadIfChanged('s1')).approvalStatus, 'draft', 'an edit is read on the next call');
+  assert.equal(full.length, 2);
+
+  row.deleted = true;
+  assert.equal(await store.loadIfChanged('s1'), null, 'a deleted voice is no voice');
+});

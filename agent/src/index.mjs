@@ -25,7 +25,7 @@ import { loadAgentModels, modelSignature, withAgentModels } from '../../scripts/
 import { createShopUsageRecording } from './llm/usage-store.mjs';
 import { createDraftRecord } from '../../scripts/lib/draft-record.mjs';
 import { createBrandVoiceStore } from './drafting/brand-voice.mjs';
-import { createDraftingStore, runDrafting } from './drafting/draft-runner.mjs';
+import { createDraftingStore, createDraftRefusals, runDrafting } from './drafting/draft-runner.mjs';
 import { loadDraftingContext } from './drafting/draft-context.mjs';
 import { readsAsClosure } from './casework/closure.mjs';
 import { createSpamClassifier } from './ingestion/spam-classifier.mjs';
@@ -217,6 +217,13 @@ async function main() {
   const orderResolutionStore = createOrderResolutionStore(supabase);
   // Remembers what was resolved, so a poll re-reads only what changed.
   const orderResolutionState = createOrderResolutionState();
+  // Candidates each drafting pass refused, so the next poll does not read their
+  // case files and threads again only to refuse them again. Outside
+  // `buildModelStages`, so a model change does not forget them.
+  const draftRefusals = createDraftRefusals();
+  const noticeRefusals = createDraftRefusals();
+  // One for the process, so its copy of the brand voice survives a model change.
+  const brandVoiceStore = createBrandVoiceStore(supabase);
   const orderContextStore = createOrderContextStore(supabase);
   // THE MODELS, rebuilt whenever Settings → Agent settings changes one
   // (`agent_models`, reloaded at the top of every poll). `models` is the config
@@ -317,6 +324,11 @@ async function main() {
       skipping: PIPELINE_STAGES.slice(PIPELINE_STAGES.indexOf(stopAfter) + 1).filter((stage) => !also.has(stage))
     });
   }
+
+  // The mailbox cutover, one key of `shops.sync_cursors`. Read alone: the whole
+  // object carries both folders' delta links, ~2 kB a read, twice a poll.
+  const readCutover = async () =>
+    (await supabaseSelect(supabase, T.SHOPS, { id: shopId }, `cutover:sync_cursors->>${CURSOR_KEYS.cutoverAt}`))[0]?.cutover ?? null;
 
   const poll = async ({ afterIngest } = {}) => {
     if (config.openaiApiKey) await refreshModels();
@@ -500,7 +512,7 @@ async function main() {
 
       // STAGE 5: our messages and the back office's, received after the
       // mailbox cutover, read in date order per ticket.
-      const cursors = (await supabaseSelect(supabase, T.SHOPS, { id: shopId }, 'sync_cursors'))[0]?.sync_cursors ?? {};
+      const cutoverAt = await readCutover();
       const others = await runOtherMessageCasework({
         store: caseworkStore,
         record,
@@ -510,7 +522,7 @@ async function main() {
         shopId,
         senderDirectory,
         owners,
-        since: cursors[CURSOR_KEYS.cutoverAt] ?? null,
+        since: cutoverAt,
         logger
       });
       if (others.considered > 0) {
@@ -710,14 +722,18 @@ async function main() {
     // both passes (`loadContext` in runDrafting).
     let draftingContext = null;
     const loadContext = () => (draftingContext ??= loadDraftingContext(supabase, shopId, logger));
+    // The brand voice, read once for both passes, and only when it changed
+    // (`loadIfChanged`): the same row, twice a minute, was 15 MB a day.
+    let brandVoicePromise = null;
+    const loadBrandVoice = () => (brandVoicePromise ??= brandVoiceStore.loadIfChanged(shopId));
     if (drafting && draftStage) {
       try {
-        const cursors = (await supabaseSelect(supabase, T.SHOPS, { id: shopId }, 'sync_cursors'))[0]?.sync_cursors ?? {};
+        const cutoverAt = await readCutover();
         const drafted = await runDrafting({
           store: drafting.store,
           draftRecord: drafting.record,
           openai: drafting.openai,
-          brandVoice: await drafting.brandVoice.load(shopId),
+          brandVoice: await loadBrandVoice(),
           shopId,
           model: models.draftingModel,
           loadContext,
@@ -728,7 +744,8 @@ async function main() {
             : null,
           cosmetovigilanceDraftOnly: config.draftOnlyCosmetovigilance,
           gates: 'poll',
-          cutoverAt: cursors[CURSOR_KEYS.cutoverAt] ?? null,
+          refusals: draftRefusals,
+          cutoverAt,
           limit: config.draftPollLimit,
           logger
         });
@@ -749,12 +766,13 @@ async function main() {
           store: noticeDrafting.store,
           draftRecord: noticeDrafting.record,
           openai: noticeDrafting.openai,
-          brandVoice: await noticeDrafting.brandVoice.load(shopId),
+          brandVoice: await loadBrandVoice(),
           shopId,
           model: models.draftingModel,
           loadContext,
           senderDirectory,
           gates: 'notice',
+          refusals: noticeRefusals,
           limit: config.draftPollLimit,
           logger
         });
@@ -810,8 +828,13 @@ async function main() {
     // above to have happened. Like categorisation it selects on ticket state
     // rather than on what this poll wrote. A no-op until Agent Setup > Forwarding
     // sets a start date (`forwarding_settings.forward_since`).
+    //
+    // Behind the change gate (DECISIONS § An idle poll reads what could have changed): what it reads
+    // moves with `tickets` (new mail, our replies, a category) or with the two
+    // forwarding tables (a switch or destination edited in Agent Setup). A
+    // failed forward or acknowledgement is retried on the 15-minute floor.
     if (runsThrough('forward')) {
-      const forwarded = await runForwarding({
+      const forwarded = await changeGate.run('forward', [T.TICKETS, T.FORWARDING_DESTINATIONS, T.FORWARDING_SETTINGS], () => runForwarding({
         store: forwardingStore,
         graphClient,
         provider,
@@ -823,10 +846,10 @@ async function main() {
           supportMailbox: config.graph.mailbox,
           extra: config.internalEmailDomains
         })
-      });
+      }));
       // kept / skipped / waiting / undecided are re-derived every poll (they
       // get no ledger row), so on their own they are not news.
-      if (didWork(forwarded, ['considered', 'kept', 'skipped', 'waiting', 'undecided'])) {
+      if (forwarded && didWork(forwarded, ['considered', 'kept', 'skipped', 'waiting', 'undecided'])) {
         logger.info('forward.pass', { shopId, ...forwarded });
       }
     }

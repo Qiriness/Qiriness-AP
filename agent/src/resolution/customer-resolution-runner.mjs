@@ -127,9 +127,15 @@ export async function runCustomerResolution({
 
   // The lookup caches its hash index for the life of the process, so a customer
   // created since the worker started would otherwise be invisible for ever.
-  // Dropped once per pass rather than per ticket, and only when there is
-  // something to look up — the rebuild is a scan.
-  lookup.refresh?.();
+  // Checked once per pass rather than per ticket, and only when there is
+  // something to look up — the rebuild is a scan. Dropped only when a customer
+  // changed since it was read (`refreshIfChanged`); a lookup without that
+  // check (a test double) is simply dropped, as before.
+  if (typeof lookup.refreshIfChanged === 'function') {
+    await lookup.refreshIfChanged();
+  } else {
+    lookup.refresh?.();
+  }
 
   // What customers wrote after we asked them for an address. Optional on
   // `record`, so an older double resolves on the sender's address alone.

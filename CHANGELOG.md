@@ -14,6 +14,24 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Egress: the drafting passes stop re-reading what they refused (2026-10-11)
+
+- **Measured first.** A `pg_stat_statements` comparison over an hour of production, then each repeated read sized on live rows. The two drafting passes were ~270 MB of the ~450 MB a day: 210 kB a poll, mostly the full case files of the 28 cases waiting on us and the threads of 6 candidates refused every poll.
+- **Changed (`agent/src/drafting/draft-runner.mjs`, `agent/src/index.mjs`).**
+  - The queue is decided on four narrow columns; full case files are read for the claimed rows only.
+  - Refused candidates are remembered per pass until their ticket, case file or case version moves, or for 15 minutes.
+  - The brand voice is read once a poll instead of twice.
+- **Proven sealed on live data:** 210 kB per poll before; 153 kB on the first poll after and 24 kB on the next, with the same refusals for the same reasons. That is ~43 MB a day instead of ~270. Full test suite passes, 8 new tests (`draft-refusals.test.mjs`).
+- **Then the rest of an idle poll**, measured by running the whole worker sealed (reads real, writes faked, Graph empty, no model):
+  - the customer index is rebuilt only when customers changed;
+  - forwarding runs behind the change gate;
+  - the reply pass drops two jsonb columns it never reads;
+  - the cutover date is read as one key;
+  - delta-cursor saves return nothing;
+  - the brand voice is re-read only when edited.
+- **Result:** 41 kB → 33 kB per idle poll, about 42 MB a day for the worker, down from ~350 MB.
+- **Not done, measured:** `mail_jobs` is checked every ~6 s (~15k small requests a day). Paged reads end with an empty extra request. The dashboard's share is unmeasured: the sample hour was a quiet Sunday.
+
 ## Social posts: views for older posts, rank by date, the team's own tags (2026-10-08)
 
 - **Three engagement rates (migration 82).** Interactions ÷ followers, ÷ reach or ÷ views, chosen per platform (one at a time, default reach) from a selector on each platform's Profile and Posts views. Every post's rate, the per-platform figures and the KPI follow it. All platforms shows the nine best posts of the period as cards, ranked by each post's own platform rate (the basis is on the card); the table stays on the per-platform view. Platforms on different bases are not pooled into one KPI, which says why. On real data, Instagram reads 5.24 % by reach, 2.09 % by views, 0.12 % by followers. Facebook reads 0.04 % by followers and nothing by reach or views until `read_insights` is granted.
