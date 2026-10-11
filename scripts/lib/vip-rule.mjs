@@ -80,7 +80,7 @@ export function vipArgs(shopId, rule, notChannels = []) {
 }
 
 /** `vipArgs` with the shop's marketplace handles read from `sales_channels`. */
-async function vipArgsFor(supabase, shopId, rule) {
+export async function vipArgsFor(supabase, shopId, rule) {
   return vipArgs(shopId, rule, (await loadMarketplaces(supabase, shopId)).handles);
 }
 

@@ -9,14 +9,12 @@
  * carries both counts for exactly that reason, and the view is expected to name
  * the denominator on every tile it draws.
  *
- * WHY THIS SERVICE READS ROWS WHEN THE OTHERS DO NOT. `customer_ticket_facts` is
- * one row per ticket that resolved to a customer — 145 today, and bounded by the
- * ticket count rather than the customer count. That is the entire justification:
- * the sibling read, `customer_segment_totals`, aggregates 58,201 customers in SQL
- * because reading those to count them is the mistake `shared.ts` documents. A
- * table-sized relation paged through PostgREST returns overlapping slices and
- * silently wrong totals; a bounded one does not. The bound is enforced below
- * rather than assumed — see `TICKET_FACT_LIMIT`.
+ * NO ROW-LEVEL READ OF TICKETS. `customer_ticket_facts` is one row per case that
+ * resolved to a customer, and this service used to read all of it and group it
+ * here, refusing to render at a 500-row cap. Case volume reached the cap, so the
+ * figures are now aggregated in SQL (`customer_vip_ticket_stats`,
+ * `customer_vip_ticket_categories`) and only the call list — the VIP cases that
+ * are open and level 3+ — comes back as rows. See 86_customer_vip_aggregates.sql.
  *
  * VIP IS THE SHOP'S RULE, ASKED, NEVER RE-DERIVED. The thresholds are set on
  * this panel and stored on `shops`; `vip_customers()` applies them (spend AND
@@ -31,11 +29,11 @@
 import { formatRfmGroup } from "../../../../scripts/lib/customer-segments.mjs";
 import {
   describeVipRule,
-  loadVipCustomers,
   loadVipRule,
   summariseVipRule,
+  vipArgsFor,
 } from "../../../../scripts/lib/vip-rule.mjs";
-import { V } from "../../../../scripts/lib/tables.mjs";
+import { RPC, V } from "../../../../scripts/lib/tables.mjs";
 import type {
   CustomerAtRisk,
   CustomerPanel,
@@ -46,21 +44,8 @@ import type {
   TicketStatus,
 } from "../../types";
 import { CLOSED_STATUSES } from "../../ticket-stats";
-import { count, getSupabaseClient, readView } from "./shared";
+import { callRpc, callRpcOne, count, getSupabaseClient, readView } from "./shared";
 import { logDashboardAccess } from "../access-log";
-
-/**
- * The hard cap on the one row-level read, and the point at which this panel
- * refuses to render rather than under-report.
- *
- * At 145 rows there is a 3.4x margin, but "bounded" is a property of today's
- * data and not of the view. If ticket volume ever reaches this, every figure on
- * the panel would quietly describe the first 500 tickets PostgREST happened to
- * return — a VIP share computed from a truncated set looks exactly like a
- * correct one. Throwing surfaces it as `PanelError`, and the fix is to move the
- * grouping below into `06_analytics.sql` as further aggregates.
- */
-const TICKET_FACT_LIMIT = 500;
 
 /**
  * Which levels land on the call list.
@@ -97,32 +82,53 @@ interface TicketFactRow {
   country_code: string | null;
 }
 
+interface TicketStatsRow {
+  tickets_linked: number | string | null;
+  vip_tickets: number | string | null;
+  vip_contacted: number | string | null;
+  spend_exposed: number | string | null;
+}
+
 export async function getCustomersPanel(shopId: string): Promise<CustomerPanel> {
   const supabase = getSupabaseClient();
   const rule = await loadVipRule(supabase, shopId);
-  const [segmentRows, factRows, summary] = await Promise.all([
-    // Biggest segment first, which on this shop means the panel opens on
-    // PROSPECTS at 53,942 — the denominator problem stated by the data itself.
-    readView<Record<string, unknown>>(V.CUSTOMER_SEGMENT_TOTALS, shopId, {
-      order: "customers.desc",
-    }),
-    // Ordered by primary key, not by date: this ordering is never displayed, it
-    // exists so two renders read the same 145 rows. `first_message_at` is
-    // nullable and would leave ties unresolved at the cap boundary.
-    readView<TicketFactRow>(V.CUSTOMER_TICKET_FACTS, shopId, {
-      order: "ticket_id.asc",
-      limit: TICKET_FACT_LIMIT,
-    }),
-    summariseVipRule(supabase, shopId, rule),
-  ]);
+  // Biggest segment first, which on this shop means the panel opens on
+  // PROSPECTS at 53,942 — the denominator problem stated by the data itself.
+  const segmentsPromise = readView<Record<string, unknown>>(V.CUSTOMER_SEGMENT_TOTALS, shopId, {
+    order: "customers.desc",
+  });
 
-  if (factRows.length >= TICKET_FACT_LIMIT) {
-    throw new Error(
-      `customer_ticket_facts returned ${factRows.length} rows, at the ${TICKET_FACT_LIMIT}-row read cap. ` +
-        "Every VIP figure on this panel would be computed from a truncated set. " +
-        "Move the grouping into an aggregate view in supabase/migrations/06_analytics.sql."
-    );
-  }
+  // THE SHOP'S RULE is applied in SQL (vip_customers); nothing here compares a
+  // number. With no rule nobody is a VIP, so the three reads are skipped.
+  const ticketReads = rule
+    ? (async () => {
+        const args = await vipArgsFor(supabase, shopId, rule);
+        const closed = [...CLOSED_STATUSES];
+        const [stats, categories, callList] = await Promise.all([
+          callRpcOne<TicketStatsRow>(RPC.CUSTOMER_VIP_TICKET_STATS, {
+            ...args,
+            p_closed_statuses: closed,
+            p_unhappy_from: UNHAPPY_FROM,
+          }),
+          callRpc<{ category: string | null; tickets: number | string }>(
+            RPC.CUSTOMER_VIP_TICKET_CATEGORIES,
+            args
+          ),
+          callRpc<TicketFactRow>(RPC.CUSTOMER_VIP_CALL_LIST, {
+            ...args,
+            p_closed_statuses: closed,
+            p_min_level: CALL_LIST_MIN_LEVEL,
+          }),
+        ]);
+        return { stats, categories, callList };
+      })()
+    : Promise.resolve(null);
+
+  const [segmentRows, summary, tickets] = await Promise.all([
+    segmentsPromise,
+    summariseVipRule(supabase, shopId, rule),
+    ticketReads,
+  ]);
 
   const segments = segmentRows.map(mapSegment);
   const base = segments.length
@@ -134,13 +140,7 @@ export async function getCustomersPanel(shopId: string): Promise<CustomerPanel> 
       }
     : null;
 
-  // THE SHOP'S RULE, asked once for every customer behind a ticket — bounded by
-  // TICKET_FACT_LIMIT, so one RPC body. The rule itself is applied in SQL
-  // (vip_customers); nothing here compares a number.
-  const linkedIds = [...new Set(factRows.map((row) => row.customer_id))];
-  const vipIds = await loadVipCustomers(supabase, shopId, rule, linkedIds);
-  const vipFacts = factRows.filter((row) => vipIds.has(row.customer_id));
-  const atRisk = buildCallList(vipFacts);
+  const atRisk = (tickets?.callList ?? []).map(mapAtRisk);
 
   // The call list names customers; everything else on the panel is a count.
   if (atRisk.length) {
@@ -157,10 +157,10 @@ export async function getCustomersPanel(shopId: string): Promise<CustomerPanel> 
     segments,
     base,
     vipRule: rule ? { ...rule, description: describeVipRule(rule) } : null,
-    vip: rule && summary ? buildVip(summary, factRows, vipFacts) : null,
-    vipByCategory: groupByCategory(vipFacts),
+    vip: rule && summary && tickets ? buildVip(summary, tickets.stats) : null,
+    vipByCategory: tallyCategories(tickets?.categories ?? []),
     atRisk,
-    spendExposed: spendExposedToComplaints(factRows),
+    spendExposed: count(tickets?.stats?.spend_exposed),
   };
 }
 
@@ -197,17 +197,16 @@ function mapSegment(row: Record<string, unknown>): SegmentTotal {
  */
 function buildVip(
   summary: { vipCustomers: number; buyersInWindow: number },
-  factRows: TicketFactRow[],
-  vipFacts: TicketFactRow[]
+  stats: TicketStatsRow | null
 ): NonNullable<CustomerPanel["vip"]> {
   const vipCustomers = summary.vipCustomers;
-  const contacted = new Set(vipFacts.map((row) => row.customer_id)).size;
+  const contacted = count(stats?.vip_contacted);
 
   return {
     customers: vipCustomers,
     buyersInWindow: summary.buyersInWindow,
-    ticketsLinked: factRows.length,
-    vipTickets: vipFacts.length,
+    ticketsLinked: count(stats?.tickets_linked),
+    vipTickets: count(stats?.vip_tickets),
     // Null rather than 0 when there are no VIPs at all: "no VIP has contacted
     // support" and "there are no VIPs" are different facts, and only the first
     // is a rate.
@@ -216,23 +215,16 @@ function buildVip(
 }
 
 /**
- * VIP tickets by subject, biggest first.
- *
- * Grouped in TypeScript over the same bounded read rather than as a second view,
- * because a second view would be a second place the VIP rule is applied — and
- * the whole point of deriving it here is that it is applied once.
+ * VIP tickets by subject, biggest first. The counts come from SQL; this only
+ * orders them.
  */
-function groupByCategory(vipFacts: TicketFactRow[]): CustomerPanel["vipByCategory"] {
-  const tally = new Map<string, number>();
-  for (const row of vipFacts) {
-    const key = row.category ?? "";
-    tally.set(key, (tally.get(key) ?? 0) + 1);
-  }
-
-  return [...tally.entries()]
-    .map(([key, tickets]) => ({
-      category: (key || null) as KnowledgeCategory | null,
-      tickets,
+function tallyCategories(
+  rows: { category: string | null; tickets: number | string }[]
+): CustomerPanel["vipByCategory"] {
+  return rows
+    .map((row) => ({
+      category: (row.category || null) as KnowledgeCategory | null,
+      tickets: count(row.tickets),
     }))
     // Ties break on the category name so the bar order does not shuffle between
     // renders when two subjects sit on the same count.
@@ -242,25 +234,12 @@ function groupByCategory(vipFacts: TicketFactRow[]): CustomerPanel["vipByCategor
 // --- the call list ---------------------------------------------------------
 
 /**
- * VIP customers with an open, level 3+ ticket — the panel's one list of people
- * rather than numbers.
+ * The call list: VIP customers with an open, level 3+ ticket, filtered and
+ * ordered by lifetime spend in `customer_vip_call_list`.
  *
- * "Open" reuses `CLOSED_STATUSES` from `ticket-stats.ts` instead of restating
- * it: the queue already decided that `resolved` and `closed` are done and the
- * other four (`open`, `awaiting_customer`, `awaiting_human`, `forwarded`) are
- * live. A second list here would drift the first time a status was added, and
- * this panel would keep offering the operator tickets the queue considers shut.
- *
- * Sorted by lifetime spend so the server's order is already the useful one; the
- * view re-sorts on the client when the operator asks for longest-waiting.
+ * 3 AND ABOVE, not 3 exactly (see CALL_LIST_MIN_LEVEL). "Open" is the queue's
+ * own `CLOSED_STATUSES`, passed to SQL rather than restated there.
  */
-function buildCallList(vipFacts: TicketFactRow[]): CustomerAtRisk[] {
-  return vipFacts
-    .filter((row) => isOpen(row.status) && (toLevel(row.level) ?? 0) >= CALL_LIST_MIN_LEVEL)
-    .map(mapAtRisk)
-    .sort((a, b) => b.amountSpent - a.amountSpent || a.ticketId.localeCompare(b.ticketId));
-}
-
 function mapAtRisk(row: TicketFactRow): CustomerAtRisk {
   return {
     ticketId: row.ticket_id,
@@ -277,37 +256,7 @@ function mapAtRisk(row: TicketFactRow): CustomerAtRisk {
   };
 }
 
-// --- exposure --------------------------------------------------------------
-
-/**
- * Lifetime spend sitting behind an open complaint.
- *
- * DEDUPLICATED BY CUSTOMER. `customer_ticket_facts` is one row per ticket, so a
- * customer with three open unhappy threads carries their whole lifetime spend
- * three times — the naive sum is a multiple of the real exposure and gets larger
- * the angrier someone is, which is the opposite of a useful signal. The set of
- * customer ids is the fix, and `amount_spent` is a customer column so any of
- * their rows carries the same value.
- *
- * This is a spend-at-risk figure, not a forecast of lost revenue: it says how
- * much past custom is attached to people currently unhappy, which is the form a
- * support backlog has to take before a board can read it.
- */
-function spendExposedToComplaints(factRows: TicketFactRow[]): number {
-  const seen = new Map<string, number>();
-  for (const row of factRows) {
-    if (!isOpen(row.status)) continue;
-    if ((toHappiness(row.happiness) ?? 0) < UNHAPPY_FROM) continue;
-    seen.set(row.customer_id, count(row.amount_spent));
-  }
-  return [...seen.values()].reduce((total, spend) => total + spend, 0);
-}
-
 // --- coercion --------------------------------------------------------------
-
-function isOpen(status: string): boolean {
-  return !(CLOSED_STATUSES as readonly string[]).includes(status);
-}
 
 /**
  * Both scales are 1-4 integers constrained in `04_support.sql`, but both are

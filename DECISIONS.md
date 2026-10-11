@@ -4321,7 +4321,7 @@ Guarding every statement would obscure the schema these files exist to document,
 
 PostgREST caps a response at 1,000 rows and pages an *unordered* query in whatever order the planner returns, so consecutive pages overlap and drop rows. This is not theoretical: while designing these panels, an unordered paged tally of the 58,201 customers returned `CHAMPIONS` as **438, then 554, then 472 on three consecutive runs** against unchanged data. Only the third was right, and nothing about the first two looked wrong.
 
-So `06_analytics.sql` carries twenty-one views and `readView` takes a hard limit with **no pagination at all**. A view that could return more rows than that limit is the wrong shape and belongs back in SQL as a further aggregate. The two exceptions — `customer_ticket_facts` and `ticket_reply_times` — are bounded by ticket count rather than by customer or message count, and each says so at its call site.
+So `06_analytics.sql` carries twenty-one views and `readView` takes a hard limit with **no pagination at all**. A view that could return more rows than that limit is the wrong shape and belongs back in SQL as a further aggregate. The two exceptions — `customer_ticket_facts` and `ticket_reply_times` — are bounded by ticket count rather than by customer or message count, and each says so at its call site. `customer_ticket_facts` was one of them until case volume reached the panel's 500-row cap (670 cases, 2026-10-11); the Customers panel now reads it only through SQL aggregates (86), so only `ticket_reply_times` is still read whole.
 
 ### Judgement stays in JavaScript, so the views expose `rfm_group` and never `is_vip`
 

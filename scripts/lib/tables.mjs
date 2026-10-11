@@ -315,6 +315,10 @@ export const RPC = {
   VIP_CUSTOMERS: 'vip_customers',
   VIP_TICKETS: 'vip_tickets',
   VIP_SUMMARY: 'vip_summary',
+  // The Customers panel's ticket figures, aggregated in SQL (86).
+  CUSTOMER_VIP_TICKET_STATS: 'customer_vip_ticket_stats',
+  CUSTOMER_VIP_TICKET_CATEGORIES: 'customer_vip_ticket_categories',
+  CUSTOMER_VIP_CALL_LIST: 'customer_vip_call_list',
   // Orders waiting to ship, each marked VIP through vip_customers().
   OPEN_ORDERS: 'open_orders',
   // The Orders page: one page of every order, and its filter options.

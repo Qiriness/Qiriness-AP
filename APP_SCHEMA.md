@@ -942,7 +942,7 @@ overlapping slices — see `DECISIONS.md § Insights`.
 | Fulfilment | `order_fulfilment_timing` (base, per order; also carries `total_refunded` + `return_status`) · `fulfilment_summary` (timing **and** the returns/refunds counts) · `fulfilment_by_month` · `fulfilment_by_carrier` (also the contact rate: orders that produced a ticket) · `fulfilment_by_bucket` · `fulfilment_ticket_coverage` (the denominator that makes that rate a floor) |
 | Fulfilment, per sales channel | `fulfilment_summary_by_channel` · `fulfilment_by_channel_month` · `fulfilment_by_channel_bucket` — the same three cut by `orders.sales_channel_handle`, read with a `channel` filter. Additive: the views above keep their one-row-per-shop shape |
 | Support | `ticket_reply_times` (base, per ticket) · `support_by_month` · `support_by_category` · `support_purchase_states` + `support_purchase_by_category` (who wrote in, by whether an online purchase is visible) |
-| Customers | `customer_ticket_facts` · `customer_segment_totals` |
+| Customers | `customer_ticket_facts` (read only through the 86 aggregates: `customer_vip_ticket_stats` / `_categories` / `customer_vip_call_list`) · `customer_segment_totals` |
 | Agent | `agent_pipeline_funnel` · `investigation_evidence_gaps` · `investigation_verdicts` · `llm_usage_by_month` · `llm_usage_summary` |
 
 **The 28 ranged functions (`RANGED READS`, `06_analytics.sql`).** Every Insights
