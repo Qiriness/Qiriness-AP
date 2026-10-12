@@ -41,6 +41,20 @@ The owner's first rule for the chatbot: everything works at least in French and 
   - **Not yet seen in the widget or with the live model** (VALIDATION_LOG 50).
 - The Supabase REST API was restricted for exceeding the egress quota during this work. The evals ran over a direct database connection through a scratch shim; nothing in the repository depends on it.
 
+## Analytics: order lines are a table (2026-10-12)
+
+- **Changed.**
+  - Migration `96_order_lines.sql`. `public.order_lines` holds one row per `orders.line_items` element, kept current by trigger. Scalar columns are the exact text `->>` returned, so values are unchanged by construction and a cast can never block an order write. `line_items` stays the snapshot.
+  - Eleven functions (`insights_collection_sales`, `_country_product_sales`, `_inventory_exceptions`, `_product_customer_mix`, `_product_orders_per_customer`, `_product_pairs`, `_product_sales`, `_promotions`, `_sales_overview`, `open_orders`, `orders_list`) and `chat.order_lines` now join it instead of unnesting JSON. They were rewritten mechanically from the live definitions.
+- **Proven, on production in rolled-back transactions.**
+  - Fingerprints identical on all 386 calls.
+  - Controls: a backfill missing first lines changed 71 calls; a wrong `product_id` changed 108. Every rewritten function moved under at least one.
+  - `chat.order_lines` identical over all 19,126 rows, with the same columns and types. The backfill gives 19,126 lines = JSON elements.
+  - Triggers: an unchanged save touches nothing, an edit rewrites, an insert adds, a delete cascades.
+  - All-time reads are faster (`product_sales` 281 → 179 ms, `promotions` 226 → 164, `sales_overview` 112 → 81); 30-day reads are unchanged.
+  - `npm test` 5604 / 1 skipped.
+- **Harness bug found and fixed on the way.** `db-fingerprint.mjs` chose the most frequent `product_id`, which is null, so the two per-product functions matched nothing and had **no real coverage**, in 95 as well. It now picks the most-sold paid product, and both functions return 26–36 non-empty variants. **95 re-verified:** their pre-95 definitions, put back in a rolled-back transaction, give output identical to the live post-95 functions.
+
 ## Analytics: one definition of "the orders in this range", and a fingerprint to prove rewrites (2026-10-12)
 
 - **Found.** The order filter for ranged insights is seven conditions: shop, not deleted, not cancelled, `[p_from, p_to)` in the shop's zone, channel include/exclude. It was spelled out in 10 functions. Seven more vary **on purpose**: `orders_summary`/`orders_series` read `order_fulfilment_timing` and count cancelled orders, `orders_by_channel` has no channel filter, and three have conditions of their own. Unifying those would have changed figures.

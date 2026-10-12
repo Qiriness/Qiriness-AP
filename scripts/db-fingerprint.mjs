@@ -48,8 +48,14 @@ const one = async (sql, params = []) => (await client.query(sql, params)).rows[0
 const shop = await one(`select id, iana_timezone, vip_min_spend, vip_min_orders, vip_window_months
   from shops where id = (select shop_id from orders group by 1 order by count(*) desc limit 1)`);
 const marketplaces = (await one(`select coalesce(array_agg(h), '{}') hs from sales_channels c cross join lateral unnest(c.handles) h where c.shop_id = $1`, [shop.id])).hs;
+// The most-sold PAID product. Not simply the most frequent product_id: that is null
+// (lines with no product), and a null product makes the per-product functions match
+// nothing, so their fingerprints would not move whatever they computed.
 const product = (await one(`select li.value ->> 'product_id' id from orders o cross join lateral jsonb_array_elements(o.line_items) li
-  where o.shop_id = $1 group by 1 order by count(*) desc limit 1`, [shop.id])).id;
+  where o.shop_id = $1 and o.cancelled_at is null and li.value ->> 'product_id' is not null
+    and coalesce((li.value ->> 'discounted_total')::numeric, 0) > 0
+  group by 1 order by count(*) desc limit 1`, [shop.id])).id;
+if (!product) throw new Error('no paid product found: the per-product functions would be fingerprinted on nothing');
 const country = (await one(`select shipping_destination ->> 'country_code' c from orders where shop_id = $1 group by 1 order by count(*) desc limit 1`, [shop.id])).c;
 const span = await one(`select min(processed_at) lo, now() hi from orders where shop_id = $1`, [shop.id]);
 const tz = shop.iana_timezone || 'UTC';

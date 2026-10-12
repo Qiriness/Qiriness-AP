@@ -74,7 +74,7 @@ All tables live in `public`, RLS on, service-role only. The management chat read
 
 | Domain | Main tables |
 | --- | --- |
-| Shopify snapshots | `shops` `customers` `orders` `products` `promotions` `sales_channels` `shopify_metaobjects` `advice_collections` `shopify_content_sources` |
+| Shopify snapshots | `shops` `customers` `orders` `order_lines` `products` `promotions` `sales_channels` `shopify_metaobjects` `advice_collections` `shopify_content_sources` |
 | Curated knowledge | `knowledge_documents` `knowledge_chunks` `company_policies` |
 | Support exemplars | `support_exemplars` `support_exemplar_phrasings` `support_answers` `company_policy_links` `company_policy_versions` `support_parameters` |
 | Agent email workflow | `tickets` `ticket_messages` `cases` `case_current` `case_links` `ticket_case_state` `ticket_investigations` `ticket_drafts` `outbound_actions` `mail_jobs` `mail_subscriptions` `spam_audit` `email_blocklist` `sender_directory` `ticket_forwards` `ticket_routing` `forwarding_*` `ticket_snoozes` `ticket_overrides` `dropped_mail_clears` |
