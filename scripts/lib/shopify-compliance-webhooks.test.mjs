@@ -69,7 +69,7 @@ test('processComplianceWebhook hard deletes matching customer rows idempotently'
       return jsonResponse([{ id: 'privacy-id', request_key: 'shopify-webhook:webhook-1' }]);
     }
     if (options.method === 'GET' && String(url).includes('/customers?')) {
-      return jsonResponse([
+      return pagedResponse(options, [
         { id: 'customer-row-id', legacy_resource_id: '191167', email: 'jane@example.com', phone: '+33123456789' }
       ]);
     }
@@ -106,6 +106,74 @@ test('processComplianceWebhook hard deletes matching customer rows idempotently'
       requests.every((request) => !JSON.stringify(request).includes('jane@example.com')),
       true
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('processComplianceWebhook finds a customer beyond the first 1000 rows', async () => {
+  // THE BUG THIS PINS. One PostgREST request stops at 1000 rows without saying
+  // so; on a 61k-customer shop the redact searched an arbitrary 1000 and
+  // deleted nobody. The match here is row 1501, on the second page.
+  const rawBody = Buffer.from(JSON.stringify({
+    shop_id: 123,
+    shop_domain: 'qiriness-dev.myshopify.com',
+    customer: { id: 191167, email: 'Jane@Example.com' }
+  }));
+  const hmac = createHmac('sha256', 'webhook-secret').update(rawBody).digest('base64');
+  const customers = Array.from({ length: 2500 }, (_, index) => ({
+    id: `row-${index}`,
+    legacy_resource_id: String(index),
+    email: `someone${index}@example.com`,
+    phone: null
+  }));
+  customers[1500] = { id: 'jane-row', legacy_resource_id: '191167', email: 'jane@example.com', phone: null };
+
+  const deletes = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url, options = {}) => {
+    if (options.method === 'GET' && String(url).includes('/shops?')) {
+      return jsonResponse([{ id: 'shop-id', shop_domain: 'qiriness-dev.myshopify.com', shopify_shop_id: '123' }]);
+    }
+    if (options.method === 'GET' && String(url).includes('/integration_events?')) {
+      return jsonResponse([]);
+    }
+    if (options.method === 'POST' && String(url).includes('/integration_events?')) {
+      return jsonResponse([{ id: 'event-id', event_key: 'shopify-webhook:webhook-2', status: 'processing' }]);
+    }
+    if (options.method === 'POST' && String(url).includes('/privacy_requests?')) {
+      return jsonResponse([{ id: 'privacy-id', request_key: 'shopify-webhook:webhook-2' }]);
+    }
+    if (options.method === 'GET' && String(url).includes('/customers?')) {
+      return pagedResponse(options, customers);
+    }
+    if (options.method === 'DELETE' && String(url).includes('/customers?')) {
+      deletes.push(String(url));
+      return jsonResponse([]);
+    }
+    if (options.method === 'PATCH') {
+      return jsonResponse([{ id: 'updated-row-id' }]);
+    }
+    throw new Error(`Unexpected request: ${options.method || 'GET'} ${url}`);
+  };
+
+  try {
+    const result = await processComplianceWebhook({
+      rawBody,
+      headers: {
+        'x-shopify-topic': 'customers/redact',
+        'x-shopify-shop-domain': 'qiriness-dev.myshopify.com',
+        'x-shopify-webhook-id': 'webhook-2',
+        'x-shopify-hmac-sha256': hmac
+      },
+      config: { shopifyWebhookSecret: 'webhook-secret' },
+      supabase: { baseUrl: 'https://example.supabase.co/rest/v1', key: 'test-key' }
+    });
+
+    assert.equal(result.statusCode, 200);
+    assert.equal(result.body.deleted_customer_count, 1);
+    assert.equal(deletes.length, 1);
+    assert.match(decodeURIComponent(deletes[0]), /jane-row/);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -156,6 +224,12 @@ test('processComplianceWebhook skips completed duplicate deliveries', async () =
     globalThis.fetch = originalFetch;
   }
 });
+
+/** Serves `rows` the way PostgREST does: the `Range` asked for, capped at 1000. */
+function pagedResponse(options, rows) {
+  const [from, to] = String(options.headers?.Range ?? '0-999').split('-').map(Number);
+  return jsonResponse(rows.slice(from, Math.min(to, from + 999) + 1));
+}
 
 function jsonResponse(payload) {
   return {

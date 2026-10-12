@@ -10,6 +10,7 @@ import {
   supabaseDelete,
   supabaseDeleteWhereIn,
   supabaseSelect,
+  supabaseSelectAll,
   supabaseUpdate,
   supabaseUpsert
 } from './supabase-rest-client.mjs';
@@ -187,7 +188,8 @@ async function processShopRedact({ supabase, shopRow }) {
     };
   }
 
-  const customers = await supabaseSelect(supabase, 'customers', { shop_id: shopRow.id }, 'id');
+  // Paged for the count only: the delete cascades from `shops` either way.
+  const customers = await supabaseSelectAll(supabase, 'customers', { shop_id: shopRow.id }, 'id');
   await supabaseDelete(supabase, 'shops', { id: shopRow.id });
 
   return {
@@ -253,8 +255,19 @@ async function findShop(supabase, shopDomain, shopifyShopId) {
   return null;
 }
 
+/**
+ * PAGED, AND MATCHED HERE RATHER THAN IN THE QUERY.
+ *
+ * Paged because one PostgREST request stops at `db-max-rows` (1000) without
+ * saying so: on 61,452 customers a redact searched an arbitrary 1,000 and
+ * reported "0 deleted" for everyone else — a redact that silently did nothing.
+ *
+ * Matched here because a filter on email or phone puts the address in the
+ * request URL, and URLs land in the API logs. Redacts are rare; one paged read
+ * of four short columns is the price of keeping the address out of them.
+ */
 async function findMatchingCustomerRowIds(supabase, shopId, customer) {
-  const rows = await supabaseSelect(
+  const rows = await supabaseSelectAll(
     supabase,
     'customers',
     { shop_id: shopId },
