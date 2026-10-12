@@ -41,6 +41,19 @@ The owner's first rule for the chatbot: everything works at least in French and 
   - **Not yet seen in the widget or with the live model** (VALIDATION_LOG 50).
 - The Supabase REST API was restricted for exceeding the egress quota during this work. The evals ran over a direct database connection through a scratch shim; nothing in the repository depends on it.
 
+## Analytics: one definition of "the orders in this range", and a fingerprint to prove rewrites (2026-10-12)
+
+- **Found.** The order filter for ranged insights is seven conditions: shop, not deleted, not cancelled, `[p_from, p_to)` in the shop's zone, channel include/exclude. It was spelled out in 10 functions. Seven more vary **on purpose**: `orders_summary`/`orders_series` read `order_fulfilment_timing` and count cancelled orders, `orders_by_channel` has no channel filter, and three have conditions of their own. Unifying those would have changed figures.
+- **Changed.**
+  - Migration `95_orders_in_range.sql`. New `public.orders_in_range(…)`: SQL, stable, one select, no SET, not definer, so Postgres inlines it. The 10 functions were rewritten **mechanically** from `pg_get_functiondef`: the seven conditions removed, the table swapped for the helper, everything else byte-identical. Only service_role may call it.
+  - New `scripts/db-fingerprint.mjs`: calls all 51 analytics functions with arguments built from their parameter names and the shop's own data, 386 calls. It records counts and hashes, never rows. `--prelude x.sql` fingerprints a candidate inside a rolled-back transaction.
+- **Proven, on production before applying.**
+  - Fingerprints identical: the candidate, then the real migration file, both in rolled-back transactions. Two baseline runs were identical, so the harness is stable while data is frozen.
+  - **Negative control:** the helper without "not cancelled" changed 45 calls in 8 of the 10 functions. (`product_pairs` and `product_orders_per_customer` were not sensitive to it; their coverage is weaker.)
+  - Timing 1,244 → 1,248 ms over the ten.
+  - As service_role the functions answer; anon and authenticated are refused as before.
+  - `npm test` 5584 pass / 1 skipped.
+
 ## Management chat: every migration is checked against what the chat relies on (2026-10-12)
 
 - **Why.** The chat model queries the 14 `chat` views as its own role and learns them only from their names, types and comments. A migration could break a view the chat role runs (a grant, a function inside a view) or change what the model is told, and nothing would fail until a question did. The analytics rewrite (D4) is next, so this guard comes first.

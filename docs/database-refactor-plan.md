@@ -67,7 +67,7 @@ Split into four sub-tasks: **mail ingest** (`ticket_messages mail_jobs mail_subs
 - **Not code-referenced, but they stay:** `case_facts` and `case_message_counts` feed `ticket_queue` and `customer_ticket_facts`; `ticket_reply_times` feeds `support_by_month`; `order_fulfilment_timing` feeds 7 views and 4 functions.
 - Views built on views: `order_fulfilment_timing` feeds 7 views and 4 functions. Keep it as the single source.
 
-### D4 — Analytics functions · `insights_* orders_list* vip_* customer_segment_*` · **medium**
+### D4 — Analytics functions · `insights_* orders_list* vip_* customer_segment_*` · **step 1 done 2026-10-12** (migration 95: `orders_in_range` shared by 10 functions, fingerprint-proven). Tool for every next step: `node scripts/db-fingerprint.mjs out.json before.json --prelude candidate.sql`. Next candidates: the line-item unnest (11 functions) via `order_lines`; the redefinition history goes with X5
 - Collapse the redefinition history (X4).
 - Repoint at `order_lines` once D1 lands. That is where most of the 140 JSON unpacks live (`insights_product_customer_mix`, `insights_promotions`, `insights_country_product_sales`, `insights_product_pairs`, `insights_collection_sales`; 2–3.7k characters each).
 - Find shared building blocks: date-range, timezone and cancelled-order filtering are repeated in every function.

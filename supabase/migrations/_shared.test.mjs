@@ -69,7 +69,9 @@ export const INCREMENTAL_FILES = [
   // between 39 and 61 replace none of them.
   '61_cases',
   // Replaces insights_freshness, which 11 first carried.
-  '92_skip_unchanged_sync_writes'
+  '92_skip_unchanged_sync_writes',
+  // Replaces ten ranged insights_* functions (the shared orders_in_range).
+  '95_orders_in_range'
 ];
 
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');
