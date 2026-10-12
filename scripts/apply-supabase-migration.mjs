@@ -3,6 +3,7 @@ import { basename } from 'node:path';
 
 import pg from 'pg';
 
+import { runChatContractCheck } from './check-chat-contract.mjs';
 import { loadEnv } from './lib/sync-config.mjs';
 
 const { Client } = pg;
@@ -42,4 +43,14 @@ async function main(filePath) {
   }
 
   console.log(`Applied ${basename(filePath)} and requested PostgREST schema reload.`);
+
+  // The management chat reads the `chat` views as its own role and learns them
+  // from their comments; a migration can break either without any error here.
+  // The migration has already committed, so a failure is reported loudly and
+  // fails the command, rather than being rolled back.
+  const contract = await runChatContractCheck();
+  if (!contract.ok) {
+    console.error('The migration applied, but the management chat contract check did not pass (see above).');
+    process.exitCode = 1;
+  }
 }

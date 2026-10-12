@@ -7,6 +7,7 @@
     "test": "node --test",
     "users": "node scripts/dashboard-users.mjs",
     "db:apply:migration": "node scripts/apply-supabase-migration.mjs",
+    "db:check:chat": "node scripts/check-chat-contract.mjs",
     "sync:shopify:products": "node scripts/sync-shopify-products.mjs",
     "sync:shopify:products:dry-run": "node scripts/sync-shopify-products.mjs --dry-run --limit=5 --page-size=5",
     "sync:shopify:customers": "node scripts/sync-shopify-customers.mjs",

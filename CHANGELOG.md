@@ -41,6 +41,14 @@ The owner's first rule for the chatbot: everything works at least in French and 
   - **Not yet seen in the widget or with the live model** (VALIDATION_LOG 50).
 - The Supabase REST API was restricted for exceeding the egress quota during this work. The evals ran over a direct database connection through a scratch shim; nothing in the repository depends on it.
 
+## Management chat: every migration is checked against what the chat relies on (2026-10-12)
+
+- **Why.** The chat model queries the 14 `chat` views as its own role and learns them only from their names, types and comments. A migration could break a view the chat role runs (a grant, a function inside a view) or change what the model is told, and nothing would fail until a question did. The analytics rewrite (D4) is next, so this guard comes first.
+- **Changed.**
+  - `scripts/lib/chat-contract.mjs` + `scripts/check-chat-contract.mjs` (`npm run db:check:chat`, `--update` to accept). Every `chat` view is run as the chat role: one row, counted, inside a rolled-back read-only transaction, with no row data read out. The rendered schema text is compared with the committed `supabase/chat-contract.snapshot.txt` (182 lines, 14 views).
+  - `apply-supabase-migration.mjs` runs the check after every migration and fails the command when it does not pass.
+- **Proven.** Against production as the chat role: 14 views run and the text matches the snapshot. With one comment altered in the snapshot, it reports exactly that line and exits 1. Six unit tests cover a failing view, a changed line, a missing snapshot and the count-only query shape. `npm test` 5565 pass / 1 skipped.
+
 ## Reusability: carrier names fold by data, and the schema map is checked (2026-10-12)
 
 - **Found.** A scan of live function bodies and `chat` comments on production for business names: the only runtime literal left was `normalise_carrier`'s CASE (COLISSIMO, LA POSTE, CHRONOPOST, MONDIAL RELAY…). `21_chat_vip.sql`'s marketplace array is a superseded copy; 60 replaced it with a `sales_channels` lookup.

@@ -1,0 +1,182 @@
+chat.customers — One row per Shopify customer, as they are NOW (a snapshot, not a history: past states cannot be reconstructed). Marketplace orders (the handles listed in your instructions) create one synthetic customer per order, so exclude customers whose orders are all on those channels from any per-person metric.
+  customer_id uuid
+  created_at timestamp with time zone
+  account_state text — ENABLED (has an account), INVITED, DISABLED. DISABLED is the default for guest checkouts, not a closed account.
+  locale text
+  country_code text
+  number_of_orders integer — Lifetime order count as Shopify reports it.
+  amount_spent numeric(12,2) — Lifetime spend as Shopify reports it (EUR).
+  currency_code text
+  last_order_at timestamp with time zone
+  rfm_group text — Shopify RFM segment: CHAMPIONS, LOYAL, ACTIVE, NEW, PROMISING, NEEDS_ATTENTION, AT_RISK, ALMOST_LOST, DORMANT, PREVIOUSLY_LOYAL, PROSPECTS (never ordered).
+  email_marketing_state text — SUBSCRIBED, NOT_SUBSCRIBED, UNSUBSCRIBED, INVALID. Current state only: unsubscribes over time are undercounted.
+  on_email_marketing_list boolean
+
+chat.fulfilment_timing — Per order: how long from placing the order to its first shipment. This is FULFILMENT time. Delivery time is not measurable: no carrier delivery data exists.
+  order_id uuid
+  processed_at timestamp with time zone
+  first_fulfilled_at timestamp with time zone
+  fulfilment_hours numeric — Hours from processed_at to first_fulfilled_at; null while the order has not shipped.
+  carrier text — Carrier of the first shipment: one canonical upper-case name per carrier, however the fulfilment feed spelled it.
+  fulfilment_count bigint
+  destination_country_code text
+  channel text
+  return_status text
+  total_refunded numeric(12,2)
+
+chat.llm_usage — One row per AI model call by the support agent (spam, categorise, decompose, investigate, draft, embed). Tokens only: no prices are stored, so cost cannot be computed here. cached_input_tokens is part of input_tokens, never add them.
+  ticket_id uuid
+  pass text
+  model text
+  input_tokens integer
+  cached_input_tokens integer
+  output_tokens integer
+  total_tokens integer
+  call_count integer
+  succeeded boolean
+  error_kind text
+  occurred_at timestamp with time zone
+
+chat.order_lines — One row per line item of an order: what was sold. product_title is the title at the time of sale. Join products on shopify_product_id.
+  order_id uuid
+  line_index integer
+  processed_at timestamp with time zone
+  channel text
+  cancelled_at timestamp with time zone
+  product_title text
+  variant_title text
+  sku text
+  shopify_product_id text
+  quantity integer — Units ordered on this line.
+  current_quantity integer — Units still on the order after removals and refunds.
+  original_total numeric
+  discounted_total numeric — Line revenue after line-level discounts (EUR), excluding shipping and order-level adjustments.
+
+chat.orders — One row per Shopify order (all sales channels). Money is in currency_code (EUR). processed_at is when the order was placed (UTC). Join customers on customer_id, order_lines and fulfilment_timing on order_id, tickets on order_number (tickets.shopify_order_number is text).
+  order_id uuid
+  order_name text
+  order_number integer
+  customer_id uuid
+  processed_at timestamp with time zone
+  channel text — Stable sales channel handle: web = Online Store, shopify-draft-orders = Draft Orders, shop-72 = Shop app; the marketplace handles are listed in your instructions.
+  channel_label text
+  financial_status text — Shopify payment state: PAID, PARTIALLY_REFUNDED, REFUNDED, VOIDED, ...
+  fulfillment_status text — Shopify fulfilment state: FULFILLED, UNFULFILLED, PARTIALLY_FULFILLED, ...
+  return_status text
+  order_status text — Derived lifecycle: fulfilled, delivered, cancelled, return_refund_completed, ... "delivered" is only set on the few orders where a delivery was recorded; do not use it to measure delivery.
+  cancelled_at timestamp with time zone — Set when the order was cancelled. Exclude cancelled orders from sales figures.
+  cancel_reason text
+  closed_at timestamp with time zone
+  currency_code text
+  subtotal_price numeric(12,2)
+  total_discounts numeric(12,2)
+  total_shipping_price numeric(12,2)
+  total_tax numeric(12,2)
+  total_price numeric(12,2) — Order total including tax and shipping, after discounts, before refunds.
+  total_refunded numeric — Amount refunded so far; 0 when nothing was refunded.
+  destination_country_code text
+  destination_country text
+  line_count integer
+  units bigint — Total quantity across the order's line items.
+  tags text[] — Merchant tags. Marketplace orders may carry the marketplace's own tag.
+
+chat.products — The Shopify catalogue as it is now. status: active, draft, archived, unlisted. For what sold, use order_lines.
+  product_id uuid
+  shopify_product_id text
+  title text
+  status text
+  vendor text
+  product_type text
+  tags text[]
+  available_stock integer — Units in stock across variants at the last sync; null when not tracked.
+  variant_count integer
+  published_at timestamp with time zone
+  created_at timestamp with time zone
+
+chat.promotions — Shopify discounts, one row per discount. method: code or automatic. discount_usage_count is how many times it has been used. The codes themselves are not exposed.
+  promotion_id uuid
+  title text
+  method text
+  discount_type text
+  status text
+  summary text
+  starts_at timestamp with time zone
+  ends_at timestamp with time zone
+  usage_limit integer
+  discount_usage_count integer
+  applies_once_per_customer boolean
+  code_count integer
+  offerable_in_replies boolean
+
+chat.shop — One row: the shop. iana_timezone is where a day starts for reporting. The VIP rule is net spend above vip_min_spend AND more than vip_min_orders orders inside the last vip_window_months (all null = no VIP rule set). The customers it admits are listed in chat.vip_customers.
+  shop_name text
+  iana_timezone text
+  vip_min_spend numeric(12,2)
+  vip_min_orders integer
+  vip_window_months integer
+
+chat.ticket_drafts — Replies the AI agent drafted. Nothing is sent automatically. status is the human review decision (pending, approved, edited, rejected); was_rewritten is true when a reviewer changed the text; auto_send_eligible is whether it WOULD have qualified for auto-send.
+  draft_id uuid
+  ticket_id uuid
+  source_verdict text
+  disposition text
+  level smallint
+  language text
+  status text
+  checks_passed boolean
+  auto_send_eligible boolean
+  was_rewritten boolean
+  model text
+  drafted_at timestamp with time zone
+
+chat.ticket_investigations — The AI agent's investigation of a ticket, one per inbound message investigated. verdict: answerable (the agent could answer), needs_customer_input, needs_human.
+  investigation_id uuid
+  ticket_id uuid
+  verdict text
+  proposed_level smallint
+  established_count integer
+  missing_count integer
+  model text
+  investigated_at timestamp with time zone
+
+chat.ticket_message_counts — Messages per ticket: total, and how many came from the customer (inbound).
+  ticket_id uuid
+  message_count bigint
+  inbound_count bigint
+  latest_inbound_at timestamp with time zone
+  latest_outbound_at timestamp with time zone
+
+chat.ticket_reply_times — First-response time per ticket: first customer message to the first reply after it. reply_hours is null when the desk has not replied from the synced mailbox.
+  ticket_id uuid
+  first_inbound_at timestamp with time zone
+  first_outbound_at timestamp with time zone
+  reply_hours numeric
+  inbound_month date
+
+chat.tickets — One row per customer-support email thread. Coverage starts when the mailbox sync began: use min(first_message_at) as the start of the data and never report a period before it. Join orders on shopify_order_number = orders.order_name or the order number as text.
+  ticket_id uuid
+  status text — open, awaiting_customer, awaiting_human, resolved, closed.
+  category text — Subject: order, delivery, product, product_stock, return_exchange, promotions, payment, account, b2b, careers, partner_collaboration, legal_privacy, cosmetovigilance, other. Null when not yet categorised.
+  secondary_category text
+  request_kind text
+  level smallint — 1 (simple) to 4 (serious, e.g. a skin reaction). Severity, not subject.
+  responsible_team text
+  language text
+  happiness smallint — Customer mood read from the mail: 1 happy to 4 very unhappy.
+  sender_label text — internal or contractor when one of our own addresses opened the thread; null for customer threads.
+  customer_id uuid
+  shopify_order_number text
+  is_duplicate boolean — True when the thread is a duplicate of another ticket; exclude from volume counts.
+  related_ticket_id uuid
+  first_message_at timestamp with time zone
+  last_message_at timestamp with time zone
+  categorised_at timestamp with time zone
+  investigated_at timestamp with time zone
+  resolved_at timestamp with time zone
+  closed_at timestamp with time zone
+  case_id uuid — The customer case this thread belongs to. Several threads can share one case (a customer who wrote again on a new thread about the same problem): count support volume as count(distinct case_id), not count(*).
+
+chat.vip_customers — One row per customer who is a VIP RIGHT NOW under the shop's VIP rule (see chat.shop: net spend strictly above vip_min_spend AND strictly more than vip_min_orders orders, both inside the last vip_window_months; uncancelled orders; marketplace orders do not count). Empty when no rule is set. Join chat.customers on customer_id for country, lifetime spend or RFM group, and chat.orders / chat.tickets on customer_id. Current status only: who was a VIP in the past cannot be reconstructed.
+  customer_id uuid
+  orders_in_window bigint — Uncancelled, non-marketplace orders inside the rule's window.
+  net_spend_in_window numeric — Sum of total_price minus refunds on those orders (EUR).

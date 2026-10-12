@@ -227,6 +227,8 @@ Written by the worker and the CLIs, read only by the Insights panels.
 
 ### Migration files
 
+**Applying one:** `npm run db:apply:migration -- supabase/migrations/<file>.sql`. Afterwards it runs the **management chat contract check** (`npm run db:check:chat`, `scripts/check-chat-contract.mjs`). As the chat role (`CHAT_DB_URL`), every `chat` view must run, and the schema text the model is shown must equal `supabase/chat-contract.snapshot.txt`. A change you meant is accepted with `npm run db:check:chat -- --update`, and the snapshot diff then shows up in review.
+
 **Nine files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
 
 | File | Creates | Depends on |
