@@ -42,6 +42,7 @@ export const ADVISORY_CASES = [
   { name: 'natural language mid-builder is not re-asked', turns: [{ message: 'Construire ma routine', action: 'build_routine' }, 'Plutôt des taches, et ma peau est mixte'], expect: { notQuestion: 'skin_type', profile: { skin_type: 'combination', primary_concern: 'dark_spots' } } },
   { name: 'the builder started in words, not the button', turns: ['On peut construire ensemble une routine complète ?'], expect: { question: 'primary_concern', profile: { routine_scope: 'complete' } } },
   { name: 'fragrance-free excludes perfumed products', turns: ['Peau sensible et tiraillements, sans parfum'], expect: { profile: { known_exclusions: ['fragrance'] } } },
+  { name: 'tight and dull: both read, never a firming serum on « dull » alone (2026-10-12)', turns: ['Ma peau tiraille et elle est terne ces temps-ci'], expect: { profile: { primary_concern: 'tightness', secondary_concerns: ['dullness'] }, not: [/Lift/] } },
 
   // --- the same conversations in English (lang: chips must be English too) ---
   ...[
@@ -68,6 +69,7 @@ export const ADVISORY_CASES = [
     { name: 'natural language mid-builder is not re-asked', turns: [{ message: 'Build my routine', action: 'build_routine' }, 'Mostly dark spots, and my skin is combination'], expect: { notQuestion: 'skin_type', profile: { skin_type: 'combination', primary_concern: 'dark_spots' } } },
     { name: 'the builder started in words, not the button (dev store, 2026-10-08)', turns: ['Can we build a full routine together?'], expect: { question: 'primary_concern', profile: { routine_scope: 'complete' } } },
     { name: '« I don\'t know » answers the question asked', turns: [{ message: 'Build my routine', action: 'build_routine' }, { choice: 'profile:primary_concern:dehydration' }, { choice: 'profile:body_area:face' }, "I don't know"], expect: { notQuestion: 'skin_type', profile: { skin_type: 'unknown' } } },
-    { name: 'fragrance-free excludes perfumed products', turns: ['Sensitive skin that feels tight, fragrance-free please'], expect: { profile: { known_exclusions: ['fragrance'] } } }
+    { name: 'fragrance-free excludes perfumed products', turns: ['Sensitive skin that feels tight, fragrance-free please'], expect: { profile: { known_exclusions: ['fragrance'] } } },
+    { name: 'tight and dull: both read, never a firming serum on « dull » alone (2026-10-12)', turns: ['My skin feels really tight and dull lately'], expect: { profile: { primary_concern: 'tightness', secondary_concerns: ['dullness'] }, not: [/Lift/] } }
   ].map((c) => ({ ...c, lang: 'en' }))
 ];

@@ -154,7 +154,9 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # knowledge-cases (French + English routing/result expectations) ·
 |       |                                # advisor-tools (one consultation turn: profile pre-pass,
 |       |                                # advice in the prompt, the advise tool, chips, cards, events) ·
-|       |                                # advisor-state (context.advisor folded from the log)
+|       |                                # advisor-state (context.advisor folded from the log) ·
+|       |                                # profile-reader (the lexicon's backup: gate on residue,
+|       |                                # one structured model call → profile values)
 |       |-- advisory/                    # the beauty consultation core, CHANNEL-FREE (imports
 |       |                                # nothing outside itself; isolation.test.mjs): profile ·
 |       |                                # lexicon (engine) over lexicon-fr + lexicon-en (same keys) ·

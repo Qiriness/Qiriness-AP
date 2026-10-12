@@ -10,6 +10,19 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Storefront advisor: a model reader backs up the lexicon (2026-10-12)
+
+The lexicon reads only the phrasings written into it. When it reads part of a message, the engine decides from a partial profile, and the reply model never corrects it. « My skin feels really tight and dull lately » was read as « dull » alone, and the engine recommended a firming serum.
+
+- **The lexicon now says what it did not understand.** `residueOf` returns the words left once every pattern, marker and filler word is removed: « my face feels like sandpaper » leaves « sandpaper ». Fillers are a list in each language table.
+- **The reader** (`storefront-chat/profile-reader.mjs`) is one structured model call. It reads the message into the shop's own profile values, before the engine decides. It runs only on a consultation turn where the lexicon left words unexplained or read nothing. It never runs for a chip, a product question or a policy or cart question. Its values merge as `model_inferred`, so the lexicon wins any conflict. A failure or a timeout (2.5 s) leaves the turn as it was. The trace records `advice.reader` (reason, status, ms, fields added) but never the words. Its tokens count on the assistant row.
+- **Reasoning off for the reader.** `completeWithTools` takes an optional `reasoningEffort`. At the model's default effort, readings took 2.2–3.9 s and 2 of 8 timed out. At `none`, all 8 took 0.9–1.8 s, with the same or better readings.
+- « tight » with an adverb in between (« feels really tight ») is now in the English lexicon.
+- **Measured.**
+  - Replayed on the 172 stored dev-store messages, the reader would run on 7 (4 %): a Spanish message, typos (« creme nbuit … peuax sensibles », « chereche »), and product names the dev catalogue lacks. All 39 messages judged « not a consultation » are orders, delivery, prices, stock or a prompt-injection attempt.
+  - Live on `gpt-6-luna`, 8 of 8 read correctly: « papier de verre » and « sandpaper » → dryness, « white bumps » and « breaks out » → imperfections, the Spanish message → sensitive, « tight and dull » → both. About 600 input and 35 output tokens each.
+  - `eval:advisory` 47/49 (the « tight and dull » case added in both languages). Root suite 5,540, 0 failures. Web typecheck clean. Not yet seen in the widget (VALIDATION_LOG 51).
+
 ## Storefront advisor: French and English, everywhere (2026-10-12)
 
 The owner's first rule for the chatbot: everything works at least in French and English (together about 99 % of customers). The dev-store conversation of 2026-10-08 showed it did not. « Can we build a full routine together? » never started the routine builder, and an English speaker got French chips. Every deterministic layer was then tested in both languages, and each English gap found was fixed. Chatbot only; nothing in the email agent changed.

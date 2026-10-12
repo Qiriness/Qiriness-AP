@@ -42,6 +42,15 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 51. The lexicon's model backup: measured on stored messages, not yet seen in the widget — 2026-10-12
+
+Offline and live readings, 2026-10-12: 7 of 172 stored messages pass the gate; 8 of 8 live readings correct in 0.9–1.8 s.
+
+1. **Unknown words.** **Check (on the store):** « My face feels like sandpaper ». The trace shows `advice.reader` with `reason: unexplained_words` (or `nothing_read`), `status: read`, `added` including `primary_concern`. The advice is a dryness/hydration routine.
+2. **No extra call when the lexicon reads it all.** **Check:** « J'ai la peau sèche et déshydratée ». `advice.reader.reason` is `fully_read`, with no `status`. One entry in `trace.calls`.
+3. **Latency.** **Check:** over a few reader turns, `advice.reader.ms` stays under 2.5 s; a `failed` status still gets a normal reply.
+4. **Not on other topics.** **Check:** « Où est ma commande ? » and « Do you have any discount codes? » show `reason: other_topic` or `not_a_consultation`.
+
 ## 50. Storefront advisor in English: offline-proven, not yet seen in the widget — 2026-10-12
 
 Offline, 2026-10-12, on the live catalogue: `eval:resolution` 123/123 (en 52/52), `eval:advisory` 45/47 (en 24/24 language-wise), unit pairs for routing and shopping. The model and the widget have not seen it.

@@ -2,6 +2,16 @@
 
 ## Storefront advisor
 
+### The lexicon has a model backup, not a model replacement (2026-10-12)
+
+The lexicon stays first because it is instant, free and testable. It reads a customer's words into the profile before the one reply call, so the engine (not the model) decides the advice. Its weakness is coverage, and a partial reading is worse than none: « tight and dull » read as « dull » produced a firming serum, and the reply model, handed finished advice, did not correct it.
+
+- **The lexicon reports its own gaps.** Content words that no pattern, marker or filler explains are its `residue`. An empty residue means the lexicon read the whole message.
+- **The model reads only what the lexicon could not**, and only for the consultation. A chip, a product question, a policy or cart question, or a message with nothing about the skin never pays for the call. On the stored dev-store messages, 4 % do.
+- **It writes the same values, at a lower rank.** Its updates are `model_inferred`, so a phrase the lexicon read is never overridden. It only fills gaps.
+- **It never holds the turn.** A 2.5 s cap, with reasoning off. Readings at the default effort took up to 4 s for no better result.
+- **The `advise` tool stays.** The reply model can still correct the profile. The reader only makes sure the advice it is handed was computed from the whole message.
+
 ### French and English are the minimum, for every layer (2026-10-12)
 
 French and English together are about 99 % of customers, and the owner made both the bar for anything built in the chatbot. A feature counts as done only once both work. Most of the chatbot decides before the model (lexicon, routing, resolution, chips), so a French-only rule fails silently in English: no error, just a vaguer reply. Measured on 2026-10-12, English resolved 34 of 52 product mentions and extracted no skin type from « very dry and dehydrated skin ».

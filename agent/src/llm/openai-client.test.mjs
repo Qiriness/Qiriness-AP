@@ -287,3 +287,18 @@ test('a different 400 is not retried', async () => {
   await assert.rejects(client.completeWithTools({ model: 'gpt-test-tools-2', messages: [], tools: [{}] }), /400/);
   assert.equal(calls, 1);
 });
+
+test('completeWithTools passes a reasoning effort to reasoning models only', async () => {
+  const bodies = [];
+  const fetchImpl = async (_url, opts) => {
+    bodies.push(JSON.parse(opts.body));
+    return jsonResponse({ choices: [{ message: { content: 'ok' } }] });
+  };
+  const client = createOpenAIClient({ apiKey: 'k', fetchImpl });
+  await client.completeWithTools({ model: 'gpt-6-luna', messages: [], reasoningEffort: 'none' });
+  await client.completeWithTools({ model: 'gpt-4o', messages: [], reasoningEffort: 'none' });
+  await client.completeWithTools({ model: 'gpt-6-luna', messages: [] });
+  assert.equal(bodies[0].reasoning_effort, 'none');
+  assert.equal(bodies[1].reasoning_effort, undefined);
+  assert.equal(bodies[2].reasoning_effort, undefined);
+});

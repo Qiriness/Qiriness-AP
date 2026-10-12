@@ -95,6 +95,26 @@ const L = {
 
 export const ROUTINE_BUILDER = L.routineBuilder;
 
+/** Every pattern, for the residue: what is left once they have all been removed. */
+const ALL_PATTERNS = [
+  L.eyes, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.routineBuilder, L.dontKnow,
+  ...L.concerns.map(([re]) => re), ...L.skinTypes.map(([, re]) => re), ...L.sensitivity.map(([, re]) => re),
+  ...L.routineSteps.map(([, re]) => re), ...L.desired.map(([, re]) => re), ...L.scope.map(([, re]) => re),
+  ...L.exclusions, ...L.routineClauses, ...L.age, ...L.ageWords.map(([re]) => re)
+];
+const NEUTRAL = new Set(LANGUAGES.flatMap((l) => [...l.markers, ...l.fillers]));
+
+/**
+ * The words of a message no pattern explains and that are not mere grammar or
+ * filler: « my face feels like sandpaper » leaves « sandpaper ». Empty means
+ * the lexicon read the whole message; anything left is for the model reader.
+ */
+export function residueOf(message) {
+  let text = ` ${norm(message)} `;
+  for (const re of ALL_PATTERNS) text = text.replace(new RegExp(re.source, 'g'), ' ');
+  return text.split(' ').filter((w) => w.length > 1 && !/^\d+$/.test(w) && !NEUTRAL.has(w));
+}
+
 export function ageBand(age) {
   if (!Number.isFinite(age) || age < 12 || age > 110) return null;
   return age < 30 ? 'under_30' : age < 45 ? '30_44' : age < 60 ? '45_59' : '60_plus';
@@ -122,7 +142,7 @@ export function detectLanguage(message) {
 /**
  * @param {string} message
  * @param {{ profile?: object, lastAsked?: string | null }} [context]
- * @returns {{ updates: { field: string, value: string, source: 'natural_language', confidence: string }[], routineBuilder: boolean }}
+ * @returns {{ updates: { field: string, value: string, source: 'natural_language', confidence: string }[], routineBuilder: boolean, residue: string[] }}
  */
 export function extractProfile(message, { profile = {}, lastAsked = null } = {}) {
   let text = ` ${norm(message)} `;
@@ -200,5 +220,5 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
   const st = updates.find((u) => u.field === 'skin_type');
   if (body && st && ['dry', 'very_dry'].includes(st.value) && !found.length && !hasPrimary) add('primary_concern', 'dryness', 'medium');
 
-  return { updates, routineBuilder: L.routineBuilder.test(` ${norm(message)} `) };
+  return { updates, routineBuilder: L.routineBuilder.test(` ${norm(message)} `), residue: residueOf(message) };
 }

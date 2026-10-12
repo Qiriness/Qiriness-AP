@@ -1,7 +1,9 @@
 /**
  * The beauty consultation, storefront side: one turn of it.
  *
- *   before the model   chip + sentence → profile updates (lexicon, ~ms) → advice
+ *   before the model   chip + sentence → profile updates (lexicon, ~ms)
+ *                      [+ the model reader when the lexicon left words unexplained,
+ *                      profile-reader.mjs] → advice
  *   the model          gets the advice as data; may call `advise` with
  *                      profile_updates the lexicon missed
  *   after              chips from next_question, cards from the steps, the new
@@ -88,7 +90,7 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   // building a routine. A question about a named product (« la crème X
   // convient aux peaux sèches ? ») still updates the profile, but is answered
   // from that product's facts, not with a routine.
-  const relevant = builderAsked || Boolean(picked) || mode === 'routine_builder' || (changed.length > 0 && !productQuestion);
+  let relevant = builderAsked || Boolean(picked) || mode === 'routine_builder' || (changed.length > 0 && !productQuestion);
   const compute = () => {
     advice = advisor.advise({ profile, mode, asked, locale: lang });
     return advice;
@@ -98,6 +100,23 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
     mode,
     get advice() { return advice; },
     get profile() { return profile; },
+    /** What the lexicon read, and what it left unexplained (`residue`): the reader's gate. */
+    lexicon: lex,
+    builderAsked,
+    picked: Boolean(picked),
+
+    /**
+     * The model reader's updates, merged BEFORE `opening()`. As `model_inferred`,
+     * they fill what the lexicon missed and never override what it read.
+     * @returns {string[]} the fields that changed
+     */
+    supplement(readerUpdates) {
+      const merged = mergeProfile(profile, modelUpdates(readerUpdates), { allowed: advisor.allowed, turn });
+      profile = merged.profile;
+      changed = [...changed, ...merged.changed];
+      if (merged.changed.length && !productQuestion) relevant = true;
+      return merged.changed.map((c) => c.field);
+    },
 
     opening() {
       return relevant ? compute() : null;
@@ -105,13 +124,9 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
 
     /** The `advise` tool. Never throws: a bad update is dropped by `mergeProfile`. */
     run(args) {
-      const modelUpdates = (Array.isArray(args?.profile_updates) ? args.profile_updates : [])
-        .slice(0, 12)
-        .filter((u) => u && typeof u.field === 'string' && typeof u.value === 'string')
-        .map((u) => ({ field: u.field, value: u.value.trim().toLowerCase().replace(/[\s-]+/g, '_'), source: 'model_inferred', confidence: 'medium' }))
-        .map((u) => (u.field === 'known_exclusions' || u.field === 'preferences' ? { ...u, value: u.value.replace(/_/g, ' ') } : u));
-      if (typeof args?.scope === 'string') modelUpdates.push({ field: 'routine_scope', value: args.scope, source: 'model_inferred', confidence: 'medium' });
-      const merged = mergeProfile(profile, modelUpdates, { allowed: advisor.allowed, turn });
+      const updates = modelUpdates(args?.profile_updates);
+      if (typeof args?.scope === 'string') updates.push({ field: 'routine_scope', value: args.scope, source: 'model_inferred', confidence: 'medium' });
+      const merged = mergeProfile(profile, updates, { allowed: advisor.allowed, turn });
       profile = merged.profile;
       changed = [...changed, ...merged.changed];
       return describe(compute());
@@ -180,6 +195,15 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
       ...(a.defaulted ? { defaulted_after_question: true } : {})
     };
   }
+}
+
+/** Profile updates a model wrote → merge-ready, as `model_inferred`. A bad value is dropped later by `mergeProfile`. */
+function modelUpdates(list) {
+  return (Array.isArray(list) ? list : [])
+    .slice(0, 12)
+    .filter((u) => u && typeof u.field === 'string' && typeof u.value === 'string')
+    .map((u) => ({ field: u.field, value: u.value.trim().toLowerCase().replace(/[\s-]+/g, '_'), source: 'model_inferred', confidence: 'medium' }))
+    .map((u) => (u.field === 'known_exclusions' || u.field === 'preferences' ? { ...u, value: u.value.replace(/_/g, ' ') } : u));
 }
 
 /** The facts of a step's product: from product data only (rule 11). */

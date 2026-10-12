@@ -208,12 +208,16 @@ export function createOpenAIClient({
     schemaName = 'result',
     maxTokens = 800,
     pass = 'other',
-    ticketId = null
+    ticketId = null,
+    // A quick reading (the storefront's profile reader) needs no long hidden
+    // reasoning: 'none' / 'low' trade depth for seconds. Unset, the model's default.
+    reasoningEffort = null
   }) {
     const payload = await request(
       {
         model,
         ...samplingParams(model, maxTokens),
+        ...(reasoningEffort && isReasoningModel(model) ? { reasoning_effort: reasoningEffort } : {}),
         messages: [...(system ? [{ role: 'system', content: system }] : []), ...messages],
         ...(tools && tools.length > 0 ? { tools, tool_choice: toolChoice } : {}),
         ...(schema

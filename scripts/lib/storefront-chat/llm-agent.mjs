@@ -39,6 +39,7 @@ import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
 import { displayLanguage, languageContext, validReplyLanguage } from './conversation-language.mjs';
 import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
+import { READER_TIMEOUT_MS, mentionsSkin, readProfile, shouldRead } from './profile-reader.mjs';
 
 export const DEFAULT_STOREFRONT_MODEL = 'gpt-6-luna';
 /** One model request. */
@@ -99,7 +100,8 @@ export class StorefrontAgentError extends Error {}
  *   productBaseUrl?: string | null,
  *   deadlineMs?: number,
  *   maxToolRounds?: number,
- *   advisor?: ReturnType<import('../advisory/recommend.mjs').createAdvisor> | null
+ *   advisor?: ReturnType<import('../advisory/recommend.mjs').createAdvisor> | null,
+ *   readerTimeoutMs?: number
  * }} deps
  *
  * `advisor` is the beauty consultation engine (scripts/lib/advisory/), built
@@ -120,7 +122,8 @@ export function createLlmAgent({
   productBaseUrl = null,
   deadlineMs = DEFAULT_TURN_DEADLINE_MS,
   maxToolRounds = DEFAULT_MAX_TOOL_ROUNDS,
-  advisor = null
+  advisor = null,
+  readerTimeoutMs = READER_TIMEOUT_MS
 }) {
   if (!client?.completeWithTools) throw new Error('createLlmAgent needs an OpenAI client.');
   if (advisor && !catalogue) advisor = null;
@@ -188,14 +191,33 @@ export function createLlmAgent({
             turn: history.filter((m) => m.role === 'user').length + 1
           })
         : null;
-      const advisorStarted = Date.now();
-      const advice = advisorTurn ? advisorTurn.opening() : null;
-      const adviceMs = Date.now() - advisorStarted;
-      for (const h of advisorTurn?.handles() ?? []) offered.add(h);
       const opening = knowledge ? retrieveKnowledge({ message, knowledge, resolution, context, history, currency }) : null;
       const shopping = readShopping ? createShoppingTurn({ readShopping: (domain) => withDeadline(readShopping(domain), 2500), readPublicPromotions: readPublicPromotions ? (domain) => withDeadline(readPublicPromotions(domain), 2500) : null, shopDomain, cart, context, message, history, resolvedProducts: [...resolvedIds].map(byId).filter(Boolean), baseCurrency: shopDomain === catalogueShopDomain ? currency : null }) : null;
       const shoppingOpening = shopping ? await shopping.opening() : null;
       const retrievalMs = Date.now() - retrievalStarted;
+
+      // THE LEXICON'S BACKUP. Words about the skin it did not understand are read
+      // by one small model call before the engine decides (profile-reader.mjs).
+      let reader = null;
+      if (advisorTurn) {
+        const gate = shouldRead({
+          lexicon: advisorTurn.lexicon,
+          state: advisorState,
+          choice: advisorTurn.picked ? choice : null,
+          productQuestion: !profileChoice && (resolution?.products.length ?? 0) > 0,
+          otherTopic: Boolean(shoppingOpening) || ['general_policy', 'general_faq', 'product_and_policy'].includes(opening?.route),
+          skinWords: mentionsSkin(message)
+        });
+        reader = { reason: gate.reason };
+        if (gate.read) {
+          const read = await readProfile({ client, model, message, allowed: advisor.allowed, lastQuestion: advisorState?.last_question ?? null, timeoutMs: Math.min(readerTimeoutMs, Math.max(1, endsAt - Date.now() - 1500)) });
+          reader = { reason: gate.reason, status: read.status, ms: read.ms, added: read.status === 'read' ? advisorTurn.supplement(read.updates) : [], usage: read.usage };
+        }
+      }
+      const advisorStarted = Date.now();
+      const advice = advisorTurn ? advisorTurn.opening() : null;
+      const adviceMs = Date.now() - advisorStarted;
+      for (const h of advisorTurn?.handles() ?? []) offered.add(h);
       const responseSchema = language.neutral_followup && language.previous_language
         ? { ...REPLY_SCHEMA, properties: { ...REPLY_SCHEMA.properties, reply_language: { type: 'string', enum: [language.previous_language] } } }
         : REPLY_SCHEMA;
@@ -216,7 +238,8 @@ export function createLlmAgent({
       });
       const messages = [...historyMessages(history), { role: 'user', content: message }];
       const trace = { calls: [], tools: [] };
-      if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs };
+      const readerTrace = reader && { reason: reader.reason, ...(reader.status ? { status: reader.status, ms: reader.ms, added: reader.added } : {}) };
+      if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace };
       if (shoppingOpening) {
         trace.shopping = { route: shoppingOpening.route, topics: shoppingOpening.topics ?? [], retrievals: shoppingOpening.results.map(({ tool, result }) => ({ tool, status: result.status, offer_preview: result.offer_preview === true, reasons: (result.promotions ?? []).map((p) => ({ id: p.promotion_id, status: p.status, reason: p.reason })) })) };
         // The cart's discounts as the widget sent them, and whether each matched an
@@ -228,7 +251,8 @@ export function createLlmAgent({
         retrievals: opening.results.map(({ tool, result }) => ({ tool, status: result.status, ids: (result.matches ?? []).map((m) => m.id), match_stage: result.matches?.[0]?.match_stage ?? result.match_stage ?? null })),
         sources: opening.results.flatMap(({ result }) => (result.sources ?? []).map((s) => ({ key: s.policy_key, version: s.version })))
       };
-      const usage = { inputTokens: 0, outputTokens: 0 };
+      // The reader's tokens count with the reply's: one ledger per assistant row.
+      const usage = { inputTokens: reader?.usage?.prompt_tokens ?? 0, outputTokens: reader?.usage?.completion_tokens ?? 0 };
 
       for (let round = 0; ; round += 1) {
         const mustAnswer = !tools || round >= maxToolRounds;
@@ -328,7 +352,7 @@ export function createLlmAgent({
           products = toCards(finalAdvice.steps.map((s) => ({ handle: s.handle, rationale: '' })), offered, catalogue, money, linkBase);
         }
         const cardIds = products.map((c) => c.id);
-        if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs };
+        if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace };
         const advisorChoices = advisorTurn ? advisorTurn.choices() : [];
         return {
           text: shopping ? shopping.sanitizeReply(parsed.text, parsed.replyLanguage ?? language.previous_language ?? 'fr') : parsed.text,

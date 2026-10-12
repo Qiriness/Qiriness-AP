@@ -53,6 +53,8 @@ The customer talks naturally. Behind the conversation, an engine keeps a profile
 ```
 message (+ chip value, + quick action)
   → lexicon (~ms, French and English tables): « peau sèche » / « dry skin », « premières rides » / « fine lines » → profile updates
+     + residue: the words it did not understand
+  → reader (only a consultation turn with residue, ~1–2 s, reasoning off): one model call → profile values, as model_inferred
   → mergeProfile: value · source (quick_choice | natural_language | model_inferred) · confidence
   → advise (~0.1 ms):
        hard eligibility: stock, area, men only on explicit request, bundles, exclusions
@@ -71,6 +73,7 @@ message (+ chip value, + quick action)
 | profile schema, merge rules | `scripts/lib/advisory/profile.mjs` | shared later |
 | phrasing → profile, message language | `scripts/lib/advisory/lexicon.mjs` over `lexicon-fr.mjs`, `lexicon-en.mjs` | shared later |
 | ingredient exclusions across languages | `scripts/lib/advisory/ingredients.mjs` | shared later |
+| the lexicon's backup: gate + model reading | `scripts/lib/storefront-chat/profile-reader.mjs` | storefront only |
 | config validate / compile / check against the catalogue | `scripts/lib/advisory/config.mjs` | shared later |
 | playbook selection, ambiguity | `scripts/lib/advisory/select-playbook.mjs` | shared later |
 | eligibility, suitability, texture, merchandising | `scripts/lib/advisory/ranking.mjs` | shared later |

@@ -13,6 +13,13 @@ export default {
   code: 'en',
 
   /** Words only English uses: they tell the language of a message. */
+  /**
+   * Words that carry nothing about the skin: what is left of a message once
+   * these, the markers and every pattern are removed is what the lexicon did
+   * NOT understand (`residue`), and sends the turn to the model reader.
+   */
+  fillers: ['where', 'start', 'begin', 'should', 'winter', 'summer', 'spring', 'autumn', 'fall', 'season', 'cold', 'hot', 'weather', 'detail', 'details', 'range', 'mode', 'suitable', 'adapted', 'what', 'how', 'which', 'love', 'like', 'really', 'very', 'so', 'quite', 'bit', 'little', 'lot', 'pretty', 'lately', 'recently', 'these', 'days', 'always', 'often', 'sometimes', 'usually', 'now', 'today', 'still', 'also', 'just', 'even', 'too', 'feel', 'feels', 'feeling', 'felt', 'get', 'gets', 'getting', 'got', 'seems', 'looks', 'look', 'become', 'becomes', 'been', 'be', 'has', 'had', 'kind', 'sort', 'since', 'because', 'when', 'after', 'before', 'during', 'there', 'they', 'them', 'their', 'its', 'im', 'ive', 'ok', 'okay', 'thank', 'thx', 'hey', 'good', 'great', 'morning', 'evening', 'night', 'time', 'times', 'bit', 'more', 'less', 'much', 'many', 'any', 'something', 'anything', 'product', 'products', 'routine', 'skincare', 'care', 'advice', 'recommend', 'suggest', 'tell', 'know', 'think', 'want', 'wanted', 'need', 'needs', 'use', 'using', 'used', 'try', 'tried', 'trying', 'one', 'ones', 'thing', 'things', 'way', 'than', 'then', 'here', 'there', 'could', 'should', 'will', 'was', 'were', 'did', 'didn', 'doesn', 'isn', 'not', 'no', 'an', 'a', 'in', 'on', 'at', 'by', 'or', 'but', 'if', 'as', 'from', 'up', 'out', 'all', 'mostly', 'mainly', 'especially', 'around', 'area', 'type', 'kind', 'build', 'together', 'show', 'give', 'find', 'choose', 'right', 'best', 'better'],
+
   markers: ['the', 'my', 'i', 'is', 'and', 'for', 'with', 'not', 'skin', 'what', 'which', 'you', 'your', 'have', 'do', 'does', 'can', 'it', 'of', 'to', 'any', 'help', 'please', 'hello', 'hi', 'thanks', 'yes', 'want', 'need', 'looking', 'eyes', 'face', 'wrinkles', 'cream', 'we', 'am', 'm', 'don', 'would', 'like', 'how', 'are', 'about', 'this', 'that', 'some'],
 
   areas: {
@@ -41,7 +48,7 @@ export default {
     puffiness: /\b(puffiness|puffy( eyes)?|eye bags|bags under (my |the )?eyes|swelling|swollen)\b/,
     tired_skin: /\b(tired|fatigued?|exhausted|lack of sleep)\b/,
     dehydration: /\b(dehydrat\w*|lacks? (water|moisture|hydration)|thirsty skin)\b/,
-    tightness: /\b(tightness|feels tight|tight skin|skin (is |feels )?tight|pulling)\b/,
+    tightness: /\b(tightness|(feels?|feeling|gets?|getting|is|so|very|really) (\w+ )?tight|tight skin|pulling)\b/,
     discomfort: /\b(discomfort|uncomfortable|itch\w*|sting\w*|tingl\w*|burning)\b/,
     dryness: /\b(dryness|flaky|flaking|peeling|rough skin)\b/,
     clogged_pores: /\b(blackheads?|(enlarged|clogged|visible|large|open|blocked) pores?|pores?)\b/,

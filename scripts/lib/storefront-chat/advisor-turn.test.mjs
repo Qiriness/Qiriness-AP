@@ -140,3 +140,60 @@ test('the widget may send a profile chip value', () => {
   assert.ok(PROFILE_CHOICE.test('profile:current_routine:cleanser+moisturiser'));
   assert.ok(!PROFILE_CHOICE.test('profile:Skin:Dry'));
 });
+
+// ---------------------------------------------------------------- the lexicon's backup
+import { readProfile, shouldRead } from './profile-reader.mjs';
+
+const reading = (updates) => ({ content: JSON.stringify({ profile_updates: updates }), toolCalls: [], usage: { prompt_tokens: 300, completion_tokens: 30 } });
+
+test('words the lexicon does not know are read by the model BEFORE the engine decides', async () => {
+  const client = scripted(reading([{ field: 'primary_concern', value: 'dehydration' }, { field: 'skin_type', value: 'dry' }]), answer('Voici une routine.'));
+  const reply = await agentWith(client).respond({ message: 'My face feels like sandpaper' });
+  assert.equal(client.calls.length, 2);
+  assert.equal(client.calls[0].pass, 'storefront_profile_read');
+  assert.equal(reply.trace.advice.reader.reason, 'unexplained_words');
+  assert.equal(reply.trace.advice.reader.status, 'read');
+  assert.deepEqual(reply.trace.advice.reader.added.sort(), ['primary_concern', 'skin_type']);
+  // The advice the reply model saw was computed from the full reading, not from nothing.
+  assert.equal(reply.trace.advice.status, 'recommended');
+  assert.equal(reply.trace.advice.playbook, 'hydra');
+  assert.match(client.calls[1].system, /Élixir Aqua/);
+  assert.equal(reply.usage.inputTokens, 300 + 800);
+});
+
+test('a message the lexicon reads whole costs no extra call', async () => {
+  const client = scripted(answer('Voici.'));
+  const reply = await agentWith(client).respond({ message: "J'ai la peau sèche et déshydratée" });
+  assert.equal(client.calls.length, 1);
+  assert.equal(reply.trace.advice.reader.reason, 'fully_read');
+});
+
+test('the lexicon wins a conflict with the reader; a failed reading leaves the turn as it was', async () => {
+  const conflicting = scripted(reading([{ field: 'skin_type', value: 'oily' }]), answer('Voici.'));
+  const reply = await agentWith(conflicting).respond({ message: 'Dry skin, dehydrated, it feels like sandpaper' });
+  assert.equal(reply.trace.advice.reader.status, 'read');
+  assert.ok(!reply.trace.advice.reader.added.includes('skin_type'), 'the lexicon read « dry »; the reader cannot turn it into oily');
+
+  const failing = { calls: [], async completeWithTools(args) { this.calls.push(args); if (args.pass === 'storefront_profile_read') throw new Error('HTTP 500'); return answer('Voici.'); } };
+  const after = await agentWith(failing).respond({ message: 'My face feels like sandpaper' });
+  assert.equal(after.trace.advice.reader.status, 'failed');
+  assert.equal(after.text, 'Voici.');
+});
+
+test('the reader gate: consultation turns with unexplained words only', () => {
+  const lex = (updates, residue, routineBuilder = false) => ({ updates, residue, routineBuilder });
+  assert.equal(shouldRead({ lexicon: lex([], ['sandpaper']), skinWords: true }).reason, 'nothing_read');
+  assert.equal(shouldRead({ lexicon: lex([{}], ['bumps']) }).reason, 'unexplained_words');
+  assert.equal(shouldRead({ lexicon: lex([{}], []) }).read, false);
+  assert.equal(shouldRead({ lexicon: lex([], ['livraison']) }).reason, 'not_a_consultation');
+  assert.equal(shouldRead({ lexicon: lex([], ['ouais']), state: { last_question: 'skin_type' } }).read, true, 'an answer in their own words to the question just asked');
+  assert.equal(shouldRead({ lexicon: lex([{}], ['bumps']), choice: 'profile:skin_type:dry' }).reason, 'chip');
+  assert.equal(shouldRead({ lexicon: lex([{}], ['bumps']), productQuestion: true }).reason, 'product_question');
+  assert.equal(shouldRead({ lexicon: lex([{}], ['bumps']), otherTopic: true }).reason, 'other_topic');
+});
+
+test('readProfile times out instead of holding the turn', async () => {
+  const hanging = { completeWithTools: () => new Promise(() => {}) };
+  const r = await readProfile({ client: hanging, model: 'm', message: 'x', allowed: { body_area: [], skin_type: [], sensitivity: [], secondary_concerns: [], current_routine: [], desired_care_type: [], routine_scope: [], age_band: [] }, timeoutMs: 20 });
+  assert.equal(r.status, 'failed');
+});
