@@ -1,5 +1,5 @@
 /**
- * The consultation's French test set, run on the LIVE catalogue by
+ * The consultation's test set, French then English, run on the LIVE catalogue by
  * `npm run eval:advisory` (free: no model). Each case is a conversation —
  * messages and chip answers — and what the engine must conclude.
  *
@@ -39,5 +39,35 @@ export const ADVISORY_CASES = [
   { name: 'routine builder asks skin type when it changes the cream', turns: [{ message: 'Construire ma routine', action: 'build_routine' }, { choice: 'profile:primary_concern:dehydration' }, { choice: 'profile:body_area:face' }], expect: { question: 'skin_type' } },
   { name: 'a question is never asked twice', turns: [{ message: 'Construire ma routine', action: 'build_routine' }, { choice: 'profile:primary_concern:dehydration' }, { choice: 'profile:body_area:face' }, { choice: 'profile:skin_type:unknown' }], expect: { notQuestion: 'skin_type' } },
   { name: 'routine builder ends in a routine', turns: [{ message: 'Construire ma routine', action: 'build_routine' }, { choice: 'profile:primary_concern:dehydration' }, { choice: 'profile:body_area:face' }, { choice: 'profile:skin_type:dry' }, { choice: 'profile:sensitivity:none' }, { choice: 'profile:current_routine:none' }, { choice: 'profile:routine_scope:essential' }, { choice: 'profile:age_band:30_44' }], expect: { playbook: 'face_hydration', status: 'recommended' } },
-  { name: 'natural language mid-builder is not re-asked', turns: [{ message: 'Construire ma routine', action: 'build_routine' }, 'Plutôt des taches, et ma peau est mixte'], expect: { notQuestion: 'skin_type', profile: { skin_type: 'combination', primary_concern: 'dark_spots' } } }
+  { name: 'natural language mid-builder is not re-asked', turns: [{ message: 'Construire ma routine', action: 'build_routine' }, 'Plutôt des taches, et ma peau est mixte'], expect: { notQuestion: 'skin_type', profile: { skin_type: 'combination', primary_concern: 'dark_spots' } } },
+  { name: 'the builder started in words, not the button', turns: ['On peut construire ensemble une routine complète ?'], expect: { question: 'primary_concern', profile: { routine_scope: 'complete' } } },
+  { name: 'fragrance-free excludes perfumed products', turns: ['Peau sensible et tiraillements, sans parfum'], expect: { profile: { known_exclusions: ['fragrance'] } } },
+
+  // --- the same conversations in English (lang: chips must be English too) ---
+  ...[
+    { name: 'dry skin + first wrinkles → radiance, Active Énergie serum', turns: ["I have dry skin and I'm starting to get wrinkles"], expect: { playbook: 'face_radiance_energy', question: null, profile: { skin_type: 'dry', primary_concern: 'early_signs_of_ageing' }, products: [/Active Énergie/] } },
+    { name: 'wrinkles alone are ambiguous: firmness or global anti-age', turns: ['I have wrinkles and dry skin'], expect: { question: 'primary_concern', options: ['loss_of_firmness', 'global_signs_of_ageing'] } },
+    { name: 'the ambiguity answered by chip → global anti-age, rich Temps Sublime', turns: ['I have wrinkles and dry skin', { choice: 'profile:primary_concern:global_signs_of_ageing' }, { choice: 'profile:routine_scope:essential' }], expect: { playbook: 'face_global_anti_age', products: [/Temps Sublime/, /Temps Sublime Riche/] } },
+    { name: 'oily + shine → oily playbook, light texture', turns: ['Oily skin with shine and breakouts, a simple routine'], expect: { playbook: 'face_oily_imperfections', not: [/Riche/] } },
+    { name: '62 with a dull complexion → radiance, not advanced (age never selects)', turns: ["I'm 62 and my complexion is dull"], expect: { playbook: 'face_radiance_energy', not: [/Exception/], profile: { age_band: '60_plus' } } },
+    { name: 'deep wrinkles → advanced (Exception)', turns: ["Deep wrinkles, I'd like an essential routine"], expect: { playbook: 'face_advanced_anti_age', products: [/Exception/, /Exception/] } },
+    { name: 'dark spots with cleanser + cream already → only the missing step', turns: ['I have dark spots, I already use a cleanser and a cream, I want to complete my routine'], expect: { playbook: 'face_dark_spots', notSlots: ['moisturiser'] } },
+    { name: 'sensitive + tightness → sensitive comfort, Sensi Zen', turns: ['My skin is sensitive and feels tight'], expect: { playbook: 'face_sensitive_comfort', products: [/Sensi Zen/] } },
+    { name: 'combination + dehydrated → hydration with the light Source d\'Eau', turns: ['Dehydrated combination skin, an essential routine'], expect: { playbook: 'face_hydration', products: [/Élixir Source d'Eau/, /Voile Source d'Eau/] } },
+    { name: 'dry + dehydrated → rich Source d\'Eau', turns: ['Very dry and dehydrated skin, an essential routine'], expect: { playbook: 'face_hydration', products: [/Élixir Source d'Eau/, /Source d'Eau Riche/] } },
+    { name: 'dark circles → eye advisor, eye product only', turns: ['I have dark circles'], expect: { playbook: 'eye_advisor', products: [/Yeux|Regard/] } },
+    { name: 'body dryness → body playbook, no face product', turns: ['Dry skin on my body'], expect: { playbook: 'body_hydration', products: [/Corps/] } },
+    { name: 'explicit men + hydration → men\'s products only', turns: ['A cream for men, dry and dehydrated skin'], expect: { playbook: 'men_face', products: [/Homme/], profile: { sex_target: 'men' } } },
+    { name: 'men anti-age → the men\'s anti-age cream', turns: ["I'm a man and I have wrinkles"], expect: { playbook: 'men_face', products: [/Anti-Âge Homme/] } },
+    { name: 'no target → never a men\'s product', turns: ['Dry and dehydrated skin, full routine'], expect: { not: [/Homme/] } },
+    { name: 'routine builder with nothing known asks the concern', turns: [{ message: 'Build my routine', action: 'build_routine' }], expect: { question: 'primary_concern' } },
+    { name: 'dehydration is face or body: the builder asks the area', turns: [{ message: 'Build my routine', action: 'build_routine' }, { choice: 'profile:primary_concern:dehydration' }], expect: { question: 'body_area' } },
+    { name: 'routine builder asks skin type when it changes the cream', turns: [{ message: 'Build my routine', action: 'build_routine' }, { choice: 'profile:primary_concern:dehydration' }, { choice: 'profile:body_area:face' }], expect: { question: 'skin_type' } },
+    { name: 'a question is never asked twice', turns: [{ message: 'Build my routine', action: 'build_routine' }, { choice: 'profile:primary_concern:dehydration' }, { choice: 'profile:body_area:face' }, { choice: 'profile:skin_type:unknown' }], expect: { notQuestion: 'skin_type' } },
+    { name: 'routine builder ends in a routine', turns: [{ message: 'Build my routine', action: 'build_routine' }, { choice: 'profile:primary_concern:dehydration' }, { choice: 'profile:body_area:face' }, { choice: 'profile:skin_type:dry' }, { choice: 'profile:sensitivity:none' }, { choice: 'profile:current_routine:none' }, { choice: 'profile:routine_scope:essential' }, { choice: 'profile:age_band:30_44' }], expect: { playbook: 'face_hydration', status: 'recommended' } },
+    { name: 'natural language mid-builder is not re-asked', turns: [{ message: 'Build my routine', action: 'build_routine' }, 'Mostly dark spots, and my skin is combination'], expect: { notQuestion: 'skin_type', profile: { skin_type: 'combination', primary_concern: 'dark_spots' } } },
+    { name: 'the builder started in words, not the button (dev store, 2026-10-08)', turns: ['Can we build a full routine together?'], expect: { question: 'primary_concern', profile: { routine_scope: 'complete' } } },
+    { name: '« I don\'t know » answers the question asked', turns: [{ message: 'Build my routine', action: 'build_routine' }, { choice: 'profile:primary_concern:dehydration' }, { choice: 'profile:body_area:face' }, "I don't know"], expect: { notQuestion: 'skin_type', profile: { skin_type: 'unknown' } } },
+    { name: 'fragrance-free excludes perfumed products', turns: ['Sensitive skin that feels tight, fragrance-free please'], expect: { profile: { known_exclusions: ['fragrance'] } } }
+  ].map((c) => ({ ...c, lang: 'en' }))
 ];

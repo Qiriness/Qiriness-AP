@@ -1,4 +1,4 @@
-// French routing expectations. Fixtures are invented; no merchant/customer facts.
+// Routing expectations, French then English. Fixtures are invented; no merchant/customer facts.
 // Product-policy cases describe the second path AFTER the product-data opening.
 export const KNOWLEDGE_CASES = [
   { message: 'Quels sont les délais de livraison en France ?', route: 'general_policy', tools: ['get_policy'], policies: ['delivery_time_policy', 'delivery_location_policy'], country: 'FR' },
@@ -27,5 +27,33 @@ export const KNOWLEDGE_CASES = [
   { message: 'Quelle est la garantie du Masque Lumière ?', route: 'product_data', tools: [], products: ['mask'], fallback: { tool: 'get_product_policy', topic: 'warranty', result: 'mask-guide:warranty' } },
   { message: 'Puis-je retourner Caresse Brume si elle est ouverte ?', route: 'product_and_policy', tools: ['get_policy'], policies: ['return_policy'], products: ['cream'], forbidden: ['get_product_policy'] },
   { message: 'Quels délais de livraison et puis-je payer en plusieurs fois ?', route: 'general_policy', tools: ['get_policy', 'get_policy'], policies: ['delivery_time_policy', 'payment_policy'] },
-  { message: 'Quelle est votre politique de confidentialité ?', route: 'general_policy', tools: ['get_policy'], status: 'not_found' }
+  { message: 'Quelle est votre politique de confidentialité ?', route: 'general_policy', tools: ['get_policy'], status: 'not_found' },
+
+  // --- English: the same routes. FAQ entries are French here, so an English FAQ
+  // question is found by the model's search_faqs in French, not by this opening.
+  ...[
+    { message: 'What are the delivery times to France?', route: 'general_policy', tools: ['get_policy'], policies: ['delivery_time_policy', 'delivery_location_policy'], country: 'FR' },
+    { message: 'How long does delivery take to Belgium?', route: 'general_policy', tools: ['get_policy'], policies: ['delivery_time_policy', 'delivery_location_policy'], country: 'BE' },
+    { message: 'Do you ship to Switzerland?', route: 'general_policy', tools: ['get_policy'], policies: ['delivery_location_policy'], country: 'CH', support: 'unsupported' },
+    { message: 'How much is shipping to France?', route: 'general_policy', tools: ['get_policy'], policies: ['shipping_cost_policy', 'delivery_location_policy'], country: 'FR' },
+    { message: 'Is delivery free?', route: 'general_policy', tools: ['get_policy'], policies: ['shipping_cost_policy'] },
+    { message: 'How long before my order is dispatched?', route: 'general_policy', tools: ['get_policy'], policies: ['dispatch_time_policy'] },
+    { message: 'Can I return an item?', route: 'general_policy', tools: ['get_policy'], policies: ['return_policy'] },
+    { message: 'How long until I get refunded?', route: 'general_policy', tools: ['get_policy'], policies: ['refund_policy'] },
+    { message: 'Can I pay in instalments?', route: 'general_policy', tools: ['get_policy'], policies: ['payment_policy'] },
+    { message: 'Do you accept PayPal?', route: 'general_policy', tools: ['get_policy'], policies: ['payment_policy'] },
+    { message: 'Can promo codes be combined?', route: 'general_policy', tools: ['get_policy'], policies: ['promotion_discount_policy'] },
+    { message: 'What offers do you have?', route: 'general_policy', tools: ['get_policy'], policies: ['promotion_discount_policy'] },
+    { message: 'How do I cancel my order?', route: 'general_policy', tools: ['get_policy'], policies: ['order_cancellation_policy'] },
+    { message: 'How do I cancle my order?', route: 'general_policy', tools: ['get_policy'], policies: ['order_cancellation_policy'] },
+    { message: 'How can I change my delivery address?', route: 'general_policy', tools: ['get_policy'], policies: ['address_change_policy', 'order_modification_policy'] },
+    { message: 'And the times?', route: 'unclassified', tools: [] },
+    { message: 'Hello', route: 'unclassified', tools: [] },
+    { message: 'Can I use Caresse Brume morning and evening?', route: 'product_data', tools: [], products: ['cream'], forbidden: ['get_product_policy'] },
+    { message: 'What precautions for the Masque Lumière?', route: 'product_data', tools: [], products: ['mask'], fallback: { tool: 'get_product_policy', topic: 'precautions', query: 'Quelles précautions pour les yeux ?', result: 'mask-guide:eyes' } },
+    { message: 'What is the warranty on the Masque Lumière?', route: 'product_data', tools: [], products: ['mask'], fallback: { tool: 'get_product_policy', topic: 'warranty', result: 'mask-guide:warranty' } },
+    { message: 'Can I return Caresse Brume once it is opened?', route: 'product_and_policy', tools: ['get_policy'], policies: ['return_policy'], products: ['cream'], forbidden: ['get_product_policy'] },
+    { message: 'What are the delivery times and can I pay in instalments?', route: 'general_policy', tools: ['get_policy', 'get_policy'], policies: ['delivery_time_policy', 'payment_policy'] },
+    { message: 'What is your privacy policy?', route: 'general_policy', tools: ['get_policy'], status: 'not_found' }
+  ].map((c) => ({ ...c, lang: 'en' }))
 ];

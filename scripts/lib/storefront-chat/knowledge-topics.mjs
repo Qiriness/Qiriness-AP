@@ -12,14 +12,16 @@ export const POLICY_KEYS = {
 };
 export const POLICY_TOPICS = Object.keys(POLICY_KEYS);
 
+// French and English, the languages of about 99 % of customers: a topic missing
+// in one of them is a bug (knowledge.test.mjs runs every case in both).
 const VOCABULARY = {
-  delivery: ['livraison', 'livrer', 'livre', 'livrez', 'expedition', 'expedier', 'shipping', 'delivery', 'dispatch'],
-  returns: ['retour', 'retours', 'retourner', 'renvoyer', 'retractation', 'return'],
-  refunds: ['remboursement', 'rembourser', 'rembourse', 'remboursee', 'refund'],
-  payments: ['payer', 'paiement', 'payement', 'payes', 'klarna', 'paypal', 'payment', 'pay'],
-  cancellations: ['annuler', 'annulation', 'cancel', 'cancellation'],
-  promotions: ['promo', 'promotions', 'promotion', 'reduction', 'remise', 'offres', 'discount', 'coupon'],
-  privacy: ['confidentialite', 'rgpd', 'privacy'],
+  delivery: ['livraison', 'livrer', 'livre', 'livrez', 'expedition', 'expedier', 'shipping', 'ship', 'shipped', 'delivery', 'deliver', 'delivered', 'dispatch', 'dispatched', 'postage'],
+  returns: ['retour', 'retours', 'retourner', 'renvoyer', 'retractation', 'return', 'returns', 'returning'],
+  refunds: ['remboursement', 'rembourser', 'rembourse', 'remboursee', 'refund', 'refunds', 'refunded'],
+  payments: ['payer', 'paiement', 'payement', 'payes', 'klarna', 'paypal', 'payment', 'pay', 'instalments', 'installments'],
+  cancellations: ['annuler', 'annulation', 'cancel', 'cancelled', 'canceled', 'cancellation'],
+  promotions: ['promo', 'promotions', 'promotion', 'reduction', 'remise', 'offre', 'offres', 'discount', 'discounts', 'coupon', 'offer', 'offers', 'deal', 'deals', 'voucher'],
+  privacy: ['confidentialite', 'rgpd', 'privacy', 'gdpr'],
   order_changes: []
 };
 
@@ -45,7 +47,7 @@ export function policyTopics(query) {
   const words = text.split(' ');
   const found = Object.entries(VOCABULARY).filter(([, terms]) => words.some((w) => terms.some((t) => nearWord(w, t)))).map(([topic]) => topic);
   if (/\b(donnees personnelles|donnees privees|personal data)\b/.test(text) && !/\b(modifier|changer|edit|change)\b/.test(text)) found.push('privacy');
-  if (/\b(modifier|changer|change|modification)\b/.test(text) && /\b(adresse|commande|address|order)\b/.test(text)) found.push('order_changes');
+  if (/\b(modifier|changer|change|modification|modify|update|edit)\b/.test(text) && /\b(adresse|commande|address|order)\b/.test(text)) found.push('order_changes');
   if (/\b(cadeau|gift)\b/.test(text) && /\b(offre|promo|commande|gratuit|manquant|order|offer)\b/.test(text)) found.push('promotions');
   if (found.includes('order_changes') && /\b(adresse|address)\b/.test(text) && !/\b(delai|temps|cout|frais|time|cost)\b/.test(text)) return [...new Set(found.filter((t) => t !== 'delivery'))];
   return [...new Set(found)];
@@ -54,21 +56,21 @@ export function policyTopics(query) {
 export function deliveryKeys(query) {
   const text = normalise(query);
   const keys = [];
-  if (/\b(frais|cout|coute|cost|gratuite?|offerte?|seuil|threshold|port)\b/.test(text)) keys.push('shipping_cost_policy');
-  if (/\b(pays|zone|destinations?|etranger|international|livrez|livrer|livre|ship to)\b/.test(text)) keys.push('delivery_location_policy');
-  if (/\b(expedition|expedier|dispatch|preparation)\b/.test(text)) keys.push('dispatch_time_policy');
-  if (/\b(delais?|temps|jours?|time|days|livraisson|livraison)\b/.test(text) && (!keys.length || /\b(delais?|temps|jours?|time|days)\b/.test(text)) && (!keys.includes('dispatch_time_policy') || /\b(livraison|delivery)\b/.test(text))) keys.push('delivery_time_policy');
+  if (/\b(frais|cout|coute|cost|costs|gratuite?|offerte?|seuil|threshold|port|free|fee|fees|charge|price)\b/.test(text)) keys.push('shipping_cost_policy');
+  if (/\b(pays|zone|destinations?|etranger|international|livrez|livrer|livre|ship to|deliver to|countries|country|abroad|worldwide)\b/.test(text)) keys.push('delivery_location_policy');
+  if (/\b(expedition|expedier|dispatch|dispatched|preparation|processing)\b/.test(text)) keys.push('dispatch_time_policy');
+  if (/\b(delais?|temps|jours?|time|times|days|long|arrive|livraisson|livraison)\b/.test(text) && (!keys.length || /\b(delais?|temps|jours?|time|times|days|long|arrive)\b/.test(text)) && (!keys.includes('dispatch_time_policy') || /\b(livraison|delivery)\b/.test(text))) keys.push('delivery_time_policy');
   return keys.length ? [...new Set(keys)] : POLICY_KEYS.delivery;
 }
 
 export function productTopic(query) {
   const text = normalise(query);
   if (/\b(precautions?|restrictions?|contre indications?|interdit|danger|yeux|eyes|safety)\b/.test(text)) return 'precautions';
-  if (/\b(enceinte|grossesse|allait|traitement|allerg|pregnan|suitab|convient)\w*/.test(text)) return 'suitability';
-  if (/\b(garantie|warranty)\b/.test(text)) return 'warranty';
-  if (/\b(efficacite|prouve|prouvee|resultats?|claims?|efficacy)\b/.test(text)) return 'claims';
-  if (/\b(retour|retourner|ouverte?|utilisee?)\b/.test(text)) return 'returns';
-  if (/\b(utiliser|utilisation|usage|matin|soir|seances?|nettoyer|charger|batterie|manuel|instructions?|use|morning|evening)\b/.test(text)) return 'usage';
+  if (/\b(enceinte|grossesse|allait|traitement|allerg|pregnan|breastfeed|suitab|convient)\w*/.test(text)) return 'suitability';
+  if (/\b(garantie|warranty|guarantee)\b/.test(text)) return 'warranty';
+  if (/\b(efficacite|prouve|prouvee|resultats?|claims?|efficacy|proven|results?|effective)\b/.test(text)) return 'claims';
+  if (/\b(retour|retourner|ouverte?|utilisee?|return|returned|opened)\b/.test(text)) return 'returns';
+  if (/\b(utiliser|utilisation|usage|matin|soir|seances?|nettoyer|charger|batterie|manuel|instructions?|use|apply|morning|evening|night|sessions?|clean|charge|battery|manual)\b/.test(text)) return 'usage';
   return null;
 }
 

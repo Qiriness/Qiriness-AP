@@ -140,6 +140,30 @@ test('French deterministic opening routes are narrow; payment FAQ does no shoppi
   assert.equal((await turn('Bonjour').run('get_stock_context', { product_ids: ['arbitrary'] })).reason, 'product_not_resolved');
 });
 
+// French and English hold about 99 % of customers: the same question opens the same reads in both.
+test('the shopping opening routes the same question the same way in French and English', async () => {
+  const f = fixture();
+  const tools = async (message) => {
+    const opening = await createShoppingTurn({ message, shopDomain: f.source.shopDomain, cart: f.cart, readShopping: async () => f.source }).opening();
+    return opening ? opening.results.map((r) => `${r.tool}${r.result?.promotions?.[0]?.code ? `:${r.result.promotions[0].code}` : ''}`) : null;
+  };
+  const pairs = [
+    ['Puis-je payer en plusieurs fois ?', 'Can I pay in instalments?'],
+    ['Quelles offres sont disponibles en ce moment ?', 'What offers are available right now?'],
+    ['Vous avez des promos en ce moment ?', 'Do you have any deals at the moment?'],
+    ['Est-ce que tout mon panier est en stock ?', 'Is everything in my cart in stock?'],
+    ['Le code WELCOME20 marche avec mon panier ?', 'Does the code WELCOME20 work with my cart?'],
+    ['Pourquoi mon code ne fonctionne pas ?', "Why isn't my code working?"],
+    ['Pourquoi mon code promo ne marche pas ?', "My promo code doesn't work, why?"],
+    ['La réduction est-elle déjà appliquée ?', 'Is the discount already applied?'],
+    ['Combien me manque-t-il pour la livraison gratuite ?', 'How much more do I need for free delivery?'],
+    ['Puis-je cumuler deux promotions ?', 'Can I combine two promotions?'],
+    ['Quelle offre puis-je avoir ?', 'Which offer can I get?'],
+    ['Est-ce que mon bon de réduction est valable ?', 'Is my voucher valid?']
+  ];
+  for (const [fr, en] of pairs) assert.deepEqual(await tools(en), await tools(fr), `${en} ≠ ${fr}`);
+});
+
 test('Agent receives opening shopping results in one model call, never private cart codes', async () => {
   const { source, cart } = fixture();
   cart.codes = ['SECRET50']; cart.discounts = [{ title: 'SECRET50', type: 'code', amount: 1000 }]; cart.total = 3000;

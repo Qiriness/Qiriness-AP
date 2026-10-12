@@ -5,8 +5,8 @@ import { getPolicy, searchFaqs } from './knowledge-tools.mjs';
 export function retrieveKnowledge({ message, knowledge, resolution = null, context = {}, history = [], currency = 'EUR', now = Date.now() }) {
   let topics = policyTopics(message);
   // An elliptical follow-up may reuse the last retrieval topic, never a new subject.
-  const countryFollowup = Boolean(countryAnswer(message) || countriesIn(message).length && /^(et\s+)?(en|pour|vers)\s+/i.test(message.trim()));
-  if (!topics.length && (countryFollowup || /^(et\s+)?(les?\s+)?(delais?|combien)\s*\??$/i.test(message.trim()))) {
+  const countryFollowup = Boolean(countryAnswer(message) || countriesIn(message).length && /^((et|and)\s+)?(en|pour|vers|to|for|in)\s+/i.test(message.trim()));
+  if (!topics.length && (countryFollowup || /^((et|and)\s+)?((les?|the)\s+)?(d[ée]lais?|combien|how long|how much|times?)\s*\??$/i.test(message.trim()))) {
     const previous = [...history].reverse().find((m) => m.role === 'assistant');
     const previousTopics = previous?.context?.trace?.knowledge?.topics ?? [];
     topics = countryFollowup ? previousTopics.includes('delivery') ? ['delivery'] : [] : previousTopics;

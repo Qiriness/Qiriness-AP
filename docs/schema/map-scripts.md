@@ -151,13 +151,14 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # (get_policy, search_faqs, get_product_policy) ·
 |       |                                # knowledge-router (opening retrieval before the model;
 |       |                                # product data first, guidance only on a later tool call) ·
-|       |                                # knowledge-cases (French routing/result expectations) ·
+|       |                                # knowledge-cases (French + English routing/result expectations) ·
 |       |                                # advisor-tools (one consultation turn: profile pre-pass,
 |       |                                # advice in the prompt, the advise tool, chips, cards, events) ·
 |       |                                # advisor-state (context.advisor folded from the log)
 |       |-- advisory/                    # the beauty consultation core, CHANNEL-FREE (imports
 |       |                                # nothing outside itself; isolation.test.mjs): profile ·
-|       |                                # lexicon-fr · config (validate, compile, check against a
+|       |                                # lexicon (engine) over lexicon-fr + lexicon-en (same keys) ·
+|       |                                # ingredients (exclusions across languages) · config (validate, compile, check against a
 |       |                                # catalogue; no product ids) · select-playbook · ranking
 |       |                                # (eligibility → suitability → routine fit → merchandising) ·
 |       |                                # recommend (createAdvisor: advise + next question) ·

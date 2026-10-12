@@ -49,7 +49,7 @@ const CATALOGUE = buildCatalogue([
 const INDEX = buildResolutionIndex(CATALOGUE);
 const makeKnowledge = (changes = {}) => buildKnowledge({ policies: POLICIES, parameters: PARAMS, documents: DOCUMENTS, ...changes });
 
-for (const c of KNOWLEDGE_CASES) test(`French route: ${c.message}`, async () => {
+for (const c of KNOWLEDGE_CASES) test(`${c.lang === 'en' ? 'English' : 'French'} route: ${c.message}`, async () => {
   const resolution = resolveProducts(c.message, { index: INDEX });
   const knowledge = makeKnowledge();
   const opening = retrieveKnowledge({ message: c.message, knowledge, resolution });
@@ -320,5 +320,18 @@ test('a product question no FAQ question matches gets that product’s FAQ, most
   const result = await runKnowledgeTool('get_product_policy', { product_id: 'mask' }, makeKnowledge(), options);
   assert.equal(result.status, 'found');
   assert.equal(result.match_stage, 'product_faq_digest');
-  assert.deepEqual(result.matches.map((m) => m.canonical_question), ['La télécommande ne fonctionne plus', 'Combien de séances par semaine ?'], 'entries sharing no word with the question are left out');
+  // Both share « télécommande »; the usage entry is on the question's topic (usage), so it leads.
+  assert.deepEqual(result.matches.map((m) => m.canonical_question), ['Combien de séances par semaine ?', 'La télécommande ne fonctionne plus'], 'entries sharing no word with the question are left out');
+
+  // The same question in English shares no word with the French FAQ: every entry goes, on-topic first.
+  const english = await runKnowledgeTool('get_product_policy', { product_id: 'mask', topic: 'warranty' }, makeKnowledge(), { ...options, query: 'What is the warranty on this mask?' });
+  assert.equal(english.status, 'found');
+  assert.equal(english.matches[0].canonical_question, 'Quelle est la garantie du masque ?');
+  assert.equal(english.matches.length, 3);
+});
+
+test('the FAQ tool tells the model which language the FAQs are written in', () => {
+  const search = (k) => knowledgeToolDefinitions(k).find((d) => d.function.name === 'search_faqs').function.description;
+  assert.match(search(makeKnowledge()), /written in fr: write query in that language/);
+  assert.doesNotMatch(search(null), /written in/);
 });

@@ -1,5 +1,5 @@
 /**
- * The product-resolution test set: French messages as customers write them,
+ * The product-resolution test set: French then English messages as customers write them,
  * against the LIVE Qiriness catalogue (`npm run eval:resolution`).
  *
  * TEST DATA, NOT RUNTIME. Product names appear here only as expectations
@@ -113,5 +113,60 @@ export const RESOLUTION_CASES = [
   // --- descriptive references (no commercial name) ------------------------------------------
   { cat: 'descriptive', message: 'le démaquillant yeux biphasé', expect: { status: 'resolved', products: [/Regard Velours/] } },
   { cat: 'descriptive', message: 'le déodorant fleur d’oranger', expect: { status: 'resolved', products: [/Déodorant/] } },
-  { cat: 'descriptive', message: 'le gua sha en quartz rose', expect: { status: 'resolved', products: [/Gua Sha/] } }
+  { cat: 'descriptive', message: 'le gua sha en quartz rose', expect: { status: 'resolved', products: [/Gua Sha/] } },
+  // --- the same in English (`lang: 'en'`): titles stay French, the words around them do not ---
+  ...[
+    { cat: 'exact', message: 'Can I get some info on E046N?', expect: { status: 'resolved', products: [/Caresse Source d.Eau Riche/] } },
+    { cat: 'exact', message: 'is product R035N available?', expect: { status: 'resolved', products: [/Flash Patch/] } },
+    { cat: 'short', message: 'the Caresse Source d’Eau Riche', expect: { status: 'resolved', products: [/Caresse Source d.Eau Riche/] } },
+    { cat: 'short', message: 'what do you think of the Élixir Temps Sublime?', expect: { status: 'resolved', products: [/Élixir Temps Sublime/] } },
+    { cat: 'short', message: 'is the Lip Beauty good for chapped lips?', expect: { status: 'resolved', products: [/Lip Beauty/] } },
+    { cat: 'short', message: 'the Temps Sublime Light', expect: { status: 'resolved', products: [/Temps Sublime Light/] } },
+    { cat: 'short', message: 'the Regard d’Or patches', expect: { status: 'resolved', products: [/Regard d.Or/] } },
+    { cat: 'type+line', message: 'the Source d’Eau serum', expect: { status: 'resolved', products: [/Élixir Source d.Eau/] } },
+    { cat: 'type+line', message: 'the Temps Sublime night cream', expect: { status: 'resolved', products: [/Crème Nuit Anti-Âge.*Caresse Temps Sublime/] } },
+    { cat: 'type+line', message: 'the Hyal-Aqua mask', expect: { status: 'resolved', products: [/Masque Hydratant & Repulpant - Hyal-Aqua/] } },
+    { cat: 'type+line', message: 'the Éclat Parfait serum', expect: { status: 'resolved', products: [/Élixir Éclat Parfait/] } },
+    { cat: 'type+line', message: 'the Éclat Parfait toner', expect: { status: 'resolved', products: [/Lotion Tonique Anti-tache - Éclat Parfait/] } },
+    { cat: 'type+line', message: 'the Éclat Parfait cream', expect: { status: 'resolved', products: [/Caresse Éclat Parfait/] } },
+    { cat: 'type+line', message: 'the Regard Énergie eye cream', expect: { status: 'resolved', products: [/Caresse Regard Énergie/] } },
+    { cat: 'typo', message: 'the caresse sourse d’eau riche', expect: { status: 'resolved', products: [/Caresse Source d.Eau Riche/] } },
+    { cat: 'typo', message: 'the lip beuaty balm', expect: { status: 'resolved', products: [/Lip Beauty/] } },
+    { cat: 'multiple', message: 'the Lip Beauty and the Velours hand cream', expect: { status: 'resolved', products: [/Lip Beauty/, /Mains Velours/] } },
+    { cat: 'multiple', message: 'what is the difference between the Élixir Source d’Eau and the Voile Source d’Eau?', expect: { status: 'resolved', products: [/Élixir Source d.Eau/, /Voile Source d.Eau/] } },
+    { cat: 'multiple', message: 'compare the Caresse Sensi Zen with the Brume Sensi Zen', expect: { status: 'resolved', products: [/Caresse Sensi Zen/, /Brume Hydratante Protectrice - Sensi Zen/] } },
+    { cat: 'reference', message: 'what is the difference between the two?', refs: { lastSet: [/Élixir Source d.Eau/, /Voile Source d.Eau/] }, expect: { status: 'resolved', products: [/Élixir Source d.Eau/, /Voile Source d.Eau/] } },
+    { cat: 'reference', message: 'do both go together?', refs: { lastSet: [/Lip Beauty/, /Mains Velours/] }, expect: { status: 'resolved', products: [/Lip Beauty/, /Mains Velours/] } },
+    { cat: 'reference', message: 'and the three you recommended, in what order do I use them?', refs: { lastRecommended: [/Mousse Divine/, /Lotion Exquise/, /Caresse Source d.Eau Riche/] }, expect: { status: 'resolved', products: [/Mousse Divine/, /Lotion Exquise/, /Caresse Source d.Eau Riche/] } },
+    { cat: 'reference', message: 'and the other one?', refs: { lastSet: [/Élixir Source d.Eau/, /Voile Source d.Eau/], focus: /Élixir Source d.Eau/ }, expect: { status: 'resolved', products: [/Voile Source d.Eau/] } },
+    { cat: 'reference', message: 'I prefer the first one', refs: { lastSet: [/Mousse Divine/, /Lotion Exquise/, /Caresse Source d.Eau Riche/] }, expect: { status: 'resolved', products: [/Mousse Divine/] } },
+    { cat: 'reference', message: 'and the last one, does it smell nice?', refs: { lastSet: [/Mousse Divine/, /Lotion Exquise/, /Caresse Source d.Eau Riche/] }, expect: { status: 'resolved', products: [/Caresse Source d.Eau Riche/] } },
+    { cat: 'reference', message: 'is this one fragrance-free?', refs: { lastSet: [/Caresse Sensi Zen/] }, expect: { status: 'resolved', products: [/Caresse Sensi Zen/] } },
+    { cat: 'reference', message: 'is this cream good for oily skin?', refs: { lastSet: [/Caresse Source d.Eau Riche/] }, expect: { status: 'resolved', products: [/Caresse Source d.Eau Riche/] } },
+    { cat: 'reference', message: 'what is the difference between the first two?', refs: { lastRecommended: [/Caresse Source d.Eau Riche/], lastSet: [/Caresse Source d.Eau Riche/] }, expect: { status: 'partial', products: [/Caresse Source d.Eau Riche/] } },
+    { cat: 'reference', message: 'this one?', refs: { lastSet: [/Lip Beauty/, /Mains Velours/] }, expect: { status: 'ambiguous', clarification: 'choose_product' } },
+    { cat: 'page', message: 'Is it suitable for dry skin?', page: /Caresse Source d.Eau Riche/, expect: { status: 'resolved', products: [/Caresse Source d.Eau Riche/] } },
+    { cat: 'page', message: 'do I use this product in the morning or the evening?', page: /Élixir Temps Sublime/, expect: { status: 'resolved', products: [/Élixir Temps Sublime/] } },
+    { cat: 'page', message: 'and the Lip Beauty?', page: /Caresse Source d.Eau Riche/, expect: { status: 'resolved', products: [/Lip Beauty/] } },
+    { cat: 'ambiguous', message: 'the Temps Sublime cream', expect: { status: 'ambiguous', clarification: 'choose_product' } },
+    { cat: 'ambiguous', message: 'the Temps Sublime gift set', expect: { status: 'ambiguous' } },
+    { cat: 'ambiguous', message: 'the Source d’Eau cream', expect: { status: 'ambiguous', clarification: 'choose_product' } },
+    { cat: 'ambiguous', message: 'the Temps Sublime serum', expect: { status: 'ambiguous', clarification: 'choose_product' } },
+    { cat: 'follow-up', message: 'the serum', pending: { mention: 'le soin source d eau', among: /Source d.Eau/ }, expect: { status: 'resolved', products: [/Élixir Source d.Eau/] } },
+    { cat: 'follow-up', message: 'the cream', pending: { mention: 'le soin source d eau', among: /Source d.Eau/ }, expect: { status: 'ambiguous', clarification: 'choose_product' } },
+    { cat: 'partial', message: 'the Lip Beauty and the magic unicorn cream', expect: { status: 'partial', products: [/Lip Beauty/] } },
+    { cat: 'range', message: 'the whole Source d’Eau range', expect: { status: 'resolved', range: true } },
+    { cat: 'range', message: 'is the Temps Sublime range suitable for sensitive skin?', expect: { status: 'resolved', range: true } },
+    { cat: 'discovery', message: 'what anti-ageing serums do you have?', expect: { status: 'unresolved' } },
+    { cat: 'discovery', message: 'a cream for dry skin?', expect: { status: 'unresolved' } },
+    { cat: 'discovery', message: 'what do you recommend?', expect: { status: 'unresolved' } },
+    { cat: 'discovery', message: 'I am looking for a moisturising face product', expect: { status: 'unresolved' } },
+    { cat: 'discovery', message: 'do you have hand masks?', expect: { status: 'unresolved' } },
+    { cat: 'discovery', message: 'Hello', expect: { status: 'unresolved' } },
+    { cat: 'discovery', message: 'are your products tested on animals?', expect: { status: 'unresolved' } },
+    { cat: 'discovery', message: 'I do not have time for a long routine', expect: { status: 'unresolved' } },
+    { cat: 'discovery', message: 'I want to treat the source of the problem, not hide it', expect: { status: 'unresolved' } },
+    { cat: 'descriptive', message: 'the orange blossom deodorant', expect: { status: 'resolved', products: [/Déodorant/] }, soft: true },
+    { cat: 'descriptive', message: 'the rose quartz gua sha', expect: { status: 'resolved', products: [/Gua Sha/] } }
+  ].map((c) => ({ ...c, lang: 'en' }))
 ];

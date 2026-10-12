@@ -45,7 +45,7 @@ for (const c of ADVISORY_CASES) {
   let turn = null;
   for (const t of c.turns) {
     const input = typeof t === 'string' ? { message: t } : { message: t.message ?? t.choice ?? '', choice: t.choice ?? null, action: t.action ?? null };
-    turn = createAdvisorTurn({ advisor, state, catalogue, money, ...input });
+    turn = createAdvisorTurn({ advisor, state, catalogue, money, locale: c.lang ?? 'fr', ...input });
     turn.opening();
     state = turn.nextState();
   }
@@ -58,19 +58,24 @@ for (const c of ADVISORY_CASES) {
   if ('question' in e && (a?.next_question?.field ?? null) !== e.question) problems.push(`question ${a?.next_question?.field ?? 'none'} ≠ ${e.question ?? 'none'}`);
   if (e.notQuestion && a?.next_question?.field === e.notQuestion) problems.push(`asked ${e.notQuestion} again`);
   for (const o of e.options ?? []) if (!a?.next_question?.options.some((x) => x.value === o)) problems.push(`option ${o} missing`);
+  // Chips in the conversation's language: a label from that language's table, never the French fallback.
+  const lang = c.lang ?? 'fr';
+  const group = ['primary_concern', 'secondary_concerns'].includes(a?.next_question?.field) ? 'concern' : a?.next_question?.field;
+  for (const o of a?.next_question?.options ?? []) if (raw.labels?.[lang]?.[group]?.[o.value] !== o.label) problems.push(`chip ${o.value} « ${o.label} » is not the ${lang} label`);
   (e.products ?? []).forEach((re, i) => { if (!re.test(nameOf.get(steps[i]?.product_id) ?? '')) problems.push(`step ${i + 1} « ${nameOf.get(steps[i]?.product_id) ?? 'none'} » ≠ ${re}`); });
   for (const re of e.not ?? []) for (const s of steps) if (re.test(nameOf.get(s.product_id))) problems.push(`« ${nameOf.get(s.product_id)} » matches ${re}`);
   for (const slot of e.notSlots ?? []) if (steps.some((s) => s.kind === slot)) problems.push(`recommended a ${slot} already in the routine`);
   for (const [field, value] of Object.entries(e.profile ?? {})) if (JSON.stringify(turn.profile[field]?.value) !== JSON.stringify(value)) problems.push(`profile.${field} ${JSON.stringify(turn.profile[field]?.value)} ≠ ${JSON.stringify(value)}`);
   if (problems.length) failed += 1;
   if (problems.length || verbose) {
-    console.log(`${problems.length ? '✗' : '✓'} ${c.name}`);
+    console.log(`${problems.length ? '✗' : '✓'} [${c.lang ?? 'fr'}] ${c.name}`);
     console.log(`    ${a?.status} ${a?.playbook?.key ?? '-'} ${a?.next_question ? `Q ${a.next_question.field}: ${a.next_question.options.map((o) => o.label).join(' | ')}` : ''}`);
     for (const s of steps) console.log(`    - ${s.slot}: ${nameOf.get(s.product_id)} [${s.reason_codes.join(', ')}]`);
     for (const p of problems) console.log(`    ! ${p}`);
   }
 }
-console.log(`\ncases: ${ADVISORY_CASES.length - failed}/${ADVISORY_CASES.length} pass`);
+const perLanguage = Object.entries(Object.groupBy(ADVISORY_CASES, (c) => c.lang ?? 'fr')).map(([lang, list]) => `${lang} ${list.length}`).join(', ');
+console.log(`\ncases: ${ADVISORY_CASES.length - failed}/${ADVISORY_CASES.length} pass (${perLanguage})`);
 
 // ---------------------------------------------------------------- invariants
 const violations = new Map();

@@ -18,8 +18,9 @@
  *                      « anti », « hydratant »: a mention needs one, or it is
  *                      a description and is left to search unless it is a
  *                      clear single match.
- * The only hand-kept words are French (and a little English) grammar —
- * conjunctions, articles, « les deux », « l'autre » — in conversation-refs.mjs.
+ * The only hand-kept words are French and English grammar — conjunctions,
+ * articles, « les deux » / « the two », « l'autre » — and everyday care words
+ * in both languages (« cream » = « crème »), in conversation-refs.mjs.
  *
  * NEVER A SILENT PICK. Several candidates come back as `ambiguous` with a
  * clarification the resolver builds from the data — the three products, or the
@@ -32,13 +33,15 @@
 import { buildProductIndex, matchProduct, normalise, tokenise } from '../../../agent/src/retrieval/product-matching.mjs';
 import {
   ANCHOR_WORDS,
+  COMMON_WORDS,
   DEFINITE_WORDS,
   GRAMMAR_WORDS,
   INDEFINITE_WORDS,
   STOPWORD_LIKE,
   detectReference,
   isDiscoveryQuestion,
-  splitMentions
+  splitMentions,
+  toCatalogueWords
 } from './conversation-refs.mjs';
 
 export const MAX_OPTIONS = 3;
@@ -219,7 +222,7 @@ export function resolveProducts(message, { index, pageProductId = null, refs = n
   for (const c of chunks) {
     // « des masques pour les mains », « une crème » : discovery. Only a product's
     // full commercial name still resolves inside it.
-    if (c.indefinite) {
+    if (c.indefinite || (discovery && c.bare)) {
       if (c.identity.length > 0) resolveIdentityChunk(c, index, out, { exclusiveOnly: true });
       continue;
     }
@@ -240,7 +243,7 @@ export function resolveProducts(message, { index, pageProductId = null, refs = n
 
   // 5–6. Conversation and page, only when nothing was named explicitly.
   if (!out.products.length && !out.candidates.length && !out.range) {
-    const ref = detectReference(normalise(text), { refs, pageProductId, careWords: new Set([...index.careTypes.keys(), ...index.synonyms.keys()]) });
+    const ref = detectReference(catalogueWords(normalise(text), index), { refs, pageProductId, careWords: new Set([...index.careTypes.keys(), ...index.synonyms.keys()]) });
     if (ref?.ids?.length) {
       for (const id of ref.ids) if (index.byId.has(id)) out.products.push(resolved(index, id, 'strong', ref.reason, ref.cue));
       if (ref.shortfall) out.unresolved.push(ref.cue);
@@ -252,12 +255,18 @@ export function resolveProducts(message, { index, pageProductId = null, refs = n
   return finish(out, index);
 }
 
+/** The customer's words in the catalogue's language: « the Hyal-Aqua mask » → « the hyal aqua masque ». */
+function catalogueWords(normalised, index) {
+  return toCatalogueWords(normalised, (w) => index.vocabulary.has(fold(w)) || index.careTypes.has(fold(w)));
+}
+
 /** Tokens of a chunk, typo-corrected against the catalogue's own words. */
 function analyse(chunkText, index) {
+  chunkText = catalogueWords(chunkText, index);
   const raw = foldedTokens(chunkText);
   const corrections = [];
   const tokens = raw.map((t) => {
-    if (index.vocabulary.has(t) || t.length < 4 || GRAMMAR_WORDS.has(t)) return t;
+    if (index.vocabulary.has(t) || t.length < 4 || GRAMMAR_WORDS.has(t) || COMMON_WORDS.has(t)) return t;
     const fixed = closest(t, index);
     if (fixed) corrections.push(`${t}→${fixed}`);
     return fixed ?? t;
@@ -266,11 +275,13 @@ function analyse(chunkText, index) {
 
   // Every word with its predecessor, stopwords included: anchors and articles live there.
   const words = chunkText.split(' ').filter(Boolean).map((w) => fold(w));
+  // French names the type first (« le sérum Source d'Eau »), English after
+  // (« the Source d'Eau serum »): a care word on either side anchors.
   const anchored = (token) => {
     const at = words.indexOf(token);
     if (at < 0) return true;
-    const before = words.slice(Math.max(0, at - 3), at);
-    return before.some((w) => isCare(w));
+    const near = [...words.slice(Math.max(0, at - 3), at), ...words.slice(at + 1, at + 4)];
+    return near.some((w) => isCare(w));
   };
   let identity = [...new Set(tokens.filter((t) => index.identity.has(t)))];
   // A LONE NAME WORD NEEDS A CARE WORD BEFORE IT. « combien de temps », « sans
@@ -281,10 +292,15 @@ function analyse(chunkText, index) {
 
   const careAt = words.findIndex((w) => isCare(w));
   const indefinite = careAt > 0 && INDEFINITE_WORDS.has(words[careAt - 1]);
+  // English drops the article in discovery: « do you have hand masks? ». A care
+  // word with no article or possessive just before it counts as indefinite there.
+  const bare = careAt >= 0 && !words.slice(Math.max(0, careAt - 3), careAt).some((w) => ANCHOR_WORDS.has(w) || INDEFINITE_WORDS.has(w));
   const definiteCare = careAt > 0 && DEFINITE_WORDS.has(words[careAt - 1]);
   const unknownWord = (w) => w && !index.vocabulary.has(w) && !GRAMMAR_WORDS.has(w) && !ANCHOR_WORDS.has(w) && !isCare(w) && !STOPWORD_LIKE.has(w);
   const corrected = new Map(raw.map((t, i) => [t, tokens[i]]));
   const after = words.slice(careAt + 1, careAt + 3).map((w) => corrected.get(w) ?? w);
+  // English order: « the magic unicorn cream », the article two words before the type.
+  const before = careAt >= 3 && DEFINITE_WORDS.has(words[careAt - 3]) ? words.slice(careAt - 2, careAt).map((w) => corrected.get(w) ?? w) : [];
 
   return {
     text: chunkText,
@@ -292,10 +308,11 @@ function analyse(chunkText, index) {
     corrections,
     identity,
     indefinite,
+    bare,
     // « la crème licorne magique »: a product named after a DEFINITE article in
     // two words the catalogue does not have. One unknown word is usually a verb
     // (« la crème convient »), so it takes two.
-    unknownProduct: definiteCare && identity.length === 0 && after.length === 2 && after.every(unknownWord),
+    unknownProduct: identity.length === 0 && ((definiteCare && after.length === 2 && after.every(unknownWord)) || (before.length === 2 && before.every(unknownWord))),
     care: [...new Set(tokens.filter(isCare))],
     literal: [...new Set(tokens.filter((t) => index.synonyms.has(t)))],
     rangeCue: /\b(gamme|ligne|collection|famille|toute|toutes|range|line)\b/.test(chunkText)

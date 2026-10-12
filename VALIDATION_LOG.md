@@ -42,6 +42,17 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 50. Storefront advisor in English: offline-proven, not yet seen in the widget — 2026-10-12
+
+Offline, 2026-10-12, on the live catalogue: `eval:resolution` 123/123 (en 52/52), `eval:advisory` 45/47 (en 24/24 language-wise), unit pairs for routing and shopping. The model and the widget have not seen it.
+
+1. **Routine builder in English.** **Check (on the store):** « Can we build a full routine together? ». One question with **English** chips (Dehydration / Dark spots / …). Clicking through ends in a routine; the events show `routine_builder_started` then `routine_builder_completed`.
+2. **English on the French store.** **Check:** with the widget in French, type « I have dry skin and fine lines ». The reply is in English, the chips (if any) are English, and `trace.advice.status` is `recommended`.
+3. **One-word answers keep the conversation's language.** **Check:** after an English question, answer a chip question by typing « Tache » or « Dry ». The chips that follow stay in English.
+4. **English FAQ question.** **Check:** « Do I need an account to order? ». The trace shows `search_faqs` called with a French query, and the answer comes from the account FAQ.
+5. **English product names.** **Check:** « the Temps Sublime night cream » → the night cream card; « do you have hand masks? » → a search, not a single product.
+6. **Voile Source d'Eau left the moisturiser collections.** **Check (Qiriness):** is that deliberate? If not, put it back in « Crèmes hydratantes » (or another moisturiser collection: `cremes-de-jour`, `cremes-hydratantes`, `creme-de-nuit`, `soins-hydratants`). `npm run eval:advisory` then passes 47/47. If yes, update the two cases expecting it for combination skin.
+
 ## 49. Social posts: insights backfill and manual tags — unit-tested, not yet synced — 2026-10-08
 
 1. **Apply migration 81.** **Done 2026-10-08:** `insights_at` exists and is null on all 60 posts, and both tag tables exist. A live round-trip passed: a duplicate name in another case was refused, a re-link was idempotent, and deleting a tag cascaded.

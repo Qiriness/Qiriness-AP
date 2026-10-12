@@ -3,10 +3,11 @@
  * « le premier », « ça » — and the conversation memory those words resolve
  * against.
  *
- * LANGUAGE, NOT BUSINESS. Everything hand-written here is French (and a little
- * English) grammar: conjunctions that separate products, deictic words, and the
- * shapes of a discovery question. No product, range or type is named; those
- * come from the catalogue (product-resolver.mjs).
+ * LANGUAGE, NOT BUSINESS. Everything hand-written here is French and English
+ * grammar (about 99 % of customers): conjunctions that separate products,
+ * deictic words, the shapes of a discovery question, and everyday words for
+ * care types in both languages (`toCatalogueWords`). No product or range is
+ * named; those come from the catalogue (product-resolver.mjs).
  *
  * THE MEMORY IS THE MESSAGE LOG. Each assistant row stores `refs` (what it
  * recommended as cards, what it mentioned) and the `resolution` of the question
@@ -23,12 +24,14 @@
 /** Grammar that must never be typo-corrected into a product word (« trois » is not « trio »). */
 export const GRAMMAR_WORDS = new Set([
   'deux', 'troi', 'trois', 'quatre', 'premier', 'premiere', 'second', 'seconde', 'deuxieme', 'troisieme', 'dernier', 'derniere',
-  'autre', 'autres', 'celui', 'celle', 'ceux', 'celle', 'cela', 'matin', 'soir', 'both', 'other', 'first', 'last', 'third'
+  'autre', 'autres', 'celui', 'celle', 'ceux', 'celle', 'cela', 'matin', 'soir', 'both', 'other', 'first', 'last', 'third',
+  'two', 'three', 'four', 'second', 'morning', 'evening', 'one', 'ones'
 ]);
 
 /** Words that make the next word a named thing: articles, possessives, demonstratives. */
 export const ANCHOR_WORDS = new Set([
-  'le', 'la', 'l', 'les', 'du', 'au', 'aux', 'mon', 'ma', 'me', 'votre', 'vos', 'notre', 'ce', 'cet', 'cette', 'the', 'my', 'your'
+  'le', 'la', 'l', 'les', 'du', 'au', 'aux', 'mon', 'ma', 'me', 'votre', 'vos', 'notre', 'ce', 'cet', 'cette',
+  'the', 'my', 'your', 'our', 'this', 'that', 'these', 'those'
 ]);
 
 /** Definite articles only: « la crème licorne » names a product; « cette crème » points at one. */
@@ -37,7 +40,18 @@ export const DEFINITE_WORDS = new Set(['le', 'la', 'l', 'les', 'the']);
 /** Short function words that are never part of a product name. */
 export const STOPWORD_LIKE = new Set([
   'de', 'des', 'du', 'et', 'ou', 'a', 'au', 'aux', 'en', 'pour', 'par', 'avec', 'sans', 'sur', 'dans', 'qui', 'que', 'est', 'il', 'elle',
-  'ne', 'pas', 'plus', 'tres', 'bien', 'of', 'for', 'and', 'with', 'is', 'it'
+  'ne', 'pas', 'plus', 'tres', 'bien', 'of', 'for', 'and', 'with', 'is', 'it', 'to', 'in', 'on', 'from', 'are', 'does', 'do', 'very', 'not'
+]);
+
+/**
+ * Everyday words that are never a misspelt product word, so never typo-corrected:
+ * « your » is not « jour », « vous » is not « doux ».
+ */
+export const COMMON_WORDS = new Set([
+  ...STOPWORD_LIKE, ...ANCHOR_WORDS,
+  'vous', 'avez', 'nous', 'leur', 'leurs', 'elles', 'mais', 'donc', 'alors', 'aussi', 'comme', 'quand', 'faire', 'peux', 'peut', 'veux', 'sont', 'etre', 'avoir', 'cette',
+  'your', 'yours', 'what', 'have', 'will', 'would', 'could', 'should', 'about', 'there', 'their', 'them', 'they', 'when', 'where', 'which', 'with', 'this', 'that',
+  'than', 'then', 'into', 'just', 'some', 'many', 'much', 'more', 'most', 'also', 'only', 'other', 'good', 'need', 'want', 'like', 'make', 'used', 'using'
 ]);
 
 /** Indefinite articles: « des masques », « une crème » is discovery, not a reference. */
@@ -55,13 +69,13 @@ export function splitMentions(text, normaliseImpl = defaultNormalise) {
 
 /** « quels sérums avez-vous », « une crème pour peau sèche », « que me conseillez-vous ». */
 export function isDiscoveryQuestion(normalised) {
-  return /\b(quel|quels|quelle|quelles|avez vous|auriez vous|vous avez|conseillez|recommandez|proposez|cherche (un|une|des)|un produit|une creme|un serum|un soin|une routine|pour (une|les|ma|mon) peau|pour peau|which|do you have|recommend|something for|looking for (a|an|some))\b/.test(
+  return /\b(quel|quels|quelle|quelles|avez vous|auriez vous|vous avez|conseillez|recommandez|proposez|cherche (un|une|des)|un produit|une creme|un serum|un soin|une routine|pour (une|les|ma|mon) peau|pour peau|vos produits|which|what|do you have|have you got|recommend|suggest|something for|looking for (a|an|some)|a product|a cream|a serum|an? (routine|treatment)|for (dry|oily|combination|sensitive|my) skin|your products)\b/.test(
     ` ${normalised} `
   );
 }
 
-const PLURAL = /\b(?:tous les |toutes les |les )(deux|2|trois|3|quatre|4)\b|\b(both)\b|\ball (three)\b/;
-const COUNTS = { deux: 2, 2: 2, both: 2, trois: 3, 3: 3, three: 3, quatre: 4, 4: 4 };
+const PLURAL = /\b(?:tous les |toutes les |les |the |the first |all )(deux|2|trois|3|quatre|4|two|three|four)\b|\b(both)\b|\ball (three)\b/;
+const COUNTS = { deux: 2, 2: 2, two: 2, both: 2, trois: 3, 3: 3, three: 3, quatre: 4, 4: 4, four: 4 };
 const RECOMMENDED_CUE = /\b(conseill\w*|recommand\w*|propos\w*|suggere\w*|suggest\w*)\b/;
 const OTHER = /\b(l autre|the other( one)?)\b/;
 const ORDINALS = [
@@ -70,7 +84,7 @@ const ORDINALS = [
   [/\b(le |la )?(troisieme|third)\b/, 2],
   [/\b(le |la )?(dernier|derniere|last)\b/, -1]
 ];
-const THIS = /\b(celui ci|celle ci|celui la|celle la|ce produit|ce soin|cet article|ca|cela|this one|this product)\b/;
+const THIS = /\b(celui ci|celle ci|celui la|celle la|ce produit|ce soin|cet article|ca|cela|this one|that one|this product|this item|it)\b/;
 
 /**
  * @param {string} normalised the customer message, normalised
@@ -119,13 +133,64 @@ export function detectReference(normalised, { refs = null, pageProductId = null,
   return null;
 }
 
-/** « cette crème », « ce sérum »: a demonstrative before one of the catalogue's own care words. */
+/** « cette crème », « this serum »: a demonstrative before one of the catalogue's own care words. */
 function matchDemonstrativeCare(text, careWords) {
-  for (const match of text.matchAll(/\b(ce|cet|cette|ces) (\w+)\b/g)) {
+  for (const match of text.matchAll(/\b(ce|cet|cette|ces|this|that|these|those) (\w+)\b/g)) {
     const word = match[2].length > 3 && /[sx]$/.test(match[2]) ? match[2].slice(0, -1) : match[2];
     if (careWords.has(word)) return match;
   }
   return null;
+}
+
+/**
+ * Everyday words for the same thing, in French and English. A customer's word
+ * becomes the one the CATALOGUE uses when the catalogue lacks it: « the
+ * Hyal-Aqua mask » reads « masque » on a French catalogue, and « le masque »
+ * would read « mask » on an English one. Language, not brand: no product is named.
+ */
+const EQUIVALENTS = [
+  ['creme', 'cream', 'creams', 'moisturiser', 'moisturizer'],
+  ['masque', 'masques', 'mask', 'masks'],
+  ['lotion', 'toner'],
+  ['coffret', 'gift set', 'gift box', 'box set'],
+  ['huile', 'oil'],
+  ['lait', 'milk'],
+  ['baume', 'balm'],
+  ['gommage', 'scrub', 'exfoliator'],
+  ['nettoyant', 'cleanser'],
+  ['demaquillant', 'make up remover', 'makeup remover'],
+  ['brume', 'mist'],
+  ['eau', 'water'],
+  ['mousse', 'foam'],
+  ['patchs', 'patches'],
+  ['nuit', 'night'],
+  ['jour', 'day'],
+  ['yeux', 'eye', 'eyes'],
+  ['levres', 'lips'],
+  ['mains', 'hand', 'hands'],
+  ['corps', 'body'],
+  ['visage', 'face'],
+  ['gamme', 'range'],
+  ['fleur d oranger', 'orange blossom'],
+  ['quartz rose', 'rose quartz']
+];
+const EQUIVALENT_PHRASES = EQUIVALENTS.flatMap((group) => group.map((phrase) => [phrase, group])).sort((a, b) => b[0].length - a[0].length);
+
+/**
+ * Normalised text → the same text in the catalogue's words. `known(word)` says
+ * whether a word is in the catalogue's titles.
+ * @param {string} normalised
+ * @param {(word: string) => boolean} known
+ */
+export function toCatalogueWords(normalised, known) {
+  let text = ` ${normalised} `;
+  const has = (phrase) => phrase.split(' ').every((w) => known(w));
+  for (const [phrase, group] of EQUIVALENT_PHRASES) {
+    if (!text.includes(` ${phrase} `) || has(phrase)) continue;
+    const target = group.find((candidate) => candidate !== phrase && has(candidate));
+    if (target) text = text.split(` ${phrase} `).join(` ${target} `);
+  }
+  return text.trim();
 }
 
 /**

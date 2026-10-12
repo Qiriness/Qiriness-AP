@@ -2,6 +2,17 @@
 
 ## Storefront advisor
 
+### French and English are the minimum, for every layer (2026-10-12)
+
+French and English together are about 99 % of customers, and the owner made both the bar for anything built in the chatbot. A feature counts as done only once both work. Most of the chatbot decides before the model (lexicon, routing, resolution, chips), so a French-only rule fails silently in English: no error, just a vaguer reply. Measured on 2026-10-12, English resolved 34 of 52 product mentions and extracted no skin type from « very dry and dehydrated skin ».
+
+- **Language words live in tables, one per language, with the same keys.** `advisory/lexicon-fr.mjs` and `lexicon-en.mjs` share one engine (`lexicon.mjs`). A test fails when one table has a key the other lacks. A new language is a new table, not new code.
+- **Every table runs on every message.** Customers mix languages (« j'ai des dark spots »), and a one-word answer carries no language.
+- **Deterministic text follows the customer, not the store.** Chips use the message's language, then the conversation's, then the page's. Labels exist for every value in both languages, and a test checks it.
+- **Words map to the catalogue's language, never the reverse.** Care words (`toCatalogueWords`) and ingredients (`ingredients.mjs`) are groups of equivalents. The customer's word becomes the form the catalogue uses, so an English-titled shop needs no change. Brand and product names are never translated.
+- **Lexical matching against French-only content is told so.** FAQ entries are French, so an English question cannot match them word for word. The model is told the FAQ language (from the data) and searches in it. A product FAQ with no shared word returns all its entries.
+- **Every test set covers both languages.** The advice, resolution, policy-routing and shopping-opening cases each have an English version, and a feature without one is not finished.
+
 ### Neutral replies retain the conversation language (2026-10-06)
 
 The owner reported an English cart/shipping conversation switching to French

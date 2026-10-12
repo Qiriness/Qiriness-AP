@@ -16,6 +16,13 @@ export function shoppingToolDefinitions() {
 }
 
 /** A lazy reader shared by opening retrieval and tools within ONE turn. */
+/** Words that follow « code » in a sentence and are not a code: « mon code ne marche pas », « my code isn't working ». */
+const CODE_FILLER = new Set([
+  'PROMO', 'NE', 'DE', 'EST', 'REDUCTION', 'MARCHE', 'FONCTIONNE', 'PAS', 'QUE', 'QUI', 'POUR', 'SUR', 'DANS', 'ET',
+  'IS', 'ISN', 'ISNT', 'DOES', 'DOESN', 'DOESNT', 'DID', 'DIDN', 'DIDNT', 'WON', 'WONT', 'NOT', 'WORK', 'WORKS', 'WORKING', 'THAT', 'THIS',
+  'FOR', 'ON', 'IN', 'AT', 'IT', 'YOU', 'AND', 'OR', 'TO', 'WAS', 'WASN', 'CAN', 'CANNOT', 'CANT', 'WILL', 'STILL', 'ALSO'
+]);
+
 export function createShoppingTurn({ readShopping, readPublicPromotions = null, shopDomain, cart, context = {}, message = '', history = [], resolvedProducts = [], baseCurrency = null }) {
   let source;
   // THE NAME OF A PUBLIC AUTOMATIC OFFER IS NOT A CODE. « TEST02 » looks like
@@ -31,7 +38,7 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
   const pageIds = new Set(resolvedProducts.filter((p) => p.handle === context.productHandle).map((p) => p.id));
   const returnedCodes = new Set();
   const requestedCodes = () => {
-    const explicit = [...message.matchAll(/\bcode\s+(?:promo\s+)?[«"']?([a-z0-9_-]{2,80})/gi)].map((m) => m[1].toUpperCase()).filter((c) => !['PROMO', 'NE', 'DE', 'EST', 'REDUCTION'].includes(c));
+    const explicit = [...message.matchAll(/\bcode\s+(?:promo\s+)?[«"']?([a-z0-9_-]{2,80})/gi)].map((m) => m[1].toUpperCase()).filter((c) => !CODE_FILLER.has(c));
     return [...new Set([...explicit, ...message.match(/\b(?=[A-Z0-9_-]*\d)[A-Z][A-Z0-9_-]{2,79}\b/g) ?? []])].slice(0, 3);
   };
   async function execute(name, args = {}) {
@@ -159,16 +166,16 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
         if (offerIds.length && cartContract.normalizeSnapshot(cart)) await add('evaluate_promotions_for_cart', { promotion_ids: offerIds });
         return { route: 'shopping_context', topics: ['free_shipping'], results };
       }
-      if (/panier|cart|basket|déjà|deja|appliqu|reduction|réduction|discount/i.test(message) || context.pageType === 'cart' && cartContract.needsCartSnapshot(message, null, context)) await add('get_cart_context');
-      if (/stock|disponib|availab/i.test(message) && !/\b(offres?|promotions?|offers?|codes?)\s+(?:sont\s+)?(?:disponib|availab)/i.test(message)) {
+      if (/panier|cart|basket|déjà|deja|already|appliqu|applied|reduction|réduction|discount|voucher|coupon/i.test(message) || context.pageType === 'cart' && cartContract.needsCartSnapshot(message, null, context)) await add('get_cart_context');
+      if (/stock|disponib|availab/i.test(message) && !/\b(offres?|promotions?|promos?|offers?|deals?|codes?)\s+(?:sont\s+|are\s+)?(?:disponib|availab)/i.test(message)) {
         const q = message.match(/(?:prends?|prendre|acheter|commande|veux|want|buy)\s+(\d{1,3}|un|une|deux|trois|quatre|cinq|two|three)\b/i)?.[1]?.toLowerCase();
         const quantity = q ? Number(q) || ({ un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, two: 2, three: 3 })[q] : undefined;
         await add('get_stock_context', /panier|cart|basket|tout|everything/i.test(message) || !ids.size ? {} : { product_ids: [...ids], ...(quantity ? { quantity } : {}) });
       }
-      if (/promo|offre|offer|code|cumul|stack|remise|discount|réduction|reduction/i.test(message)) {
+      if (/promo|offre|offer|deal|voucher|coupon|soldes|code|cumul|combin|stack|remise|discount|réduction|reduction/i.test(message)) {
         const codes = requestedCodes();
         if (codes.length) for (const code of codes) await add('evaluate_promotions_for_cart', { code });
-        else if (/panier|cart|basket|cumul|stack|manque|fonctionn|appliqu|réduction|reduction|remise|discount/i.test(message)) await add('evaluate_promotions_for_cart');
+        else if (/panier|cart|basket|cumul|combin|stack|manque|missing|fonctionn|marche|work|appliqu|applied|réduction|reduction|remise|discount|voucher|coupon/i.test(message)) await add('evaluate_promotions_for_cart');
         else {
           await add('get_active_promotions');
           // WITH A CART, AN OFFERS QUESTION IS ALSO AN ELIGIBILITY QUESTION.

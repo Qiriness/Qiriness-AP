@@ -71,9 +71,12 @@ for (const c of RESOLUTION_CASES) {
 }
 
 const cats = [...new Set(RESOLUTION_CASES.map((c) => c.cat))];
+const score = (rows) => `${rows.filter((x) => x.ok).length}/${rows.length}`;
 for (const cat of cats) {
   const rows = results.filter((x) => x.c.cat === cat);
-  console.log(`${cat.padEnd(12)} ${rows.filter((x) => x.ok).length}/${rows.length}`);
+  const fr = rows.filter((x) => (x.c.lang ?? 'fr') === 'fr');
+  const en = rows.filter((x) => x.c.lang === 'en');
+  console.log(`${cat.padEnd(12)} fr ${score(fr).padEnd(6)} en ${en.length ? score(en) : '-'}`);
 }
 const hard = results.filter((x) => !x.c.soft);
 const silent = results.filter((x) => x.silentPick);
@@ -83,7 +86,7 @@ console.log(`time per message: median ${sorted[Math.floor(sorted.length / 2)].to
 
 for (const x of results) {
   if (x.ok && !verbose) continue;
-  console.log(`${x.ok ? '✓' : x.c.soft ? '~' : '✗'} [${x.c.cat}] ${x.c.message}`);
+  console.log(`${x.ok ? '✓' : x.c.soft ? '~' : '✗'} [${x.c.lang ?? 'fr'} ${x.c.cat}] ${x.c.message}`);
   if (!x.ok) console.log(`    ${x.problems.join(' · ')}`);
   if (!x.ok || verbose) {
     console.log(`    → ${x.r.status}; ${x.r.products.map((p) => `${p.name} (${p.match_strength}: ${p.match_reason})`).join(' | ') || '—'}`);

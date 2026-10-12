@@ -5,7 +5,8 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { createAdvisor, slotList } from './recommend.mjs';
-import { extractProfile } from './lexicon-fr.mjs';
+import { LANGUAGES, detectLanguage, extractProfile } from './lexicon.mjs';
+import { ingredientKey, ingredientWords } from './ingredients.mjs';
 import { allowedValues, mergeProfile } from './profile.mjs';
 import { checkCatalogue, compileConfig, validateConfig } from './config.mjs';
 import { selectPlaybook } from './select-playbook.mjs';
@@ -253,6 +254,63 @@ test('the lexicon reads the brief\'s own example, and « je ne sais pas » answe
   const men = extractProfile('Une crème pour mon mari, il a la peau grasse').updates;
   assert.ok(men.some((u) => u.field === 'sex_target' && u.value === 'men'));
   assert.ok(men.some((u) => u.field === 'skin_type' && u.value === 'oily'));
+});
+
+// French and English hold about 99 % of customers: every rule exists in both.
+test('the French and English lexicons cover the same keys', () => {
+  const [fr, en] = LANGUAGES;
+  for (const group of ['areas', 'concerns', 'skinTypes', 'sensitivity', 'routineSteps', 'desired', 'scope']) {
+    assert.deepEqual(Object.keys(en[group]).sort(), Object.keys(fr[group]).sort(), `${group} differs between fr and en`);
+  }
+  for (const field of ['men', 'women', 'routineNone', 'routineClause', 'wants', 'routineBuilder', 'dontKnow']) assert.ok(fr[field] && en[field], field);
+  for (const field of ['exclusions', 'age', 'ageWords', 'markers']) assert.ok(fr[field].length && en[field].length, field);
+});
+
+test('the lexicon reads the same profile from the same sentence in French and English', () => {
+  const pairs = [
+    ["J'ai la peau sèche et je commence à avoir des rides", "I have dry skin and I'm starting to get wrinkles"],
+    ["J'ai des rides autour des yeux", 'I have wrinkles around my eyes'],
+    ['Une crème pour mon mari, il a la peau grasse', 'A cream for my husband, he has oily skin'],
+    ['Peau très sèche et déshydratée, une routine essentielle', 'Very dry and dehydrated skin, an essential routine'],
+    ["J'ai des taches, j'utilise déjà un nettoyant et une crème", 'I have dark spots, I already use a cleanser and a cream'],
+    ['Ma peau est sensible, sans parfum', 'My skin is sensitive, fragrance-free'],
+    ["J'ai 52 ans et la peau qui se relâche", "I'm 52 and my skin is sagging"],
+    ['Peau mixte avec des points noirs', 'Combination skin with blackheads'],
+    ['Je cherche un sérum pour les rougeurs', "I'm looking for a serum for redness"]
+  ];
+  const read = (m) => extractProfile(m).updates.map((u) => [u.field, u.value]).sort((a, b) => a.join().localeCompare(b.join()));
+  for (const [fr, en] of pairs) assert.deepEqual(read(en), read(fr), `${en} ≠ ${fr}`);
+  assert.deepEqual(extractProfile("I don't know", { lastAsked: 'skin_type' }).updates.map((u) => [u.field, u.value]), [['skin_type', 'unknown']]);
+  for (const m of ['Build my routine', 'Can we build a full routine together?', 'Help me create a skincare routine', 'On peut construire ensemble une routine ?']) assert.ok(extractProfile(m).routineBuilder, m);
+  for (const m of ['Can we do a full routine?', 'What is in your routine kit?', 'Quelle routine pour moi ?']) assert.ok(!extractProfile(m).routineBuilder, m);
+});
+
+test('the language of a message, when it says', () => {
+  assert.equal(detectLanguage("J'ai la peau sèche"), 'fr');
+  assert.equal(detectLanguage('I have dry skin'), 'en');
+  assert.equal(detectLanguage('what offer are availabe'), 'en');
+  assert.equal(detectLanguage('On peut utiliser le routine builder mode'), 'fr');
+  assert.equal(detectLanguage('Tache'), 'fr');
+  assert.equal(detectLanguage('Dry'), 'en');
+  assert.equal(detectLanguage('Temps Sublime'), null);
+  assert.equal(detectLanguage('ok'), null);
+});
+
+test('an exclusion is one ingredient in every language, and a stored legacy word still excludes', () => {
+  assert.deepEqual(ingredientWords(ingredientKey('parfum')), ingredientWords('fragrance'));
+  assert.ok(ingredientWords('fragrance').includes('parfum'));
+  assert.ok(ingredientWords('parfum').includes('fragrance'));
+  assert.deepEqual(ingredientWords('acide mandelique'), ['acide mandelique']);
+  assert.equal(ingredientKey('Hyaluronic acid'), 'hyaluronic_acid');
+});
+
+test('the Qiriness labels exist in French and English for every value', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(here, '../../../data/advisor/qiriness.json'), 'utf8'));
+  for (const group of Object.keys(raw.labels.fr)) {
+    assert.deepEqual(Object.keys(raw.labels.en[group] ?? {}).sort(), Object.keys(raw.labels.fr[group]).sort(), `labels.${group}`);
+  }
+  const concerns = Object.keys(raw.concerns).filter((k) => !k.startsWith('_'));
+  for (const lang of ['fr', 'en']) for (const k of concerns) assert.ok(raw.labels[lang].concern[k], `labels.${lang}.concern.${k}`);
 });
 
 test('profile merge: an explicit answer beats an inference, unknown is an answer, invalid values are dropped', () => {

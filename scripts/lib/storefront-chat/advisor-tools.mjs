@@ -11,7 +11,7 @@
  * only adapts it to a live chat: chips, cards, the prompt block, the log.
  */
 
-import { extractProfile } from '../advisory/lexicon-fr.mjs';
+import { extractProfile } from '../advisory/lexicon.mjs';
 import { FIELDS, mergeProfile, profileSummary } from '../advisory/profile.mjs';
 import { turnEvents } from '../advisory/events.mjs';
 import { emptyAdvisorState } from './advisor-state.mjs';

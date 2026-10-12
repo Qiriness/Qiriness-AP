@@ -20,14 +20,18 @@ const definition = (name, description, properties) => ({ type: 'function', funct
   name, description, strict: true,
   parameters: { type: 'object', properties, required: Object.keys(properties), additionalProperties: false }
 } });
-export function knowledgeToolDefinitions() {
+export function knowledgeToolDefinitions(knowledge = null) {
+  // Matching is lexical: an English question finds nothing in French FAQs. The
+  // FAQs' own languages, from the data, tell the model what to search in.
+  const faqLanguages = [...new Set((knowledge?.faqs ?? []).map((r) => String(r.locale || '').slice(0, 2)).filter(Boolean))];
+  const queryLanguage = faqLanguages.length ? ` FAQ entries are written in ${faqLanguages.join(', ')}: write query in ${faqLanguages.length > 1 ? 'one of those languages' : 'that language'}, translating the customer's words when they wrote in another.` : '';
   return [
     definition('get_policy', 'Authoritative general shop policy and referenced parameter facts. Preserve all conditions and possibilities. A delivery time does not establish that a country is served; a threshold does not establish a current offer. Missing facts cannot be inferred.', {
       topic: { type: 'string', enum: POLICY_TOPICS },
       country: { ...nullableString, description: 'ISO country code if the customer supplied a destination, otherwise null. Never derive it from language.' },
       context: { type: ['object', 'null'], properties: { query: nullableString }, required: ['query'], additionalProperties: false }
     }),
-    definition('search_faqs', 'Find a GENERAL approved FAQ by exact question, aliases, keywords, topic and fuzzy lexical matching. Product-specific guidance is excluded. A policy_reference requires get_policy; the FAQ is intent, not a copy of changing facts.', {
+    definition('search_faqs', 'Find a GENERAL approved FAQ by exact question, aliases, keywords, topic and fuzzy lexical matching. Product-specific guidance is excluded. A policy_reference requires get_policy; the FAQ is intent, not a copy of changing facts.' + queryLanguage, {
       query: { type: 'string' }, topic: nullableString, limit: { type: ['integer', 'null'], description: '1 to 5, default 3. Ambiguous matches contain questions only.' }
     }),
     definition('get_product_policy', 'SECOND PATH ONLY: approved guidance linked to a product already resolved in this turn. Read its catalogue facts and relevant Shopify FAQs first. Use only when those facts are insufficient or the question needs controlled precautions/restrictions. Never browse other products.', {
@@ -159,17 +163,22 @@ export function explicitProductEvidence(product, query) {
  * within a fixed size, and the model answers from the relevant ones.
  */
 const DIGEST_MAX_CHARS = 6000;
-function productFaqDigest(records, query) {
+function productFaqDigest(records, query, topic = null) {
   const terms = keywords(query);
   const plain = (s) => keywords(s).join(' ');
+  const onTopic = (r) => Boolean(topic) && productTopic(`${r.canonical_question} ${r.aliases.join(' ')}`) === topic;
   const scored = records.map((r) => {
     const text = ` ${plain(`${r.canonical_question} ${r.answer}`)} `;
-    return { r, hits: terms.filter((t) => text.includes(` ${t} `) || text.includes(` ${t}`)).length };
-  }).sort((a, b) => b.hits - a.hits);
+    return { r, hits: terms.filter((t) => text.includes(` ${t} `) || text.includes(` ${t}`)).length, topic: onTopic(r) ? 1 : 0 };
+  }).sort((a, b) => b.hits - a.hits || b.topic - a.topic);
+  // No entry shares a word: the question is in another language than the FAQ
+  // (« warranty » / « garantie »). Every entry then goes, on-topic first, for
+  // the model to read; otherwise the ones sharing words.
+  const shared = scored.some((s) => s.hits);
   const entries = [];
   let size = 0;
   for (const { r, hits } of scored) {
-    if (terms.length && !hits && entries.length) break;
+    if (shared && !hits && entries.length) break;
     const length = r.canonical_question.length + String(r.answer).length;
     if (size + length > DIGEST_MAX_CHARS && entries.length) break;
     size += length;
@@ -209,7 +218,7 @@ export async function runKnowledgeTool(name, args, knowledge, { resolvedIds = ne
     const exact = matchFaqs(pool, { query: asked, locale, limit: 3 });
     const matched = exact.status !== 'not_found' ? exact : matchFaqs(pool, { query: reducedQuery, locale, limit: 3 });
     if (matched.status !== 'not_found' || !records.length) return { product_id: id, ...matched };
-    return { product_id: id, ...productFaqDigest(records, reducedQuery) };
+    return { product_id: id, ...productFaqDigest(records, reducedQuery, topic) };
   } catch {
     // Do not put transport errors, credentials or unrestricted rows into the model.
     return { status: 'unavailable', reason: 'source_read_failed' };

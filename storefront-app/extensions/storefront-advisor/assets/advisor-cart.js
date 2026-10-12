@@ -18,12 +18,12 @@
     return plain || null;
   }
   function needsShoppingContext(message, action, context) {
-    return action === 'offers' || /\b(panier|cart|basket|stock|disponib|availab|promo|offre|offer|discount|remise|reduction|réduction|code|cumul|stack|checkout|quantit)/i.test(message || '') || /\d+\s*(?:%|percent|pour\s?cent)|\b\d+\s*off\b|\bpercent off\b/i.test(message || '') || Boolean(context && context.pageType === 'cart' && /\b(they|them|these|adapt|suit|convien|ces|ils|elles)|(?:can you see|voyez.vous)/i.test(message || ''));
+    return action === 'offers' || /\b(panier|cart|basket|stock|disponib|availab|promo|offre|offer|deal|voucher|coupon|soldes|discount|remise|reduction|réduction|code|cumul|combin|stack|checkout|quantit)/i.test(message || '') || /\d+\s*(?:%|percent|pour\s?cent)|\b\d+\s*off\b|\bpercent off\b/i.test(message || '') || Boolean(context && context.pageType === 'cart' && /\b(they|them|these|adapt|suit|convien|ces|ils|elles)|(?:can you see|voyez.vous)/i.test(message || ''));
   }
   function needsCartSnapshot(message, action, context) {
     if (!needsShoppingContext(message, action, context)) return false;
     if (/panier|cart|basket|tout|everything/i.test(message || '')) return true;
-    if ((action === 'offers' || /\b(offres?|promotions?|offers?)\s+(?:sont\s+)?(?:disponib|availab)|offres?.*(?:moment|actuell)|current offers/i.test(message || '')) && !/code|cumul|stack|manque|appliqu|fonctionn|eligib|éligib/i.test(message || '')) return false;
+    if ((action === 'offers' || /\b(offres?|promotions?|promos?|offers?|deals?)\s+(?:sont\s+|are\s+)?(?:disponib|availab)|(offres?|promos?|offers?|deals?).*(?:moment|actuell|right now|currently|today)|current (offers|deals|promotions)/i.test(message || '')) && !/code|cumul|stack|manque|appliqu|fonctionn|eligib|éligib/i.test(message || '')) return false;
     if (/stock|disponib|availab/i.test(message || '') && context && context.productHandle && !/promo|offre|code|discount/i.test(message || '')) return false;
     return true;
   }

@@ -37,7 +37,7 @@ import { buildStorefrontSystemPrompt } from './system-prompt.mjs';
 import { knowledgeToolDefinitions, KNOWLEDGE_TOOL_NAMES, runKnowledgeTool, getPolicy } from './knowledge-tools.mjs';
 import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
-import { languageContext, validReplyLanguage } from './conversation-language.mjs';
+import { displayLanguage, languageContext, validReplyLanguage } from './conversation-language.mjs';
 import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
 
 export const DEFAULT_STOREFRONT_MODEL = 'gpt-6-luna';
@@ -124,7 +124,7 @@ export function createLlmAgent({
 }) {
   if (!client?.completeWithTools) throw new Error('createLlmAgent needs an OpenAI client.');
   if (advisor && !catalogue) advisor = null;
-  const definitions = [...(catalogue ? toolDefinitions(catalogue) : []), ...(advisor ? [adviseToolDefinition(advisor)] : []), ...(knowledge ? knowledgeToolDefinitions() : []), ...(readShopping ? shoppingToolDefinitions() : [])];
+  const definitions = [...(catalogue ? toolDefinitions(catalogue) : []), ...(advisor ? [adviseToolDefinition(advisor)] : []), ...(knowledge ? knowledgeToolDefinitions(knowledge) : []), ...(readShopping ? shoppingToolDefinitions() : [])];
   const tools = definitions.length ? definitions : null;
   const linkBase = productLinkBase(productBaseUrl);
   const resolutionIndex = catalogue ? buildResolutionIndex(catalogue) : null;
@@ -170,6 +170,7 @@ export function createLlmAgent({
       for (const c of resolution?.candidates ?? []) for (const o of c.options) offered.add(o.handle);
       for (const id of resolution?.range?.ids ?? []) if (byId(id)) offered.add(byId(id).handle);
 
+      const language = languageContext(message, history, choice);
       const retrievalStarted = Date.now();
       // The consultation: profile from the message (and chip), advice before the model.
       const advisorTurn = advisor
@@ -179,7 +180,8 @@ export function createLlmAgent({
             message,
             choice,
             action,
-            locale,
+            // Chips in the customer's language, not the store's: an English speaker on the French store gets English chips.
+            locale: displayLanguage(language, locale),
             catalogue,
             money,
             productQuestion: !profileChoice && (resolution?.products.length ?? 0) > 0,
@@ -194,7 +196,6 @@ export function createLlmAgent({
       const shopping = readShopping ? createShoppingTurn({ readShopping: (domain) => withDeadline(readShopping(domain), 2500), readPublicPromotions: readPublicPromotions ? (domain) => withDeadline(readPublicPromotions(domain), 2500) : null, shopDomain, cart, context, message, history, resolvedProducts: [...resolvedIds].map(byId).filter(Boolean), baseCurrency: shopDomain === catalogueShopDomain ? currency : null }) : null;
       const shoppingOpening = shopping ? await shopping.opening() : null;
       const retrievalMs = Date.now() - retrievalStarted;
-      const language = languageContext(message, history, choice);
       const responseSchema = language.neutral_followup && language.previous_language
         ? { ...REPLY_SCHEMA, properties: { ...REPLY_SCHEMA.properties, reply_language: { type: 'string', enum: [language.previous_language] } } }
         : REPLY_SCHEMA;

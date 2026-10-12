@@ -18,6 +18,7 @@ import { EXCLUSION, FIT } from './reason-codes.mjs';
 import { hasPhrase, norm } from './text.mjs';
 import { inFamily, inSlot } from './config.mjs';
 import { valueOf } from './profile.mjs';
+import { ingredientWords } from './ingredients.mjs';
 
 export const WEIGHTS = {
   primaryCollection: 1,
@@ -47,7 +48,7 @@ export function exclusionOf(sig, { area, men, exclusions = [], wantsBundle = fal
   if (!sig.areas.has(area)) return EXCLUSION.WRONG_AREA;
   if (men ? !sig.men : sig.men) return EXCLUSION.WRONG_TARGET;
   if (sig.bundle && !wantsBundle) return EXCLUSION.BUNDLE_NOT_REQUESTED;
-  if (exclusions.some((word) => hasPhrase(sig.text, word))) return EXCLUSION.EXCLUDED_BY_CUSTOMER;
+  if (exclusions.some((value) => ingredientWords(value).some((word) => hasPhrase(sig.text, word)))) return EXCLUSION.EXCLUDED_BY_CUSTOMER;
   return null;
 }
 
