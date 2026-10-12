@@ -1186,7 +1186,7 @@ export async function saveTicketOverrides(
   await supabaseInsert(
     supabase,
     T.TICKET_OVERRIDES,
-    change.audit.map((entry: Record<string, unknown>) => ({ shop_id: shopId, ticket_id: ticketId, ...entry }))
+    change.audit.map((entry: Record<string, unknown>) => ({ shop_id: shopId, ticket_id: ticketId, ...entry })), { returning: 'minimal' }
   );
 
   // Re-fold now: a raised version stales the open drafts before anything can

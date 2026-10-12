@@ -36,7 +36,7 @@ export function createBlocklistStore(supabase) {
         await supabaseUpdateById(supabase, 'email_blocklist', ruleId, {
           hit_count: base + count,
           last_hit_at: now
-        });
+        }, { returning: 'minimal' });
       }
     },
 

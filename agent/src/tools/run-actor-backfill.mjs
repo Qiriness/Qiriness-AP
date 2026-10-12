@@ -64,7 +64,7 @@ async function main() {
   let failed = 0;
   for (const row of changes) {
     try {
-      await supabaseUpdateById(supabase, 'ticket_messages', row.id, { actor: row.wanted });
+      await supabaseUpdateById(supabase, 'ticket_messages', row.id, { actor: row.wanted }, { returning: 'minimal' });
     } catch (error) {
       failed += 1;
       console.error(`  ${row.id}: ${error.message}`);

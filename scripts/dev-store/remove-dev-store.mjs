@@ -34,6 +34,6 @@ if (!confirmed) {
   console.log('Nothing removed. Re-run with --yes to remove.');
 } else {
   for (const shop of shops) await supabaseDelete(supabase, 'shops', { id: shop.id, environment: 'development' });
-  await supabaseDelete(supabase, 'storefront_chat_sessions', { shop_domain: target.domain });
+  await supabaseDelete(supabase, 'storefront_chat_sessions', { shop_domain: target.domain }, { returning: 'minimal' });
   console.log('Removed. Unset STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN and STOREFRONT_CHAT_PRODUCT_BASE_URL if set.');
 }

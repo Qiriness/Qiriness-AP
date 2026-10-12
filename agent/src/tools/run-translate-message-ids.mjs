@@ -109,7 +109,7 @@ async function main() {
   const latest = (await supabaseSelect(supabase, 'shops', { id: shopId }, 'id,sync_cursors'))[0]?.sync_cursors || {};
   await supabaseUpdateById(supabase, 'shops', shopId, {
     sync_cursors: { ...withoutLinks(latest), [CURSOR_KEYS.idType]: 'immutable' }
-  });
+  }, { returning: 'minimal' });
   console.log('\nDone. sync_cursors.mail_id_type = immutable; the next poll starts a full read in the new format.\n');
 }
 
@@ -167,7 +167,7 @@ async function write(supabase, updates) {
     while (queue.length > 0) {
       const update = queue.shift();
       try {
-        await supabaseUpdateById(supabase, update.table, update.id, { graph_message_id: update.to });
+        await supabaseUpdateById(supabase, update.table, update.id, { graph_message_id: update.to }, { returning: 'minimal' });
       } catch (error) {
         errors += 1;
         console.error(`  ${update.table} ${update.id}: ${error.message}`);

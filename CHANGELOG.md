@@ -41,6 +41,17 @@ The owner's first rule for the chatbot: everything works at least in French and 
   - **Not yet seen in the widget or with the live model** (VALIDATION_LOG 50).
 - The Supabase REST API was restricted for exceeding the egress quota during this work. The evals ran over a direct database connection through a scratch shim; nothing in the repository depends on it.
 
+## Egress: every write whose result is discarded asks for no row back (2026-10-12)
+
+- **Found.** Of 133 REST write calls, 58 were `await …;` statements that threw the response away while asking PostgREST for every written row. The hot ones: the ingestion direction fix on `ticket_messages`, the `llm_usage` insert, the forwarding store, blocklist hit counts, the social/TikTok syncs. The rest are dashboard admin actions and CLIs.
+- **Changed.**
+  - `supabaseUpdate` and `supabaseDelete` accept `{ returning: 'minimal' }`, as the other writers already did.
+  - The 58 calls pass it. They were edited by script with an arity check, and 0 were skipped.
+  - **Two were wrong and are reverted:** the forwarding destination insert and update (`forwarding-service.ts`) sit inside `withLabelCheck(() => …)`, and their rows ARE used. The scan had read "nothing before the call on its line" as discarded.
+  - The 2 calls followed by `.catch(() => {})` discard the value too; there are no `.then` uses.
+  - New `scripts/lib/rest-writes-minimal.test.mjs` fails on any discarded write without `minimal`. Proven by reverting one fix: it names `usage-store.mjs:40`.
+- **Proven.** `npm test` 5604 pass / 1 skipped; web `tsc` clean; the diff holds nothing but these edits. **Not measured**: egress, until the block lifts on 2026-10-15.
+
 ## Analytics: order lines are a table (2026-10-12)
 
 - **Changed.**

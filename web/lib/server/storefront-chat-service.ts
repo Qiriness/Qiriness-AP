@@ -390,7 +390,7 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
       input_tokens: reply.usage?.inputTokens ?? null,
       output_tokens: reply.usage?.outputTokens ?? null,
     },
-  ]);
+  ], { returning: 'minimal' });
 
   recordAdvisoryEvents(db, shopDomain, "events" in reply && Array.isArray(reply.events) ? reply.events : []);
 

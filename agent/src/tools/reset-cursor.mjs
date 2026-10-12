@@ -26,7 +26,7 @@ async function main() {
   const hadCursor = CURSOR_KEYS.deltaLink in cursors;
   const hadResume = CURSOR_KEYS.resumeLink in cursors;
 
-  await supabaseUpdateById(supabase, 'shops', shopId, { sync_cursors: withoutLinks(cursors) });
+  await supabaseUpdateById(supabase, 'shops', shopId, { sync_cursors: withoutLinks(cursors) }, { returning: 'minimal' });
   logger.info('ingest.cursor_reset', { shopId, hadCursor, hadResume });
 }
 

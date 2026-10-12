@@ -91,7 +91,7 @@ async function main() {
         agent_reason: result.reason,
         agent_model: model,
         categorised_at: new Date().toISOString()
-      });
+      }, { returning: 'minimal' });
       results.push({ row, agent: result });
       process.stdout.write('.');
     } catch (error) {

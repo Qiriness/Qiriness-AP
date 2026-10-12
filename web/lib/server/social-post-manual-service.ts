@@ -22,7 +22,7 @@ export async function setManualPost(accountId: string, postId: string, metric: s
   if (value === null) await supabaseDelete(client, TABLE, filters);
   else {
     const [account] = await supabaseSelect(client, 'social_accounts', { shop_id: shopId, id: accountId }, 'engagement_basis', { limit: 1 });
-    await supabaseUpsert(client, TABLE, [{ ...filters, value, basis: metric === 'engagementRate' ? account.engagement_basis ?? 'reach' : null, updated_at: new Date().toISOString() }], 'shop_id,account_id,post_id,metric');
+    await supabaseUpsert(client, TABLE, [{ ...filters, value, basis: metric === 'engagementRate' ? account.engagement_basis ?? 'reach' : null, updated_at: new Date().toISOString() }], 'shop_id,account_id,post_id,metric', { returning: 'minimal' });
   }
   return true;
 }

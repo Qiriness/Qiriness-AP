@@ -111,7 +111,7 @@ async function main() {
   // Idempotent: re-running updates rows instead of duplicating them, so a repeat
   // run cannot silently double the review set (or overwrite a label — the
   // human_* columns are not in the payload, so an upsert leaves them untouched).
-  await supabaseUpsert(supabase, 'categorisation_review', rows, 'shop_id,graph_message_id');
+  await supabaseUpsert(supabase, 'categorisation_review', rows, 'shop_id,graph_message_id', { returning: 'minimal' });
 
   console.log(`\nWritten to categorisation_review (batch ${batch}).`);
   console.log('Label human_category / human_request_kind / human_level in the Supabase table editor,');

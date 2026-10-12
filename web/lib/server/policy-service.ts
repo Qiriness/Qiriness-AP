@@ -496,7 +496,7 @@ export async function setRuleApproval(
 }
 
 export async function deleteRule(shopId: string, id: string): Promise<void> {
-  await supabaseDelete(getSupabaseClient(), T.SUPPORT_ANSWERS, { id, shop_id: shopId });
+  await supabaseDelete(getSupabaseClient(), T.SUPPORT_ANSWERS, { id, shop_id: shopId }, { returning: 'minimal' });
 }
 
 /**
@@ -519,7 +519,7 @@ export async function setCollectionMode(
     getSupabaseClient(),
     T.SUPPORT_EXEMPLARS,
     { shop_id: shopId, exemplar_key: exemplarKey },
-    { collection_mode: mode },
+    { collection_mode: mode }, { returning: 'minimal' }
   );
 }
 
@@ -535,7 +535,7 @@ export async function setNeverAutoSend(shopId: string, exemplarKey: string, neve
     getSupabaseClient(),
     T.SUPPORT_EXEMPLARS,
     { shop_id: shopId, exemplar_key: exemplarKey },
-    { never_auto_send: neverAutoSend === true },
+    { never_auto_send: neverAutoSend === true }, { returning: 'minimal' }
   );
 }
 

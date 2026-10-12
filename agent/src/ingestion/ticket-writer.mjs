@@ -772,7 +772,7 @@ export function createSupabaseMessageStore(supabase) {
 
     /** Re-files one stored message, and its actor with it; the only write here besides the upsert. */
     async setMessageDirection(messageId, direction, actor) {
-      await supabaseUpdateById(supabase, T.TICKET_MESSAGES, messageId, actor ? { direction, actor } : { direction });
+      await supabaseUpdateById(supabase, T.TICKET_MESSAGES, messageId, actor ? { direction, actor } : { direction }, { returning: 'minimal' });
     },
 
     async upsertMessage(row) {

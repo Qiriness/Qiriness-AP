@@ -117,7 +117,7 @@ export async function setParameter(
         description: (PARAMETERS as Record<string, { description: string }>)[key].description,
       },
     ],
-    "shop_id,parameter_key",
+    "shop_id,parameter_key", { returning: 'minimal' }
   );
 
   const all = await listParameters(shopId);

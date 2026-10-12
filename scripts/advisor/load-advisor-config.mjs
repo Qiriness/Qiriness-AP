@@ -65,9 +65,9 @@ if (dryRun) {
 }
 
 for (const table of [ADVISOR_T.MERCHANDISING, ADVISOR_T.MAPPINGS, ADVISOR_T.PLAYBOOKS]) {
-  await supabaseDelete(db, table, { shop_id: shop.id });
+  await supabaseDelete(db, table, { shop_id: shop.id }, { returning: 'minimal' });
 }
-await supabaseInsert(db, ADVISOR_T.PLAYBOOKS, rows.playbooks);
-await supabaseInsert(db, ADVISOR_T.MAPPINGS, rows.mappings);
+await supabaseInsert(db, ADVISOR_T.PLAYBOOKS, rows.playbooks, { returning: 'minimal' });
+await supabaseInsert(db, ADVISOR_T.MAPPINGS, rows.mappings, { returning: 'minimal' });
 if (rows.merchandising.length) await supabaseInsert(db, ADVISOR_T.MERCHANDISING, rows.merchandising);
 console.log('\nLoaded. The storefront advisor picks it up within five minutes (its catalogue refresh).');

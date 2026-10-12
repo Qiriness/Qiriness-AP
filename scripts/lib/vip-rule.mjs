@@ -135,7 +135,7 @@ export async function saveVipRule(supabase, shopId, rule) {
     vip_min_orders: rule ? rule.minOrders : null,
     vip_window_months: rule ? rule.windowMonths : null,
     vip_rule_changed_at: new Date().toISOString()
-  });
+  }, { returning: 'minimal' });
 }
 
 function toNumber(value) {

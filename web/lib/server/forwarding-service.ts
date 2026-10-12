@@ -175,7 +175,7 @@ export async function setDestinationOn(shopId: string, id: string, on: boolean):
  * each forward went to, so the record of what was sent is unaffected.
  */
 export async function deleteDestination(shopId: string, id: string): Promise<void> {
-  await supabaseDelete(getSupabaseClient(), T.FORWARDING_DESTINATIONS, { id, shop_id: shopId });
+  await supabaseDelete(getSupabaseClient(), T.FORWARDING_DESTINATIONS, { id, shop_id: shopId }, { returning: 'minimal' });
 }
 
 export async function saveAckSettings(

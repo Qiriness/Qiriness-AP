@@ -230,7 +230,7 @@ async function write({ supabase, shopId, usable, pruneTranslations }) {
     // naming it here would let a careless edit turn this into a bulk approval.
   }));
 
-  await supabaseUpsert(supabase, 'support_exemplars', rows, 'shop_id,exemplar_key');
+  await supabaseUpsert(supabase, 'support_exemplars', rows, 'shop_id,exemplar_key', { returning: 'minimal' });
 
   // Read the ids back rather than assuming the upsert returned them in order.
   const stored = await supabaseSelect(
@@ -267,7 +267,7 @@ async function write({ supabase, shopId, usable, pruneTranslations }) {
     supabase,
     'support_exemplar_phrasings',
     phrasingRows,
-    'support_exemplar_id,phrasing_index'
+    'support_exemplar_id,phrasing_index', { returning: 'minimal' }
   );
 
   const removed = await removeStalePhrasings({ supabase, usable, idByKey, pruneTranslations });

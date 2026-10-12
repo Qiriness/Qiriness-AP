@@ -106,7 +106,7 @@ export async function actOnObligation(
   const supabase = getSupabaseClient();
   await supabaseInsert(supabase, T.TICKET_CASE_ACTIONS, [
     { shop_id: shopId, ticket_id: ticketId, obligation_id: obligationId, action, acted_by: actedBy },
-  ]);
+  ], { returning: 'minimal' });
 
   // Settling the check that kept the case in the queue may snooze it now.
   await refoldTicket(shopId, ticketId, { settledByPerson: true });

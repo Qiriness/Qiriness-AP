@@ -45,7 +45,7 @@ if (!dryRun) {
   const supabase = createSupabaseClient(loadConfig(target.childEnv));
   const [shop] = await supabaseSelect(supabase, 'shops', { shop_domain: target.domain, environment: 'development' }, 'id', { limit: 1 });
   if (!shop) throw new Error(`No development shop row for ${target.domain} after the sync.`);
-  await supabaseUpdate(supabase, 'advice_collections', { shop_id: shop.id, is_active: false }, { is_active: true });
+  await supabaseUpdate(supabase, 'advice_collections', { shop_id: shop.id, is_active: false }, { is_active: true }, { returning: 'minimal' });
   run('sync-shopify-collections.mjs');
   console.log(`\nDone. Set STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN=${target.domain} for the advisor to use this catalogue.`);
 }

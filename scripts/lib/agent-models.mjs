@@ -78,7 +78,7 @@ export async function loadAgentModels(supabase, shopId) {
 export async function saveAgentModel(supabase, { shopId, agent, model, updatedBy = null }) {
   if (!EDITABLE_AGENTS.includes(agent)) throw new Error(`Unknown agent: ${agent}`);
   if (model === null) {
-    await supabaseDelete(supabase, T.AGENT_MODELS, { shop_id: shopId, agent });
+    await supabaseDelete(supabase, T.AGENT_MODELS, { shop_id: shopId, agent }, { returning: 'minimal' });
     return;
   }
   if (!isValidModelId(model)) throw new Error(`Not a model id: ${model}`);
@@ -86,7 +86,7 @@ export async function saveAgentModel(supabase, { shopId, agent, model, updatedBy
     supabase,
     T.AGENT_MODELS,
     [{ shop_id: shopId, agent, model, updated_by: updatedBy }],
-    'shop_id,agent'
+    'shop_id,agent', { returning: 'minimal' }
   );
 }
 

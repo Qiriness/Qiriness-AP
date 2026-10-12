@@ -70,7 +70,7 @@ export function createContactFormRepairStore(supabase) {
     },
 
     async save(messageId, patch) {
-      await supabaseUpdateById(supabase, 'ticket_messages', messageId, patch);
+      await supabaseUpdateById(supabase, 'ticket_messages', messageId, patch, { returning: 'minimal' });
     }
   };
 }

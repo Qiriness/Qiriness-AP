@@ -167,7 +167,7 @@ async function syncMembership({ args, shopify, supabase, shopRow, syncedAt }) {
     await supabaseUpdateById(supabase, T.ADVICE_COLLECTIONS, collection.id, {
       product_ids: ids,
       products_synced_at: syncedAt
-    });
+    }, { returning: 'minimal' });
     console.log(`Refreshed ${collection.handle}: ${ids.length} live products.`);
   }
 

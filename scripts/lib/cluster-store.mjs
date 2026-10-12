@@ -141,12 +141,12 @@ export function createClusterStore(supabase) {
         await supabaseInsert(
           supabase,
           T.TICKET_CLUSTERS,
-          buildClusterRows({ shopId: runFacts.shopId, runId: run.id, clusters })
+          buildClusterRows({ shopId: runFacts.shopId, runId: run.id, clusters }), { returning: 'minimal' }
         );
       } catch (error) {
         // Best-effort: if the cleanup itself fails there is nothing further to
         // try, and the original error is the one worth reporting.
-        await supabaseDelete(supabase, T.CLUSTER_RUNS, { id: run.id }).catch(() => {});
+        await supabaseDelete(supabase, T.CLUSTER_RUNS, { id: run.id }, { returning: 'minimal' }).catch(() => {});
         throw error;
       }
 

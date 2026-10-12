@@ -37,7 +37,7 @@ export function createUsageStore(supabase, { shopId, logger } = {}) {
       }
 
       try {
-        await supabaseInsert(supabase, T.LLM_USAGE, entries.map((entry) => toRow(entry, shopId)));
+        await supabaseInsert(supabase, T.LLM_USAGE, entries.map((entry) => toRow(entry, shopId)), { returning: 'minimal' });
         return entries.length;
       } catch (error) {
         // No prompt text has ever been in these entries, so the count and the

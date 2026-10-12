@@ -267,7 +267,7 @@ export function createForwardingStore(supabase) {
             attempts: priorAttempts + 1
           }
         ],
-        'ticket_message_id'
+        'ticket_message_id', { returning: 'minimal' }
       );
     },
 
@@ -276,7 +276,7 @@ export function createForwardingStore(supabase) {
       const patch = { ack_state: state, ack_error: error ? String(error).slice(0, 300) : null };
       if (attempts !== undefined) patch.ack_attempts = attempts;
       if (state === 'sent') patch.ack_at = new Date().toISOString();
-      await supabaseUpdate(supabase, T.TICKET_ROUTING, { ticket_id: ticketId }, patch);
+      await supabaseUpdate(supabase, T.TICKET_ROUTING, { ticket_id: ticketId }, patch, { returning: 'minimal' });
     }
   };
 }

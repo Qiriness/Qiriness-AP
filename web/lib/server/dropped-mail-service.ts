@@ -163,7 +163,7 @@ export async function clearDroppedMail(shopId: string, auditIds: string[], clear
 
 /** Brings every cleared email back into the list. */
 export async function restoreClearedMail(shopId: string): Promise<void> {
-  await supabaseDelete(getSupabaseClient(), T.DROPPED_MAIL_CLEARS, { shop_id: shopId });
+  await supabaseDelete(getSupabaseClient(), T.DROPPED_MAIL_CLEARS, { shop_id: shopId }, { returning: 'minimal' });
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

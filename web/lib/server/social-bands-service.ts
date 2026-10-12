@@ -57,7 +57,7 @@ export async function saveBands(kind: unknown, rules: unknown): Promise<{ ok: tr
 /** Forgets a platform's stored rules, so the suggestions apply again. */
 export async function resetBands(kind: unknown): Promise<boolean> {
   if (!(ORGANIC_KINDS as string[]).includes(kind as string)) return false;
-  await supabaseDelete(getSupabaseClient(), SOCIAL_BAND_T.BANDS, { shop_id: await getShopId(), kind: kind as string });
+  await supabaseDelete(getSupabaseClient(), SOCIAL_BAND_T.BANDS, { shop_id: await getShopId(), kind: kind as string }, { returning: 'minimal' });
   return true;
 }
 

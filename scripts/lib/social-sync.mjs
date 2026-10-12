@@ -326,7 +326,7 @@ async function syncProvider({ supabase, shopId, connection, appConfig, now, log,
       supabase,
       SOCIAL_T.CONNECTIONS,
       { shop_id: shopId, provider },
-      { last_sync_at: now.toISOString(), last_sync_status: status, last_sync_error: error ? error.slice(0, 500) : null }
+      { last_sync_at: now.toISOString(), last_sync_status: status, last_sync_error: error ? error.slice(0, 500) : null }, { returning: 'minimal' }
     ).catch(() => {});
   }
   const { unanswered, failed, ...counts } = stats;

@@ -52,7 +52,7 @@ export function createAttachmentBackfillStore(supabase) {
     },
 
     async save(messageId, attachments) {
-      await supabaseUpdateById(supabase, 'ticket_messages', messageId, { attachments });
+      await supabaseUpdateById(supabase, 'ticket_messages', messageId, { attachments }, { returning: 'minimal' });
     }
   };
 }

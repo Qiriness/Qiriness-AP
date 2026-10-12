@@ -499,12 +499,12 @@ export async function deleteArticle(shopId: string, articleId: string): Promise<
     supabase,
     "agent_test_runs",
     { shop_id: shopId, expect_document_id: articleId, article_verdict: { operator: "not.is", value: "null" } },
-    { article_verdict: null }
+    { article_verdict: null }, { returning: 'minimal' }
   );
   // knowledge_chunks cascades automatically via its ON DELETE CASCADE FK.
   // The shopify_content_sources catalog row (if any) is untouched: the page
   // or policy still exists in Shopify and stays importable again later.
-  await supabaseDelete(supabase, "knowledge_documents", { id: articleId, shop_id: shopId });
+  await supabaseDelete(supabase, "knowledge_documents", { id: articleId, shop_id: shopId }, { returning: 'minimal' });
 }
 
 // --- internals -------------------------------------------------------------
@@ -739,7 +739,7 @@ async function embedDocumentChunks(supabase: any, documentRow: any): Promise<voi
       await supabaseUpdateById(supabase, "knowledge_chunks", id, {
         ...columns,
         embedding: toVectorLiteral(columns.embedding),
-      });
+      }, { returning: 'minimal' });
     }
   } catch (error: any) {
     console.error(

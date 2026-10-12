@@ -88,6 +88,6 @@ console.log('  snapshot written to', OUT);
 // else, so without this the claim finds none of them.
 const ids = before.map((b) => b.ticketId);
 for (const id of ids) {
-  await supabaseUpdate(supabase, 'tickets', { id }, { needs_investigation: true });
+  await supabaseUpdate(supabase, 'tickets', { id }, { needs_investigation: true }, { returning: 'minimal' });
 }
 console.log(`  flagged ${ids.length} ticket(s) for investigation`);

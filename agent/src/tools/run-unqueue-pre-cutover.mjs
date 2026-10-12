@@ -93,7 +93,7 @@ async function main() {
   let failed = 0;
   for (const ticket of clear) {
     try {
-      await supabaseUpdateById(supabase, 'tickets', ticket.id, { needs_categorisation: false });
+      await supabaseUpdateById(supabase, 'tickets', ticket.id, { needs_categorisation: false }, { returning: 'minimal' });
     } catch (error) {
       failed += 1;
       console.error(`  ${ticket.id}: ${error.message}`);

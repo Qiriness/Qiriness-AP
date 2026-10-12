@@ -275,7 +275,8 @@ export async function supabaseRpc(client, functionName, args = {}) {
 // including embedded resources. Without it PostgREST returns the patched row's
 // own columns only, so a caller that reads a ticket WITH its customer and then
 // updates it gets back a narrower object than it started with.
-export async function supabaseUpdate(client, table, filters, row, { select } = {}) {
+export async function supabaseUpdate(client, table, filters, row, { select, returning } = {}) {
+  const minimal = returning === 'minimal';
   const searchParams = new URLSearchParams();
   applyFilters(searchParams, filters);
   if (select) {
@@ -288,13 +289,13 @@ export async function supabaseUpdate(client, table, filters, row, { select } = {
       method: 'PATCH',
       headers: supabaseHeaders(client, {
         'Content-Type': 'application/json',
-        Prefer: 'return=representation'
+        Prefer: minimal ? 'return=minimal' : 'return=representation'
       }),
       body: JSON.stringify(row)
     }
   );
 
-  const payload = await response.json().catch(() => null);
+  const payload = minimal && response.ok ? null : await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.message || payload?.details || `HTTP ${response.status}`;
     throw new Error(`Supabase update ${table} failed: ${detail}`);
@@ -351,7 +352,8 @@ export async function supabaseDeleteWhereIn(client, table, column, values) {
   }
 }
 
-export async function supabaseDelete(client, table, filters) {
+export async function supabaseDelete(client, table, filters, { returning } = {}) {
+  const minimal = returning === 'minimal';
   const searchParams = new URLSearchParams();
   applyFilters(searchParams, filters);
 
@@ -360,12 +362,12 @@ export async function supabaseDelete(client, table, filters) {
     {
       method: 'DELETE',
       headers: supabaseHeaders(client, {
-        Prefer: 'return=representation'
+        Prefer: minimal ? 'return=minimal' : 'return=representation'
       })
     }
   );
 
-  const payload = await response.json().catch(() => null);
+  const payload = minimal && response.ok ? null : await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.message || payload?.details || `HTTP ${response.status}`;
     throw new Error(`Supabase delete from ${table} failed: ${detail}`);

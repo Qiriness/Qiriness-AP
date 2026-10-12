@@ -129,7 +129,7 @@ export async function addSalesChannel(shopId: string, input: any): Promise<Sales
       analytics_names: list(input.analyticsNames, true),
       position: existing.channels.length,
     },
-  ]);
+  ], { returning: 'minimal' });
   return listSalesChannels(shopId);
 }
 
@@ -147,11 +147,11 @@ export async function updateSalesChannel(shopId: string, id: string, input: any)
   }
   if (input.analyticsNames !== undefined) patch.analytics_names = list(input.analyticsNames, true);
   // The key never changes: it is in bookmarked Insights URLs.
-  await supabaseUpdateById(getSupabaseClient(), T.SALES_CHANNELS, id, patch);
+  await supabaseUpdateById(getSupabaseClient(), T.SALES_CHANNELS, id, patch, { returning: 'minimal' });
   return listSalesChannels(shopId);
 }
 
 export async function deleteSalesChannel(shopId: string, id: string): Promise<SalesChannelsView> {
-  await supabaseDelete(getSupabaseClient(), T.SALES_CHANNELS, { id, shop_id: shopId });
+  await supabaseDelete(getSupabaseClient(), T.SALES_CHANNELS, { id, shop_id: shopId }, { returning: 'minimal' });
   return listSalesChannels(shopId);
 }

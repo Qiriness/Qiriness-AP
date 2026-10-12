@@ -19,11 +19,11 @@ export async function connectTikTok({ supabase, shopId, code, redirect, userId =
     shop_id: shopId, provider: 'tiktok', kind: 'tiktok', external_id: bundle.openId,
     name: profile.display_name ?? null,
     ...(existing.length ? {} : { engagement_basis: 'views' })
-  }], 'shop_id,kind,external_id');
+  }], 'shop_id,kind,external_id', { returning: 'minimal' });
   // Old logins retain history but cannot be synced with this login's token.
   await supabaseUpdate(supabase, SOCIAL_T.ACCOUNTS, {
     shop_id: shopId, provider: 'tiktok', external_id: { operator: 'neq', value: bundle.openId }
-  }, { enabled: false });
+  }, { enabled: false }, { returning: 'minimal' });
   return { ok: true, accounts: 1 };
 }
 

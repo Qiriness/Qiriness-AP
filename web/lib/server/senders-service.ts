@@ -102,7 +102,7 @@ export async function addSender(
   if (Array.isArray(existing) && existing.length > 0) {
     throw new KnowledgeValidationError(`${pattern} is already in the directory.`);
   }
-  await supabaseInsert(supabase, T.SENDER_DIRECTORY, [{ shop_id: shopId, pattern_type: patternType, pattern, label, note }]);
+  await supabaseInsert(supabase, T.SENDER_DIRECTORY, [{ shop_id: shopId, pattern_type: patternType, pattern, label, note }], { returning: 'minimal' });
   return listSenders(shopId);
 }
 
@@ -118,11 +118,11 @@ export async function updateSender(
   const supabase = getSupabaseClient();
   const rows = await supabaseSelect(supabase, T.SENDER_DIRECTORY, { id, shop_id: shopId }, "id");
   if (!Array.isArray(rows) || rows.length === 0) throw new KnowledgeValidationError("No such sender.");
-  await supabaseUpdateById(supabase, T.SENDER_DIRECTORY, id, patch);
+  await supabaseUpdateById(supabase, T.SENDER_DIRECTORY, id, patch, { returning: 'minimal' });
   return listSenders(shopId);
 }
 
 export async function deleteSender(shopId: string, id: string): Promise<SenderDirectoryView> {
-  await supabaseDelete(getSupabaseClient(), T.SENDER_DIRECTORY, { id, shop_id: shopId });
+  await supabaseDelete(getSupabaseClient(), T.SENDER_DIRECTORY, { id, shop_id: shopId }, { returning: 'minimal' });
   return listSenders(shopId);
 }

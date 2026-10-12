@@ -98,7 +98,7 @@ export async function processComplianceWebhook({ rawBody, headers, config, supab
         processed_at: new Date().toISOString(),
         deleted_customer_count: result.deletedCustomerCount || 0,
         metadata: result.metadata || {}
-      }
+      }, { returning: 'minimal' }
     );
     await finishIntegrationEvent(supabase, event.row.id, {
       status: 'completed',
@@ -190,7 +190,7 @@ async function processShopRedact({ supabase, shopRow }) {
 
   // Paged for the count only: the delete cascades from `shops` either way.
   const customers = await supabaseSelectAll(supabase, 'customers', { shop_id: shopRow.id }, 'id');
-  await supabaseDelete(supabase, 'shops', { id: shopRow.id });
+  await supabaseDelete(supabase, 'shops', { id: shopRow.id }, { returning: 'minimal' });
 
   return {
     deletedCustomerCount: customers.length,

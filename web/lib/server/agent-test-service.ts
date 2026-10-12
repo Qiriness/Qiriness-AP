@@ -381,14 +381,14 @@ export async function saveIdealAnswer(
   await supabaseUpdateById(getSupabaseClient(), T.AGENT_TEST_RUNS, run.id, {
     ideal_body_text: text === "" ? null : text,
     ideal_saved_at: text === "" ? null : new Date().toISOString(),
-  });
+  }, { returning: 'minimal' });
   return getRun(shopId, id);
 }
 
 /** A run is an operator's note. Deleting one is theirs to do. */
 export async function deleteRun(shopId: string, id: string): Promise<void> {
   await getRun(shopId, id);
-  await supabaseDelete(getSupabaseClient(), T.AGENT_TEST_RUNS, { id, shop_id: shopId });
+  await supabaseDelete(getSupabaseClient(), T.AGENT_TEST_RUNS, { id, shop_id: shopId }, { returning: 'minimal' });
 }
 
 function toSummary(row: any): TestRunSummary {

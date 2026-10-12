@@ -86,7 +86,7 @@ async function main() {
       await supabaseUpdateById(supabase, 'ticket_messages', change.id, {
         direction: change.wanted,
         actor: actorOf({ ...change, direction: change.wanted }, directory, config.actorByLabel)
-      });
+      }, { returning: 'minimal' });
     } catch (error) {
       failed += 1;
       console.error(`  ${change.id}: ${error.message}`);
