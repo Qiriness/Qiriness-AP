@@ -198,8 +198,9 @@ export function createSyncAccessLog(supabase, { shopId, integrationEventId = nul
   };
 }
 
+/** Write-only: no caller reads the row back, so none is returned (egress, ~915 inserts a day). */
 export async function recordDataAccessEvent(supabase, row) {
-  const rows = await supabaseInsert(
+  await supabaseInsert(
     supabase,
     'data_access_events',
     [{
@@ -213,7 +214,8 @@ export async function recordDataAccessEvent(supabase, row) {
       integration_event_id: row.integration_event_id || null,
       occurred_at: row.occurred_at || new Date().toISOString(),
       metadata: row.metadata || {}
-    }]
+    }],
+    { returning: 'minimal' }
   );
-  return rows[0] || null;
+  return null;
 }

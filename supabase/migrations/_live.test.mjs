@@ -26,7 +26,14 @@ import { FILES, read } from './_shared.test.mjs';
  * SKIPPED WITHOUT A DATABASE, deliberately. `npm test` has never needed one and
  * this must not be what changes that: a contributor with no Supabase project
  * still gets the full text suite, and this file reports as skipped rather than
- * red. Set SUPABASE_DB_URL to run it.
+ * red. Set SUPABASE_TEST_DB_URL to run it.
+ *
+ * NEVER THE PRODUCTION DATABASE. This used to fall back to `SUPABASE_DB_URL`,
+ * which in `.env.local` is production, so every `npm test` built and dropped a
+ * full copy of the schema there — and a killed run left one behind, twice
+ * (2.4 MB found once, then `tmp_baseline_91d98ab4b248439d`, 53 tables, on
+ * 2026-10-12). It now reads only its own variable, meant for the dev project,
+ * and refuses one that equals `SUPABASE_DB_URL`.
  *
  * The schema is thrown away at the end whatever happens. It is named with a uuid
  * so two runs cannot collide, and dropped in a `finally` so a failed assertion
@@ -35,18 +42,22 @@ import { FILES, read } from './_shared.test.mjs';
 
 const { Client } = pg;
 
-function resolveDbUrl() {
-  if (process.env.SUPABASE_DB_URL) return process.env.SUPABASE_DB_URL;
+function readEnv() {
   try {
-    return loadEnv().SUPABASE_DB_URL || null;
+    return loadEnv();
   } catch {
     // No .env.local at all is a normal state for a fresh clone.
-    return null;
+    return { ...process.env };
   }
 }
 
-const DB_URL = resolveDbUrl();
-const skip = DB_URL ? false : 'SUPABASE_DB_URL is not set — skipping the applied-baseline test';
+const ENV = readEnv();
+const DB_URL = ENV.SUPABASE_TEST_DB_URL || null;
+const skip = !DB_URL
+  ? 'SUPABASE_TEST_DB_URL is not set — skipping the applied-baseline test'
+  : DB_URL === ENV.SUPABASE_DB_URL
+    ? 'SUPABASE_TEST_DB_URL equals SUPABASE_DB_URL — refusing to build test schemas in the app database'
+    : false;
 
 /**
  * Rewrite the baseline to install into a throwaway schema.
@@ -391,7 +402,11 @@ test('the baseline applies, and its projections return what they claim', { skip 
       assert.equal(rows[0].p50_hours, null);
     });
   } finally {
-    await client.query(`drop schema if exists ${schema} cascade`).catch(() => {});
+    // Said out loud: a silent failure here left tmp_baseline_91d98ab4b248439d
+    // (53 tables, 27 views) in production until 2026-10-12.
+    await client.query(`drop schema if exists ${schema} cascade`).catch((error) => {
+      console.warn(`_live.test: could not drop ${schema}; drop it by hand (${error.message})`);
+    });
     await client.end();
   }
 });

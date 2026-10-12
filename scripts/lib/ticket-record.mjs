@@ -172,7 +172,11 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
   /** Every read starts here. A soft-deleted ticket is invisible to all of them. */
   const live = (extra = {}) => ({ shop_id: shopId, deleted_at: IS_NULL, ...extra });
 
-  const patch = (ticketId, columns) => updateById(supabase, T.TICKETS, ticketId, columns);
+  // No row back: no caller reads one, and the full ticket row (~3 kB) returned on
+  // every write was the largest single egress statement in production, about
+  // 15.6k calls a day (pg_stat_statements, 2026-08-07 to 2026-10-12).
+  const patch = (ticketId, columns) =>
+    updateById(supabase, T.TICKETS, ticketId, columns, { returning: 'minimal' });
 
   /**
    * One queue row, same shape as the list.

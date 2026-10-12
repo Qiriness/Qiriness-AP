@@ -54,6 +54,18 @@ const build = (answers) => {
 
 const lastPatch = (transport) => [...transport.calls].reverse().find((c) => c.kind === 'updateById').columns;
 
+test('every ticket patch asks for no row back', async () => {
+  // Egress: the full ticket row returned per write was ~15.6k calls a day, and
+  // nothing read it. Pinned across writers that share `patch`.
+  const { transport, record } = build({ 'select:tickets': [{ metadata: {} }] });
+  await record.setSenderLabel('t1', 'internal');
+  await record.linkCustomer({ id: 't1', metadata: {} }, { customerId: null, status: 'unmatched' });
+  await record.close({ id: 't1', metadata: {} });
+  const patches = transport.calls.filter((c) => c.kind === 'updateById');
+  assert.equal(patches.length, 3);
+  for (const call of patches) assert.equal(call.options?.returning, 'minimal');
+});
+
 test('a record cannot be built without a shop', () => {
   // Tenant scoping is bound once, here, rather than remembered at 60 call sites.
   assert.throws(() => createTicketRecord({}, { shopId: null }), /requires a shopId/);

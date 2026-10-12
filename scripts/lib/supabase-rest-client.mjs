@@ -95,11 +95,12 @@ export async function supabaseUpsert(client, table, rows, onConflict, { returnin
   return payload;
 }
 
-export async function supabaseInsert(client, table, rows) {
+export async function supabaseInsert(client, table, rows, { returning } = {}) {
   if (rows.length === 0) {
     return [];
   }
 
+  const minimal = returning === 'minimal';
   const normalizedRows = normalizeBulkRows(rows);
   const response = await supabaseFetch(
     `${client.baseUrl}/${table}`,
@@ -107,13 +108,13 @@ export async function supabaseInsert(client, table, rows) {
       method: 'POST',
       headers: supabaseHeaders(client, {
         'Content-Type': 'application/json',
-        Prefer: 'return=representation'
+        Prefer: minimal ? 'return=minimal' : 'return=representation'
       }),
       body: JSON.stringify(normalizedRows)
     }
   );
 
-  const payload = await response.json().catch(() => null);
+  const payload = minimal && response.ok ? [] : await response.json().catch(() => null);
   if (!response.ok) {
     const detail = payload?.message || payload?.details || `HTTP ${response.status}`;
     throw new Error(`Supabase insert into ${table} failed: ${detail}`);

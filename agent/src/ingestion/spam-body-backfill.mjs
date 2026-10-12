@@ -120,7 +120,8 @@ export function createSpamBodyBackfillStore(supabase) {
     },
 
     async saveBody(id, patch) {
-      await supabaseUpdateById(supabase, 'spam_audit', id, patch);
+      // No row back: it would carry the body just written (~254 saves a day).
+      await supabaseUpdateById(supabase, 'spam_audit', id, patch, { returning: 'minimal' });
     }
   };
 }
