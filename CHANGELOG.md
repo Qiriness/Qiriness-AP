@@ -10,6 +10,16 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Database load: full-table reads page by key, not by offset (2026-10-12)
+
+- **Found.** Ranking `pg_stat_statements` by buffer blocks (since 2026-08-07): one statement was **71% of all buffer reads**. That was `supabaseSelectAll` paging `customers (id, email)` with LIMIT/OFFSET: 16,018 calls, 501M blocks, 1,699 s of database time. The same pattern on `customers (id, shopify_customer_id)` was second, at 130M. An offset makes Postgres read and discard every earlier row, so one pass over 61k customers costs O(n²).
+- **Changed.**
+  - `supabaseSelectAll` pages by keyset (`id=gt.<last id>`) on its default `id.asc` order. If the caller's select leaves `id` out, it is fetched for the cursor and stripped, so every caller gets back exactly the columns it asked for. Another sort order, or a filter on `id`, keeps offset paging.
+  - New `scripts/lib/postgrest-paging-fake.mjs` serves test pages as PostgREST does (id order, cursor, Range, 1000 cap). The six test fakes that sliced by `Range` alone now use it.
+  - Migration `91_redundant_indexes.sql` (**unapplied**) drops three indexes another unique index already provides, and the baseline no longer creates them.
+- **Proven.** On production, read-only `EXPLAIN ANALYZE`: page 61 is 72 ms / 61,452 blocks by offset and 2.7 ms / 1,010 blocks by key. A full pass is 2,028,954 blocks by offset and 62,093 by key (33× less). New client tests cover the cursor, the id strip and the offset fallback. `npm test` 5464 pass / 1 skipped; web `tsc` clean. **Not proven** through PostgREST itself, which is blocked until 2026-10-15.
+- **Likely side effect, unmeasured.** `insights_freshness` averaged 2.3 s over 1,614 calls but runs in 18 ms on an idle database. The difference is most plausibly CPU contention from these scans.
+
 ## Docs: the per-session read drops from ~52k tokens to ~3.5k (2026-10-12)
 
 - **Why.** `APP_SCHEMA.md` (read every session) had grown to ~51k tokens, and `DECISIONS.md` to ~210k in one file.

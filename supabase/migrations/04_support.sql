@@ -784,8 +784,6 @@ create table public.email_blocklist (
   constraint email_blocklist_hit_count_check check (hit_count >= 0)
 );
 
-create index email_blocklist_shop_pattern_idx on public.email_blocklist (shop_id, pattern_type, pattern);
-
 create trigger email_blocklist_set_updated_at
 before update on public.email_blocklist
 for each row
@@ -868,8 +866,6 @@ create table public.sender_directory (
     )
   )
 );
-
-create index sender_directory_shop_pattern_idx on public.sender_directory (shop_id, pattern_type, pattern);
 
 create trigger sender_directory_set_updated_at
 before update on public.sender_directory

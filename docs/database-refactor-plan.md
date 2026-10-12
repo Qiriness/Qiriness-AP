@@ -29,10 +29,12 @@ Working document for the database refactor started 2026-10-12. **Phase 0** (inve
 |---|---|---|---|
 | X1 | REST write helpers default to `return=representation` (`supabaseInsert`, `supabaseUpdate`, `supabaseUpdateById`, `supabaseUpsert`, `supabaseDelete`). Flip the default to `minimal` and opt in where the result is read | Writes returning full rows: tickets 15.6k/day, `data_access_events` 915, `shops` 505, `spam_audit` (incl. `body_text`) 254 | S |
 | X2 | The nightly full sync rewrites every row whether or not it changed (`ON CONFLICT DO UPDATE`) | `customers` 2.08M updates on 61k rows; `orders` 231k on 6k. Index (26 MB) is bigger than heap (21 MB). Add `WHERE … IS DISTINCT FROM` via an RPC, or skip pages whose `shopify_updated_at` has not moved | M |
-| X3 | Index hygiene | 3 indexes that duplicate a unique constraint (`support_answers_shop_set_idx`, `sender_directory_shop_pattern_idx`, `email_blocklist_shop_pattern_idx`). 46 non-unique indexes with 0 scans since 08-07 (3.8 MB, mostly GIN on `products`/`orders`/`customers` JSON and arrays). 23 foreign keys without an index (mostly `trigger_message_id → ticket_messages`, `shop_id → shops`) | S |
+| X3 | Index hygiene. **Decided 2026-10-12:** migration `91_redundant_indexes.sql` (unapplied) drops the 3 redundant copies; `support_answers_shop_set_fallback_unique` is partial and stays, and the redundant one there is `support_answers_shop_set_idx` (a prefix of `_key_unique`). **Foreign-key indexes not added**: every child table is tiny (≤ 1k rows), so a parent delete scans little and an index only costs writes; revisit if `ticket_messages` purges get slow. **Unused indexes left** until a full month of post-block traffic confirms them | 3 indexes that duplicate a unique constraint (`support_answers_shop_set_idx`, `sender_directory_shop_pattern_idx`, `email_blocklist_shop_pattern_idx`). 46 non-unique indexes with 0 scans since 08-07 (3.8 MB, mostly GIN on `products`/`orders`/`customers` JSON and arrays). 23 foreign keys without an index (mostly `trigger_message_id → ticket_messages`, `shop_id → shops`) | S |
 | X4 | Function churn: 12 functions redefined across 3–4 migration files (`orders_list` ×4; `insights_*` ×3). The current definition can only be found by reading the last file | Collapsed by the baseline (X5) | — |
 | X5 | Migration layout: 92 files, about 20.7k lines, applied in production so they cannot be rewritten. Generate a **squashed baseline** from the cleaned schema for fresh environments, archive the history, and keep forward-only migrations from then on | Decide after the domain work, so the baseline is the cleaned schema | M |
 | X6 | Business literals in SQL | `array['amazon','connect-dev-1']` (`21_chat_vip.sql:44`) should come from `sales_channels`. Carrier patterns in `normalise_carrier` (`06_analytics.sql:38`) should be data. Default `'fr'` locale. Qiriness/Yves Rocher wording in `chat` view comments | S |
+| X9 | **Offset paging was 71% of all database buffer reads.** `supabaseSelectAll` LIMIT/OFFSET over `customers` (501M + 130M blocks since 08-07) | **Done 2026-10-12**: keyset paging, 33× fewer blocks per full pass (measured). Re-check the top of `pg_stat_statements` by `shared_blks_hit` after the 15th | S |
+| X10 | `insights_freshness`: 2.3 s average over 1,614 calls, but 18 ms when the database is quiet. Most likely contention from X9 | Re-measure after X9 ships before touching the function. If it is still slow: `tickets` and `ticket_messages` are seq-scanned for `min(first_message_at)` and `max(coalesce(sent_at, received_at))` | S |
 | X8 | **`npm test` applies the whole baseline into production.** `_live.test.mjs` falls back to `.env.local`'s `SUPABASE_DB_URL` (production) and creates and drops a `tmp_baseline_*` schema on every run; a killed run is what left P0.3 behind. Point it at a dedicated variable (e.g. `SUPABASE_TEST_DB_URL`, dev project) and skip otherwise | **Done 2026-10-12**: reads only `SUPABASE_TEST_DB_URL` and refuses one equal to `SUPABASE_DB_URL` (both checked). Set it to the dev project in `.env.local` to run the test again | S |
 | X7 | `docs/schema/database.md` (was the APP_SCHEMA Database Map) is missing 6 objects: `dropped_mail_clears`, `dropped_mail_list`, `support_parameters`, `ticket_case_state`, `social_audience_manual`, `social_post_manual_metrics` | Fix in the docs task | S |
 
@@ -41,7 +43,10 @@ Working document for the database refactor started 2026-10-12. **Phase 0** (inve
 Ranked by impact × risk. "Hot" means it is on the worker's poll path or the sync/webhook path, so changes need a measured before/after.
 
 ### D1 — Shopify snapshots · `customers orders products promotions shops shopify_metaobjects sales_channels advice_collections shopify_content_sources` · **high**
-- **`orders.line_items` is JSON that the SQL treats as a table.** `li.value->…` appears 140+ times across `insights_*`, and `chat.order_lines` re-derives the table on every query. Normalise it into an `order_lines` table, written by the order sync, then repoint the `insights_*` functions (D4) and `chat.order_lines`.
+- **`orders.line_items` is JSON that the SQL treats as a table.** `li.value->…` appears 140+ times across `insights_*`, and `chat.order_lines` re-derives the table on every query.
+  - **Measured 2026-10-12, read-only, quiet database: not a performance problem at this size.** Unnesting all 19,126 lines takes ~80 ms. `insights_product_sales` takes 46 ms (30 days) to ~200 ms (all time). Its 459 ms production average is most plausibly the same contention as X10.
+  - **Decision: deferred into D4.** The gain is maintainability: one place for the casts, and indexable `product_id`. That is worth taking only while the `insights_*` functions are being rewritten anyway.
+  - **Design when it is done:** a `public.order_lines` table (`order_id` FK `on delete cascade`, `shop_id`, `line_index`, typed columns for what the SQL reads — `product_id`, `variant_id`, `title`, `sku`, `quantity`, `current_quantity`, `original_total`, `discounted_total`, `discounts jsonb`). Maintain it with an `after insert or update of line_items` trigger on `orders`, guarded `when (old.line_items is distinct from new.line_items)`. That gives **no sync code change**, it cannot drift from `line_items` (which stays as the raw snapshot), the backfill is one statement, and the nightly full upsert (X2) does not rewrite lines that did not change. Then repoint `chat.order_lines` and the `insights_*` functions one at a time, each checked against the old output.
 - Other JSON on `orders`: `fulfillments` (460 B avg), `discount_applications`, `shipping_destination` (read 30+ times by key).
 - **`shops` is a hot row.** 33.6k updates on 2 rows; `sync_cursors` (Graph delta links) is rewritten every poll. A `sync_cursors` table, one row per cursor, would stop rewriting the shop row.
 - Write churn (X2) and unused GIN indexes (X3) mostly land here.
@@ -97,10 +102,10 @@ Root clutter: `APP_SCHEMA.m`, `CHANGELOG.m`, `README.m`, `tmp-rerun-*.json`, `sh
 
 ## Order
 
-1. P0.1–P0.4 (P0.2 and P0.3 need approval).
-2. X1 + X3 duplicates. Small; first egress win when the block lifts.
-3. Docs workstream. It makes every later session cheaper.
-4. D1 (`order_lines`, `sync_cursors`) → D4 → D3. These are the analytics chain.
+1. ~~P0.1–P0.5~~ done or closed 2026-10-12, except dropping the P0.3 schema (needs the user to run it).
+2. ~~X3 redundant indexes~~ (migration 91 written, unapplied) · ~~X9 keyset paging~~ · ~~docs~~. X1 continues call site by call site.
+3. **On 2026-10-15:** deploy, apply 91, re-measure egress and the `pg_stat_statements` top (by calls AND by blocks); then X10.
+4. X2 (nightly sync rewrites unchanged rows) → D2 `tickets.metadata` trails → D4 (with `order_lines`) → D3.
 5. D2 sub-tasks, one at a time, each measured before and after.
 6. X5 squashed baseline from the cleaned schema.
 7. D5 checks run after every step that touches a name.

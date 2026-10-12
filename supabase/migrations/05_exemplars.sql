@@ -558,9 +558,6 @@ create unique index support_answers_shop_set_fallback_unique
   on public.support_answers (shop_id, answer_set)
   where is_fallback;
 
-create index support_answers_shop_set_idx
-  on public.support_answers (shop_id, answer_set);
-
 create index support_answers_when_conditions_gin_idx
   on public.support_answers using gin (when_conditions);
 
