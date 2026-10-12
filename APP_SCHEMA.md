@@ -85,7 +85,7 @@ All tables live in `public`, RLS on, service-role only. The management chat read
 | Klaviyo | `klaviyo_connections` `klaviyo_campaigns` `klaviyo_flow_days` |
 | Social and paid media | `social_*` `ad_*` (incl. `social_post_manual_metrics` `social_audience_manual`) |
 | Compliance and audit | `privacy_requests` `data_access_events` `integration_events` |
-| Analytics | `ticket_clusters` `cluster_runs` `storefront_session_months` |
+| Analytics | `ticket_clusters` `cluster_runs` `storefront_session_months` `carrier_aliases` (config) |
 
 ## Surfaces
 

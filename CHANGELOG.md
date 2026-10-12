@@ -41,6 +41,15 @@ The owner's first rule for the chatbot: everything works at least in French and 
   - **Not yet seen in the widget or with the live model** (VALIDATION_LOG 50).
 - The Supabase REST API was restricted for exceeding the egress quota during this work. The evals ran over a direct database connection through a scratch shim; nothing in the repository depends on it.
 
+## Reusability: carrier names fold by data, and the schema map is checked (2026-10-12)
+
+- **Found.** A scan of live function bodies and `chat` comments on production for business names: the only runtime literal left was `normalise_carrier`'s CASE (COLISSIMO, LA POSTE, CHRONOPOST, MONDIAL RELAY…). `21_chat_vip.sql`'s marketplace array is a superseded copy; 60 replaced it with a `sales_channels` lookup.
+- **Changed.**
+  - Migration `94_carrier_aliases.sql`: a `carrier_aliases` table (pattern → canonical, by position), seeded with exactly the old rules. `normalise_carrier` now reads it as `security definer`, so the chat role still needs no table grant. It matches with `strpos`, not LIKE, and is now `stable` (no index uses it). The chat column comment no longer lists carriers.
+  - `docs/schema/database.md`: rows for `ticket_case_state`, `support_parameters`, `dropped_mail_clears`, `dropped_mail_list`, `social_audience_manual`, `social_post_manual_metrics` and `carrier_aliases`.
+  - New `scripts/lib/schema-docs.test.mjs` fails when a name in `tables.mjs` is missing from the map. It would have caught the two dropped-mail objects.
+- **Proven.** On PGlite with the real baseline, 17 and 94 (twice): all 12 distinct carrier names in production fold exactly as today. A new alias row changes the output with no SQL edit. The chat role cannot read the table, yet the function and `chat.fulfilment_timing` still answer it. `npm test` 5559 pass / 1 skipped.
+
 ## Schema: sixteen views nothing read are dropped (2026-10-12)
 
 - **Found.** 16 views in `06_analytics.sql` are the whole-book, pre-range versions of Insights figures. Examples: `fulfilment_summary`, the seven `fulfilment_by_*`, `support_by_category`, `support_purchase_*`, `agent_pipeline_funnel`, `investigation_verdicts`/`_evidence_gaps`, `llm_usage_*`. `11_insights_ranges.sql` gave each a ranged function twin, and the dashboard reads only those. No code, test, prompt, other view or function (public or `chat`) reads them; checked by a code scan and a body scan on production.
