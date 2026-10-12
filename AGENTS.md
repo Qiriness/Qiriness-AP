@@ -6,13 +6,13 @@ Read `APP_SCHEMA.md` first for the current app structure and content map. Update
 
 | File | Holds | Update when |
 | --- | --- | --- |
-| `APP_SCHEMA.md` | **where things are**: map, data model, pass order. Kept lean; read every session | structure changes |
-| `DECISIONS.md` | **why they are that way**: the measurement or failure behind each rule. Read on demand, per section | a rule changes, or you learn why one exists |
-| `CHANGELOG.md` | what was built and how far it is proven. Append-only | you ship something |
-| `VALIDATION_LOG.md` | what is built but unproven, with the check to run. Items close only when the check has been run | you build against dev-store data, or run a check |
+| `APP_SCHEMA.md` | **where things are**: the index (~2k tokens), read every session. Detail in `docs/schema/*.md` (web, scripts, agent, database, surfaces, worker), read only the part you need | structure changes: edit the matching `docs/schema/` file; touch the index only for a new area, domain or top-level folder |
+| `DECISIONS.md` | **why they are that way**: an index of sections. Each section is `docs/decisions/<area>.md`; find a cited `§ <heading>` with `grep -rn "^### <heading>" docs/decisions/` | a rule changes, or you learn why one exists: append a `###` to the area file |
+| `CHANGELOG.md` | what was built and how far it is proven, newest first, the last ~30 days. Older entries: `docs/archive/` | you ship something: add the entry at the TOP |
+| `VALIDATION_LOG.md` | what is built but unproven, with the check to run. Closed items move to `docs/archive/VALIDATION_LOG-closed.md` | you build against dev-store data, or run a check |
 | `README.md` | what the project is, how to run it, what is next | setup or priorities change |
 
-Do not put rationale in `APP_SCHEMA.md` or a build log in `README.md` — that is what made them expensive to read.
+Do not put rationale in `APP_SCHEMA.md` or a build log in `README.md` — that is what made them expensive to read. Do not grow the `APP_SCHEMA.md` index with detail: it is loaded every session.
 
 ## Context
 
@@ -23,8 +23,8 @@ This project is a customer-support operating system for **Qiriness**. Read [READ
 - Following rules apply to the whole `Qirines_email_automation` directory
 - Use `APP_SCHEMA.md` as the primary source of architectural context before opening code files.
 - Do not scan the full codebase by default.
-- Before changing any behaviour, read the matching section of `DECISIONS.md`. Most entries record a measurement against real mail or a bug that was hit and fixed, so re-deriving them from the code alone tends to reproduce the bug.
-- If `APP_SCHEMA.md` is not detailed enough, open only the directly relevant files, then update it if the documented structure has drifted.
+- Before changing any behaviour, read the matching section of `DECISIONS.md` (the index points to the `docs/decisions/` file; search it rather than reading a large one whole). Most entries record a measurement against real mail or a bug that was hit and fixed, so re-deriving them from the code alone tends to reproduce the bug.
+- If `APP_SCHEMA.md` is not detailed enough, open the matching `docs/schema/` file, then only the directly relevant code files; update the schema doc if the documented structure has drifted.
 - Do not invent business requirements, database fields, API contracts, or external integrations.
 - Prefer small, modular, reviewable changes.
 - Record what you shipped in `CHANGELOG.md`, and update `## Next Steps` in `README.md` when priorities change. `README.md` has no status log — that is `CHANGELOG.md`.
