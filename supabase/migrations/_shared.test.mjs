@@ -67,7 +67,9 @@ export const INCREMENTAL_FILES = [
   '39_klaviyo',
   // Listed because it replaces three functions 11 first carried; the files
   // between 39 and 61 replace none of them.
-  '61_cases'
+  '61_cases',
+  // Replaces insights_freshness, which 11 first carried.
+  '92_skip_unchanged_sync_writes'
 ];
 
 export const read = (name) => readFileSync(new URL(`./${name}.sql`, import.meta.url), 'utf8');

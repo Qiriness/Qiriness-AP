@@ -10,6 +10,18 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Nightly sync: a write that changes nothing is not written (2026-10-12)
+
+- **Measured.** Between the last two nightly runs, **14 of 61,452 customers and 12 of 6,168 orders** changed in Shopify. The nightly still rewrote all 67k rows: 2.08M customer updates and 231k order updates since 2026-08-07, with the `customers` indexes (26 MB) bigger than the table (21 MB). Every rewrite also moved `updated_at`, which the worker's change gate, `changedOrderRefs` and the customer lookup each read as "changed". After every nightly they redid their work over the whole table.
+- **Changed (migration `92_skip_unchanged_sync_writes.sql`, unapplied).**
+  - A BEFORE UPDATE trigger on `customers` and `orders` drops an update that would change nothing but `synced_at`/`updated_at`. That includes the nightly's `ON CONFLICT DO UPDATE`. The generated `on_email_marketing_list` is excluded from the comparison, because a BEFORE trigger sees it uncomputed. It is derived from compared columns, so nothing is lost.
+  - `insights_freshness` reports orders/customers "synced" as the later of the newest row change and the last **completed** nightly. Without that, a quiet night would show as stale after 30 h.
+  - `synced_at` on these two tables now means "last written", not "last seen". Nothing reads it for them; `deleteExpiredOrders` uses `retention_delete_after`.
+- **Proven.**
+  - The repo's real baseline plus 92 (applied twice) on an in-process Postgres (PGlite 0.3.11). An unchanged customer upsert affects 0 rows and keeps its `synced_at`. A changed `rfm_group` is written. The generated column is still recomputed on a real change. Orders behave the same way. Freshness returns the last completed nightly when no row moved.
+  - `92_skip_unchanged_sync_writes.test.mjs`. `npm test` 5489 pass / 1 skipped.
+  - **Not run** on Supabase: the dev project no longer exists (`tenant not found`), and the Barbara Gould host is IPv6-only from here.
+
 ## Database load: full-table reads page by key, not by offset (2026-10-12)
 
 - **Found.** Ranking `pg_stat_statements` by buffer blocks (since 2026-08-07): one statement was **71% of all buffer reads**. That was `supabaseSelectAll` paging `customers (id, email)` with LIMIT/OFFSET: 16,018 calls, 501M blocks, 1,699 s of database time. The same pattern on `customers (id, shopify_customer_id)` was second, at 130M. An offset makes Postgres read and discard every earlier row, so one pass over 61k customers costs O(n²).
