@@ -236,32 +236,14 @@ export const V = {
   CASE_FACTS: 'case_facts',
   TICKET_QUEUE: 'ticket_queue',
 
-  // 06_analytics — every Insights panel figure comes from one of these, because
-  // a dashboard that pages rows and reduces them in JavaScript is wrong twice
-  // over (PostgREST's 1,000-row cap, and unordered pages that overlap).
+  // 06_analytics — the views the ranged insights_* functions build on. The
+  // whole-book views those functions replaced (fulfilment_summary and 15 others)
+  // were dropped by 93_drop_superseded_views: nothing read them.
   ORDER_FULFILMENT_TIMING: 'order_fulfilment_timing',
-  FULFILMENT_SUMMARY: 'fulfilment_summary',
-  FULFILMENT_BY_MONTH: 'fulfilment_by_month',
-  FULFILMENT_BY_CARRIER: 'fulfilment_by_carrier',
-  FULFILMENT_TICKET_COVERAGE: 'fulfilment_ticket_coverage',
-  FULFILMENT_BY_BUCKET: 'fulfilment_by_bucket',
-  // The same three cut by sales channel. Additive rather than a channel column
-  // on the views above, which stay one row per shop for the whole book.
-  FULFILMENT_SUMMARY_BY_CHANNEL: 'fulfilment_summary_by_channel',
-  FULFILMENT_BY_CHANNEL_MONTH: 'fulfilment_by_channel_month',
-  FULFILMENT_BY_CHANNEL_BUCKET: 'fulfilment_by_channel_bucket',
   TICKET_REPLY_TIMES: 'ticket_reply_times',
   SUPPORT_BY_MONTH: 'support_by_month',
-  SUPPORT_BY_CATEGORY: 'support_by_category',
-  SUPPORT_PURCHASE_STATES: 'support_purchase_states',
-  SUPPORT_PURCHASE_BY_CATEGORY: 'support_purchase_by_category',
   CUSTOMER_TICKET_FACTS: 'customer_ticket_facts',
-  CUSTOMER_SEGMENT_TOTALS: 'customer_segment_totals',
-  INVESTIGATION_EVIDENCE_GAPS: 'investigation_evidence_gaps',
-  AGENT_PIPELINE_FUNNEL: 'agent_pipeline_funnel',
-  INVESTIGATION_VERDICTS: 'investigation_verdicts',
-  LLM_USAGE_BY_MONTH: 'llm_usage_by_month',
-  LLM_USAGE_SUMMARY: 'llm_usage_summary'
+  CUSTOMER_SEGMENT_TOTALS: 'customer_segment_totals'
 };
 
 /** Postgres functions reached through PostgREST's /rpc endpoint. */

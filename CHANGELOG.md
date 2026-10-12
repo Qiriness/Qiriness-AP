@@ -10,6 +10,30 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Storefront advisor: French and English, everywhere (2026-10-12)
+
+The owner's first rule for the chatbot: everything works at least in French and English (together about 99 % of customers). The dev-store conversation of 2026-10-08 showed it did not. « Can we build a full routine together? » never started the routine builder, and an English speaker got French chips. Every deterministic layer was then tested in both languages, and each English gap found was fixed. Chatbot only; nothing in the email agent changed.
+
+- **Consultation lexicon.** `advisory/lexicon.mjs` is one engine over two tables of the same shape, `lexicon-fr.mjs` and `lexicon-en.mjs`. All tables run on every message, because customers mix languages and a one-word answer (« Tache », « Dry ») has none of its own. English word order is handled (« very dry and dehydrated skin »). A test fails when one table has a key the other lacks.
+- **Exclusions are one ingredient in every language.** `advisory/ingredients.mjs`: « sans parfum » and « fragrance-free » both store `fragrance`, which excludes a product listing « Parfum ». A value stored before (« parfum ») still expands to its group.
+- **The routine builder starts in words, in both languages.** « Can we build a full routine together? » and « On peut construire ensemble une routine ? » now start it; « can we do a full routine? » still only sets the scope.
+- **Chips in the customer's language.** The 41 English concern labels were empty (they fell back to French). They are filled in `data/advisor/qiriness.json`, and a test requires every label in both languages. Chip language is now the message's language (`detectLanguage`), then the conversation's, then the page's. Before, it was always the store locale.
+- **Policies and FAQs.** English routing words added: ship, dispatched, canceled, offer, deals, voucher, instalments, how long, worldwide, and others. FAQs are all French (9 documents), so the `search_faqs` tool now tells the model the FAQ language, taken from the documents. A product FAQ that shares no word with the question (an English question, French entries) now returns every entry, on-topic first; before, it returned only the first.
+- **Shopping opening.** « What offers are available? » was read as a stock question, and « my code isn't working » as a code named « ISN ». Both are fixed in the server and the widget rule (`advisor-cart.js`).
+- **Product names.** English puts the type after the name (« the Source d'Eau serum »), and its type words are English (cream, mask, toner, gift set, night). `toCatalogueWords` maps everyday care words to the form the catalogue uses, in either direction. References (« the two », « the first two », « this cream », « it ») and the English shapes of discovery were added. Common words are never typo-corrected: « your » had become « jour ».
+- **Proven.** Live catalogue, no model:
+  - `eval:resolution`: 123/123 (French 71/71, English 52/52), 0 silent wrong picks.
+  - `eval:advisory`: 45/47 (French 23, English 24) and 0 rule violations over 3,936 profiles. The 2 failures are one French case and its English twin, both caused by the catalogue: « Voile Source d'Eau » is no longer in any moisturiser collection, so a combination-skin routine gets the standard Source d'Eau cream (VALIDATION_LOG 50).
+  - Unit tests cover the same sentence in both languages, routing pairs (23 English policy cases, 12 shopping pairs) and label parity. Root suite 5,515 tests, 0 failures. Web typecheck clean.
+  - **Not yet seen in the widget or with the live model** (VALIDATION_LOG 50).
+- The Supabase REST API was restricted for exceeding the egress quota during this work. The evals ran over a direct database connection through a scratch shim; nothing in the repository depends on it.
+
+## Schema: sixteen views nothing read are dropped (2026-10-12)
+
+- **Found.** 16 views in `06_analytics.sql` are the whole-book, pre-range versions of Insights figures. Examples: `fulfilment_summary`, the seven `fulfilment_by_*`, `support_by_category`, `support_purchase_*`, `agent_pipeline_funnel`, `investigation_verdicts`/`_evidence_gaps`, `llm_usage_*`. `11_insights_ranges.sql` gave each a ranged function twin, and the dashboard reads only those. No code, test, prompt, other view or function (public or `chat`) reads them; checked by a code scan and a body scan on production.
+- **Changed.** Migration `93_drop_superseded_views.sql`. The baseline no longer creates them (06: 4017 → 3497 lines). `tables.mjs` no longer names them. `docs/schema/database.md` lists what remains. Function comments that mention one by name ("the ranged twin of fulfilment_summary") are left as they are in the live database.
+- **Proven.** `93_drop_superseded_views.test.mjs` asserts each view is gone from the baseline and from `tables.mjs`, and that nothing left reads one. The edited baseline still applies from empty on PGlite, then 92 and 93, each twice: 11 public views remain. `npm test` 5533 pass / 1 skipped; web `tsc` clean.
+
 ## Nightly sync: a write that changes nothing is not written (2026-10-12)
 
 - **Measured.** Between the last two nightly runs, **14 of 61,452 customers and 12 of 6,168 orders** changed in Shopify. The nightly still rewrote all 67k rows: 2.08M customer updates and 231k order updates since 2026-08-07, with the `customers` indexes (26 MB) bigger than the table (21 MB). Every rewrite also moved `updated_at`, which the worker's change gate, `changedOrderRefs` and the customer lookup each read as "changed". After every nightly they redid their work over the whole table.
