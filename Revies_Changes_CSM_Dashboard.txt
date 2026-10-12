@@ -1,0 +1,551 @@
+CSM DASHBOARD CHANGES - IMPLEMENTATION HANDOFF
+Prepared: 11 October 2026
+
+1. SCOPE AND SOURCE
+
+Source repository:
+C:\Users\gnoua\Desktop_backup\APP_DEV\ClaraPortfolio\Clara_SM_Dashboard
+
+Destination repository:
+C:\Users\gnoua\Desktop_backup\APP_DEV\03_Qiriness_Email\Qirines_Email_Automation
+
+This handoff INCLUDES the commit "UI + tiktok optimisation" and every
+subsequent commit through "non-follower bands update". The comparison starts
+at its parent so the first commit's changes are included:
+
+  Baseline: 03261ed (add shop; parent of 155efd9)
+  End:      29e287a1b8931062adb5801ba28d6441039247af
+  Range:    03261ed..29e287a
+
+Commits, in order:
+  155efd9  UI + tiktok optimisation
+  b40d09b  ui - clickable engagement-rate explanation
+  2420bca  DATA MANUAL ENTRY FIX - generic post and audience entries
+  9e90eac  UI - audience identity/observation metadata and report wording
+  3b8211f  button highloight + data manual - focus and editor persistence
+  29e287a  non-follower bands update
+
+The source working tree was clean when this handoff was prepared. The
+destination HEAD inspected was 7285bf7b0e2b499f552f880d8ead76e29ca77bed.
+This file is an implementation guide, not an applied integration. No destination
+application code, database or environment configuration was changed.
+
+Earlier Clara changes (sidebar branding, company appearance, company creation,
+invitations and the earlier report overhaul) are outside this commit range.
+Some files below depend on that earlier Clara infrastructure; those dependencies
+must be adapted rather than pulled in implicitly.
+
+2. WHAT CHANGED AND HOW IT SHOULD WORK
+
+A. TikTok dashboard totals and trends
+
+Problem: public-video metrics existed in Posts, but summary views/interactions
+and trends read daily account rows that TikTok Display API does not supply.
+
+The TikTok-only summary and platform card now use lifetime views and interactions
+from videos published in the selected dates. The new insights_tiktok_post_series
+RPC groups enabled-account videos by publication bucket in the business timezone.
+The aggregate includes all eligible videos, independently of the 200-row post
+table limit. Its period end is exclusive.
+
+Follower-growth points use differences between stored follower snapshots. A
+first snapshot without a predecessor cannot establish growth. The series can
+read an earlier snapshot before the displayed range to calculate later changes.
+Missing publication/snapshot buckets remain unknown; they are not invented as
+zero or treated as complete daily coverage. Missing RPC support shows an
+unavailable state rather than fabricated data.
+
+Mixed-platform summary views/interactions remain unavailable when combining
+TikTok lifetime counters with other platforms' daily activity. Individual
+platform cards retain their own figures. Reach remains a unique count and is
+never summed across days or accounts. Manual post annotations do not replace
+dashboard provider totals or trends.
+
+Short labels explain "lifetime - selected videos", publication-date trends and
+observed snapshot changes. These views do not claim the lifetime interactions
+were earned during the selected period.
+
+This is an aggregation fix using the existing Display API connector, not a new
+Accounts API connector or an authentication repair. Display API still cannot
+provide missing daily account analytics, unique video reach, attributed video
+follows or pre-connection follower history. Accounts API access requires a
+separate application/permissions and was not implemented. Live token health was
+not established by these synthetic checks.
+
+Main files:
+  scripts/lib/social-figures.mjs
+  supabase/migrations/97_tiktok_post_series.sql
+  web/lib/server/insights/social-service.ts
+  web/components/insights/SocialView.tsx
+  web/components/insights/SocialTrend.tsx
+  web/lib/social-types.ts
+
+B. Dashboard layout and explanation controls
+
+Platform headings are larger. Platform/mode controls share the heading row;
+Profile summary / Content summary / Post insights tabs share a second row with
+the engagement-rate selector. Rows wrap on small screens, removing the large
+gaps caused by controls and content occupying separate vertical positions.
+
+Removed the blanket TikTok availability paragraph and individual platform
+subtitles, including "Public video performance and follower snapshots". The
+cross-platform subtitle remains. Short metric provenance labels remain where
+they affect how a number is interpreted.
+
+The selected engagement-rate explanation moved from always-visible text into
+a clickable information icon. Native details/summary supports click and keyboard
+activation; Escape closes it. The popover anchors to the entire basis control so
+it stays within mobile content bounds. Viewers can read it. Save failures remain
+visible independently of the popover.
+
+The chart's accessible data table now sits inside a visually hidden wrapper,
+keeping the data accessible without the table affecting chart layout.
+
+English and French strings were added for new controls, provenance and errors.
+
+Main files:
+  web/components/insights/SocialHeader.tsx
+  web/components/insights/SocialView.tsx
+  web/components/insights/SocialView.module.css
+  web/components/insights/SocialTrend.tsx
+  web/components/insights/TimeSeriesChart.tsx
+  web/components/insights/EngagementBasisSelect.tsx
+  web/lib/i18n/messages/insights-social.ts
+
+C. General manual entries for missing post metrics
+
+The old non-follower-only editor became a reusable ManualMetricCell for all nine
+numeric Post insights columns:
+  views, reach, engagementRate, likes, comments, shares, follows, engagement,
+  nonFollowersPct.
+
+Authorized editors can Add a missing value and Edit a manual value. Provider
+values, including a reported zero, remain authoritative and are not editable.
+Enter or blur commits an edit; Escape cancels. A deliberate empty input removes
+the annotation. Zero is a valid saved value, not an empty field. Invalid values
+or failed writes do not silently erase previously saved values.
+
+Counts must be non-negative safe whole numbers. Non-follower share is 0-100
+percentage points; engagement-rate percentages may exceed 100. Decimal/comma/%
+input is supported for percentages and normalized to two decimal places.
+
+Storage moved into social_post_manual_metrics, keyed by business/account/post/
+metric. Migration 98 copies existing social_posts.non_followers_pct values into
+this storage. Provider sync continues updating social_posts only, so annotations
+survive reload and sync. Provider values displayed later take precedence without
+deleting the stored annotation.
+
+The server fills only missing counts, recalculates engagement rate from the
+effective counts and chosen denominator, and uses an explicit manual rate only
+as a fallback. Explicit rates are tied to the selected views/reach/followers
+basis. Table values and manually derived rates receive a Manual label. Tags,
+search, sorting and colour bands continue using effective post values.
+
+PUT /api/insights/social/manual-metrics receives:
+  { accountId, postId, metric, value }
+  value is a number or null to clear; the business identity comes from the
+  authenticated server context, not the request body.
+
+The old non-followers endpoint remains compatible by delegating to the generic
+service. Its route itself was not changed in this range; adapt that caller when
+replacing the destination's old service exports.
+
+Main files:
+  scripts/lib/social-post-manual.mjs
+  supabase/migrations/98_manual_post_metrics.sql
+  web/lib/server/social-post-manual-service.ts
+  web/app/api/insights/social/manual-metrics/route.ts
+  web/components/insights/ManualMetricCell.tsx
+  web/components/insights/SocialPostsTable.tsx
+  web/lib/server/insights/social-service.ts
+  web/lib/social-types.ts
+
+D. Manual audience data for all four Profile summary graphs
+
+Gender, age, countries and cities cards are now available for each selected
+organic platform (Instagram, Facebook, TikTok), not only Instagram. Each missing
+provider dimension can have a dated manual distribution. Editors can Add, Edit
+or Clear it; viewers see source/date labels without editing controls.
+
+The editor has an observation date, category rows, percentage fields and
+add/remove buttons. Gender uses female/male/unknown options. Other dimensions
+use named categories. Labels must be unique, non-empty and at most 80 characters;
+percentages must be 0-100 and total at most 100. Up to 50 categories are accepted
+by validation. The UI limits gender to its three options. Partial distributions
+stay partial: 60% female plus 20% male is not rescaled to 75%/25%.
+
+Observation dates must be real dates from 2000-01-01 through today in the
+business timezone. Saving requires an enabled connected account for that
+platform. Entries are scoped to business/platform/dimension. Only the latest
+manual distribution for a dimension is stored; replacing its date does not
+create historical audience records. Clearing one graph must not clear another.
+
+Provider audience data takes precedence for an entire dimension when available.
+Its source and observation date are retained separately for each graph; dates
+can differ across graphs. Other missing dimensions can still use manual data.
+
+PUT /api/insights/social/manual-audience receives:
+  { kind, dimension, capturedOn, entries: [{ key, value }, ...] }
+  dimension is gender/age/country/city; entries: null deliberately clears it.
+  The server resolves business identity and permissions. A client cannot pick
+  another business by adding a shopId/companyId field.
+
+Main files:
+  scripts/lib/social-audience-manual.mjs
+  supabase/migrations/99_manual_audience.sql
+  web/lib/server/social-audience-manual-service.ts
+  web/app/api/insights/social/manual-audience/route.ts
+  web/components/insights/SocialAudience.tsx
+  web/components/insights/SocialAudience.module.css
+  web/components/insights/SocialView.tsx
+  web/lib/server/insights/social-service.ts
+  web/lib/social-types.ts
+
+E. Focus thickness, audience lag and saved-value persistence
+
+Workspace controls previously combined a 2px box-shadow ring with a 3px outline
+and offset. Inputs/dropdowns/buttons now use one thin 1px themed ring. Keyboard
+focus stays visible. The default token and company-theme derived token were both
+updated so saved brand palettes do not restore the heavy focus style.
+
+Audience rows now use stable IDs rather than array indexes as React keys, and
+functional state updates rather than captured arrays. Adding/removing a row
+preserves surviving category values and focus identity.
+
+Successful audience writes immediately update the saved state of that card
+without waiting for a full dashboard refresh. Reopening the editor uses those
+acknowledged entries. Other cards keep independent drafts. Duplicate submissions
+are guarded. Company/platform/dimension component keys reset unsaved drafts when
+the user switches workspace or platform.
+
+Post saves keep acknowledged per-account/post/metric values in component state
+while a background refresh updates derived rates and bands. Delayed reads cannot
+restore stale manual values over a newer successful write. Native values still
+win. Clearing a value is an explicit acknowledged change. The browser does not
+guess a follower denominator; server refresh supplies follower-based rates.
+
+These states are presentation acknowledgements, not the persistence layer.
+The annotation tables remain the source of truth after reload. Values appear
+saved only after the API confirms success; failed writes retain the draft/error.
+
+Main files:
+  web/app/globals.css
+  web/app/workspace.css
+  scripts/lib/company-theme.mjs
+  web/components/insights/SocialAudience.tsx
+  web/components/insights/SocialPostsTable.tsx
+  scripts/lib/social-post-manual.mjs (applySavedPostMetrics)
+
+F. Non-follower colour bands
+
+Non-followers was added to BandMetric, the shared band metric list, validation
+and the band editor. It uses existing Low/Medium/High colours in Post insights.
+Rules save per business/platform, apply to effective manual or provider values,
+and survive reload.
+
+Available modes:
+  No colour (default, until explicitly configured)
+  Fixed number: percentage-point thresholds between 0 and 100
+  % of the median post: thresholds relative to the known platform cohort
+
+% of followers is excluded because non-follower share is already a percentage.
+Median-relative thresholds may exceed 100; fixed percentage thresholds cannot.
+Below low is Low, high and above is High, between is Medium. Missing values or
+missing/zero relative denominators have no colour. A measured zero can be Low.
+
+Migration 100 extends the existing social_metric_bands metric constraint and
+adds the non-follower percentage/mode constraint; existing rules and RLS remain.
+Numeric migration sorting was added so 100 runs after 99, not before 70.
+
+This addition is verified for the dashboard table. The current exported report
+uses nonFollowerShare (0-1) rather than nonFollowersPct (0-100); its configuredBand
+mapping was not extended by this commit. Do not claim that exported non-follower
+cells already receive this new shading. If extending reports later, explicitly
+map the metric name and convert both values and cohort peers to percentage
+points before applying fixed thresholds.
+
+Main files:
+  scripts/lib/social-bands.mjs
+  web/components/insights/BandsEditor.tsx
+  web/lib/social-types.ts
+  supabase/migrations/100_non_followers_bands.sql
+  scripts/migrate.mjs
+  tests/database-isolation.test.mjs
+
+G. Reports now carry manual annotations and audience provenance
+
+The report service reads manual posts and audience distributions alongside the
+existing provider data. The adapter includes effective manual post values,
+manual metric names, fallback rates, and non-follower share converted from
+percentage points to a 0-1 share. Explicit rates likewise convert to report
+ratio units. Native counts and recalculated rates retain priority.
+
+Exports mark entered values and manually derived rates as Manual. Audience
+snapshots include manualDimensions and dimensionDates. Manual gender and age
+distributions preserve entered percentages rather than normalizing partial
+data into a full pie. Wording identifies omitted categories as unknown and
+labels manual dimensions with their observation dates.
+
+All four manual dimensions are embedded in the export data. That does not mean
+four new report graphs were added: the existing report layout is retained.
+
+The offline renderer still serializes shared pure calculations into the HTML.
+Any helper embedded with toString() must contain its own dependencies so the
+minified production bundle cannot reference missing module-local names. Keep
+the destination's existing historical/report fixes; those preceded this range.
+
+Main files:
+  scripts/lib/social-report-data.mjs
+  scripts/lib/social-report.mjs
+  web/lib/server/insights/social-report-service.ts
+  scripts/lib/social-audience-manual.mjs
+  scripts/lib/social-post-manual.mjs
+
+3. DESTINATION ADAPTATION POINTS
+
+The destination was inspected for structure, not modified or fully validated.
+
+- Framework: Clara uses Next.js 16 / React 19; Qiriness currently declares
+  Next.js 14 / React 18. Port the social features into its existing framework
+  conventions. Do not replace package.json, middleware, layouts or the support
+  application's framework as an incidental part of this handoff.
+
+- Business model: Clara has companies plus company_memberships; Qiriness has
+  Shopify shops. Source columns named shop_id already refer to Clara companies.
+  In target migrations reference the correct shops table and verified shop
+  identity. The client audience companyId key can carry the target shop ID as
+  an identity key; it does not require importing Clara company creation.
+
+- Authentication: Clara services import company-context, requireRole and
+  AccessError, and its UI imports AccessProvider/useCompanyRole/CanEdit. These
+  are dependencies from before this range. Qiriness has developer/management/
+  contact roles and different route guards. Adapt the permission checks to its
+  established role policy; do not silently equate unrelated role names.
+  Recheck authentication and edit permission inside mutation services/routes,
+  not only by hiding buttons. Retain origin checks and read-only behavior.
+
+- RLS: source migrations 98/99 call public.company_role(shop_id), absent in the
+  inspected target migrations. The target shared Insights client currently uses
+  a service-role client and cached aggregates. The new source flow requires the
+  authenticated user's JWT and membership/authorized-shop RLS. A security-invoker
+  RPC alone does not protect reads performed with a bypass-RLS service role.
+  Add the correct target authorization/RLS boundary and user-JWT REST path for
+  these social reads/writes. Do not copy a company_role call without its actual
+  policy implementation, or expose service/Vault credentials to browser code.
+
+- Composite post identity: migration 98 requires a unique referenced key on
+  social_posts(shop_id,account_id,external_id). Clara's earlier security migration
+  supplies it. Check the target schema and add the needed composite key/account
+  scope constraints in a new target migration before creating the annotation FK.
+
+- Existing band schema: the inspected target migration 83 permits Instagram and
+  Facebook only, while its later TikTok migration may extend related constraints.
+  Verify the applied schema and TikTok band eligibility before adding this field.
+  Migration 100 changes the metric constraint, not the platform-kind constraint.
+
+- Styling: target has globals.css and SocialView.module.css but no Clara
+  workspace.css or company-theme.mjs. Merge the thin focus-ring token into its
+  real shared shell/focus selectors; do not create a Clara workspace stylesheet
+  just to carry over two rules. Company themes are an earlier out-of-range
+  feature, so only update a theme-derived ring if an equivalent exists.
+
+- Caching: annotations and saved band rules must be read fresh after writes.
+  Keep user/tenant data out of a shared cache that can bypass access checks or
+  return old annotations. Preserve the target's aggregate strategy rather than
+  computing uncapped totals by summing a paged/capped list in the browser.
+
+- Runtime imports: reuse the pure scripts/lib modules where practical, but
+  adapt source-only server imports to the target's services. Audit the old
+  non-followers route and any readNonFollowers callers before removing an export.
+
+- Reports: merge the manual-data additions into existing report fixes; do not
+  overwrite the destination's complete report files from an unrelated baseline.
+  Keep its company/shop branding and existing calendar/export behavior.
+
+- Migrations: add new target migration files using its next free sequence.
+  Do not overwrite applied migrations 83/84/85 or blindly import Clara baselines.
+  Preserve existing non-follower values, native counters, bands and account IDs.
+  Apply numeric sorting if the target tooling enumerates numbered filenames.
+  Clara's 97-100 numbering describes the source, not guaranteed target numbering.
+
+4. SUGGESTED IMPLEMENTATION ORDER
+
+1) Create a target working branch. Read its Social/Report decisions and identify
+   the actual shop authorization, JWT/RLS, account and post-key contracts.
+2) Add target-adapted migrations: trend RPC, post annotation storage/backfill,
+   audience storage/validation, and extended band constraints. Test with dummy
+   data before applying them to the target database.
+3) Add pure validation/merge helpers and typed data contracts. Keep percentages,
+   report ratios, lifetime counters and period account metrics distinct.
+4) Add protected mutation services/routes. Migrate the old percentage endpoint
+   to the generic service while retaining compatibility.
+5) Update Social service reads: lifetime TikTok totals/trends, effective post
+   annotations, recomputed rates, banding and platform-specific audience data.
+6) Merge the UI components, layout styles, information disclosure, translations,
+   stable row IDs and acknowledged saved states. Adapt role/context imports.
+7) Merge report adapter/service/renderer annotations and provenance. Preserve
+   existing standalone report serialization and historical-data rules.
+8) Run the checks below, then deploy the target code separately. Applying SQL
+   does not deploy the browser/server implementation.
+
+5. VERIFICATION AND KNOWN LIMITS
+
+Latest source verification: 105 automated tests, lint, typecheck, production
+build and synthetic authenticated production browser checks passed. Source
+migrations 97, 98, 99 and 100 are installed in Clara's configured Supabase project;
+that does not establish installation or compatibility in the Qiriness database.
+The source environment file and credentials were not copied into this handoff.
+
+Checks to port/run against dummy target data:
+  - TikTok-only lifetime totals; no pooling with other daily platform metrics.
+  - Trend aggregation beyond 200 videos, timezone midnight boundaries, missing
+    buckets and missing initial follower baselines.
+  - Unauthorized/foreign-shop reads and writes; viewer read-only controls and
+    API rejection; composite account/post ownership.
+  - Manual post entry, zero, invalid values, clear, Escape, API failure, reload,
+    provider sync, native precedence and denominator-specific rates.
+  - Rapid edits while dashboard reads are delayed; latest saved values survive.
+  - All four audience graph saves, other-card draft retention, category typing,
+    add/remove row identity, partial totals, invalid duplicates/over-100 sums,
+    observation dates, clear/reload and native-dimension precedence.
+  - Non-follower fixed/median bands, threshold boundaries, null versus zero,
+    saved rules after reload, recolouring after a manual edit and shop isolation.
+  - Info disclosure click/keyboard/Escape, readable thin keyboard focus, mobile
+    wrapping and no horizontal page overflow.
+  - Actual production endpoint report download, manual metadata and percentages,
+    no minified-script errors, edit/save/reopen and PDF generation.
+
+Existing source test commands:
+  npm test
+  npm run lint
+  npm run typecheck
+  npm run test:browser
+  npm run build
+
+Target commands differ; check its package.json. It currently has root npm test
+and web lint/typecheck/build scripts, plus web report:social:verify. The source
+browser harness rebuilds with dummy config and mocks Clara Auth/company REST
+contracts, so adapt it to the target rather than running it against real users.
+After that harness, run a normal-config build again: its dummy NEXT_PUBLIC
+configuration is embedded into .next at build time.
+
+These checks do not prove hosted deployment, real-account editor latency,
+real TikTok token health, Accounts API access or live Qiriness sync behavior.
+After deployment, compare a real account's known figures and confirm annotations
+survive refresh and a real provider sync without logging tokens/personal data.
+
+6. FINDING THE EXACT IMPLEMENTATION
+
+All paths are relative to the source repository above. Use the final versions at
+29e287a, not an intermediate commit that lacks the later editor fixes.
+
+To inspect the entire inclusive range without changing either repository:
+
+  git -C "C:\Users\gnoua\Desktop_backup\APP_DEV\ClaraPortfolio\Clara_SM_Dashboard" diff 03261ed 29e287a
+
+To inspect one module, append -- followed by its relative path, for example:
+
+  git -C "C:\Users\gnoua\Desktop_backup\APP_DEV\ClaraPortfolio\Clara_SM_Dashboard" diff 03261ed 29e287a -- scripts/lib/social-post-manual.mjs
+
+The inventory below covers all 45 changed files in this range. "Merge" means the
+same path currently exists in the target, not that it is compatible. "New" means
+that exact target path was absent, not that it can be copied without adaptation.
+Source documentation is reference material; merge useful decisions into target
+docs rather than replacing its much broader app documentation.
+
+7. COMPLETE CHANGED-FILE INVENTORY
+
+Inventory appended below from the actual Git diff, with destination path checks.
+
+  [M] APP_SCHEMA.md
+      Reference documentation
+  [M] CHANGELOG.md
+      Reference documentation
+  [M] DECISIONS.md
+      Reference documentation
+  [M] README.md
+      Reference documentation
+  [M] VALIDATION_LOG.md
+      Reference documentation
+  [M] scripts/lib/company-theme.mjs
+      New path; adapt dependencies
+  [A] scripts/lib/social-audience-manual.mjs
+      New path; adapt dependencies
+  [A] scripts/lib/social-audience-manual.test.mjs
+      New path; adapt dependencies
+  [M] scripts/lib/social-bands.mjs
+      Merge existing target file
+  [M] scripts/lib/social-bands.test.mjs
+      Merge existing target file
+  [M] scripts/lib/social-figures.mjs
+      Merge existing target file
+  [M] scripts/lib/social-figures.test.mjs
+      Merge existing target file
+  [A] scripts/lib/social-post-manual.mjs
+      New path; adapt dependencies
+  [A] scripts/lib/social-post-manual.test.mjs
+      New path; adapt dependencies
+  [M] scripts/lib/social-report-data.mjs
+      Merge existing target file
+  [M] scripts/lib/social-report-data.test.mjs
+      Merge existing target file
+  [M] scripts/lib/social-report.mjs
+      Merge existing target file
+  [M] scripts/migrate.mjs
+      New path; adapt dependencies
+  [M] scripts/verify-browser.mjs
+      New path; adapt dependencies
+  [A] supabase/migrations/100_non_followers_bands.sql
+      New path; adapt dependencies
+  [A] supabase/migrations/97_tiktok_post_series.sql
+      New path; adapt dependencies
+  [A] supabase/migrations/98_manual_post_metrics.sql
+      New path; adapt dependencies
+  [A] supabase/migrations/99_manual_audience.sql
+      New path; adapt dependencies
+  [M] tests/database-isolation.test.mjs
+      New path; adapt dependencies
+  [A] web/app/api/insights/social/manual-audience/route.ts
+      New path; adapt dependencies
+  [A] web/app/api/insights/social/manual-metrics/route.ts
+      New path; adapt dependencies
+  [M] web/app/globals.css
+      Merge existing target file
+  [M] web/app/workspace.css
+      New path; adapt dependencies
+  [M] web/components/insights/BandsEditor.tsx
+      Merge existing target file
+  [M] web/components/insights/EngagementBasisSelect.tsx
+      Merge existing target file
+  [A] web/components/insights/ManualMetricCell.tsx
+      New path; adapt dependencies
+  [A] web/components/insights/SocialAudience.module.css
+      New path; adapt dependencies
+  [A] web/components/insights/SocialAudience.tsx
+      New path; adapt dependencies
+  [M] web/components/insights/SocialHeader.tsx
+      Merge existing target file
+  [M] web/components/insights/SocialPostsTable.tsx
+      Merge existing target file
+  [M] web/components/insights/SocialTrend.tsx
+      Merge existing target file
+  [M] web/components/insights/SocialView.module.css
+      Merge existing target file
+  [M] web/components/insights/SocialView.tsx
+      Merge existing target file
+  [M] web/components/insights/TimeSeriesChart.tsx
+      Merge existing target file
+  [M] web/lib/i18n/messages/insights-social.ts
+      Merge existing target file
+  [M] web/lib/server/insights/social-report-service.ts
+      Merge existing target file
+  [M] web/lib/server/insights/social-service.ts
+      Merge existing target file
+  [A] web/lib/server/social-audience-manual-service.ts
+      New path; adapt dependencies
+  [M] web/lib/server/social-post-manual-service.ts
+      Merge existing target file
+  [M] web/lib/social-types.ts
+      Merge existing target file
+
+End of handoff. No credentials, environment files or live account data included.

@@ -14,6 +14,13 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 
 
+## Shop switcher: a menu of the other shops' dashboards (2026-10-12)
+
+- **Why.** A second shop (Barbargould) gets its own deployment, Supabase project and accounts, so there is no shared session to switch. The switcher is a list of links, not a context change.
+- **Changed.** `scripts/lib/shop-links.mjs` parses `SHOP_LINKS` (`Name|https://host`, comma separated; malformed or non-http(s) entries skipped, duplicates dropped) and marks the one matching the request host. `/api/auth/me` returns it as `shops`; `UserMenu` draws « Switch shop » with the others, only when there are any. Strings in `en.ts` / `fr.ts`.
+- **Proven.** `shop-links.test.mjs` (6 tests) pass; `tsc` clean. **Not proven in a browser** (not checked: Chrome use is limited) or with `SHOP_LINKS` set on a real deployment.
+- **To use.** Set the same `SHOP_LINKS` on both Vercel projects; unset, nothing changes. Signing in again on the other shop is expected.
+
 ## Egress: the drafting passes stop re-reading what they refused (2026-10-11)
 
 - **Measured first.** A `pg_stat_statements` comparison over an hour of production, then each repeated read sized on live rows. The two drafting passes were ~270 MB of the ~450 MB a day: 210 kB a poll, mostly the full case files of the 28 cases waiting on us and the threads of 6 candidates refused every poll.

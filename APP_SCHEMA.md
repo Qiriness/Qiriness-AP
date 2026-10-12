@@ -526,6 +526,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |       |                                # through the nightly's own query and
 |       |                                # mapper, with a replay guard and an
 |       |                                # out-of-order guard; then the snooze wake
+|       |-- shop-links.mjs               # SHOP_LINKS (`Name|https://host`, comma separated)
+|       |                                # -> the other shops' dashboards; /api/auth/me
+|       |                                # returns them, UserMenu draws « Switch shop »
+|       |                                # as plain links (separate deployments, accounts)
 |       |-- dashboard-auth.mjs           # isomorphic: ROLES, what each may open
 |       |                                # (canAccessPath), and the Supabase Auth
 |       |                                # client — ES256 check locally, then

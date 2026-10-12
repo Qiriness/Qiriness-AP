@@ -11,6 +11,7 @@ export const fr: Record<MessageKey, string> = {
   "common.language": "Langue",
   "common.signOut": "Se déconnecter",
   "common.signingOut": "Déconnexion…",
+  "shop.switch": "Changer de boutique",
   "nav.home": "Accueil",
   "nav.insights": "Analyses",
   "nav.tickets": "Tickets",

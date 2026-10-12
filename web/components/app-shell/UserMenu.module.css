@@ -118,6 +118,21 @@
   cursor: default;
 }
 
+.shops {
+  padding-bottom: var(--space-1);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--space-1);
+}
+.shopsLabel {
+  display: block;
+  padding: var(--space-2) var(--space-3) var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+}
+a.menuItem {
+  text-decoration: none;
+}
+
 @media (max-width: 720px) {
   .identity {
     display: none;
