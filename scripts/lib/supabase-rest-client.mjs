@@ -168,6 +168,16 @@ export async function supabaseSelect(client, table, filters, select = '*', optio
  * A stable sort is required, not optional: without an ORDER BY, Postgres may
  * return rows in a different order per request, which makes offset paging drop
  * some rows and repeat others. Defaults to `id.asc`.
+ *
+ * KEYSET, NOT OFFSET, ON THE DEFAULT ORDER. Each page asks for `id > last id
+ * seen` instead of skipping `from` rows. An offset makes Postgres read and
+ * discard every earlier row, so a full pass costs O(n²): paging 61k customers
+ * this way was 71% of all buffer reads in production (501M blocks, 1,699 s of
+ * database time, 2026-08-07 → 10-12). Keyset is O(n) through the primary key,
+ * and cannot skip or repeat a row when the table changes mid-read. A caller
+ * that sorts on anything else, or filters on `id` itself, keeps offset paging.
+ * When the select leaves `id` out, it is fetched for the cursor and removed, so
+ * every caller gets back exactly the columns it asked for.
  */
 export async function supabaseSelectAll(client, table, filters, select = '*', options = {}) {
   const order = options.order || 'id.asc';
@@ -175,17 +185,24 @@ export async function supabaseSelectAll(client, table, filters, select = '*', op
   // Never ask for more than the caller will keep: a limit of 500 used to fetch
   // a full 1000-row page and throw half of it away.
   const pageSize = Math.min(options.pageSize || 1000, max);
+  const keyset = order === 'id.asc' && !Object.hasOwn(filters || {}, 'id');
+  const selectsId = topLevelColumns(select).some((column) => column === 'id' || column === '*');
+  const requested = keyset && !selectsId ? `${select},id` : select;
   const rows = [];
+  let lastId = null;
 
   for (let from = 0; rows.length < max; ) {
-    const searchParams = new URLSearchParams({ select, order });
+    const searchParams = new URLSearchParams({ select: requested, order });
     applyFilters(searchParams, filters);
+    if (keyset && lastId !== null) {
+      searchParams.set('id', `gt.${lastId}`);
+    }
 
     const response = await supabaseFetch(`${client.baseUrl}/${table}?${searchParams.toString()}`, {
       method: 'GET',
       headers: supabaseHeaders(client, {
         'Range-Unit': 'items',
-        Range: `${from}-${from + pageSize - 1}`
+        Range: keyset ? `0-${pageSize - 1}` : `${from}-${from + pageSize - 1}`
       })
     });
 
@@ -198,11 +215,36 @@ export async function supabaseSelectAll(client, table, filters, select = '*', op
       break;
     }
 
-    rows.push(...payload);
+    if (keyset) {
+      lastId = payload[payload.length - 1].id;
+      if (lastId === undefined || lastId === null) {
+        throw new Error(`Supabase select from ${table}: keyset paging needs an id on every row`);
+      }
+    }
+    rows.push(...(keyset && !selectsId ? payload.map(({ id, ...rest }) => rest) : payload));
     from += payload.length;
   }
 
   return rows.length > max ? rows.slice(0, max) : rows;
+}
+
+/** The top-level column list of a PostgREST `select`, ignoring embedded resources' inner lists. */
+function topLevelColumns(select) {
+  const columns = [];
+  let depth = 0;
+  let current = '';
+  for (const char of String(select)) {
+    if (char === '(') depth += 1;
+    if (char === ')') depth -= 1;
+    if (char === ',' && depth === 0) {
+      columns.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  columns.push(current.trim());
+  return columns;
 }
 
 /**

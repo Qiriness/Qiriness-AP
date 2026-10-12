@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
+import { postgrestPage } from '../../../scripts/lib/postgrest-paging-fake.mjs';
 import { createCustomerLookup } from './customer-lookup.mjs';
 
 const MARIE = {
@@ -293,8 +294,9 @@ function stampedSupabase() {
       return { ok: true, json: async () => [{ updated_at: state.stamp }] };
     }
     if (parsed.searchParams.get('select') === 'id,email') {
-      state.scans += 1;
-      return { ok: true, json: async () => CUSTOMERS.map(({ id, email }) => ({ id, email })) };
+      if (!parsed.searchParams.has('id')) state.scans += 1; // a scan is its first page
+      const rows = CUSTOMERS.map(({ id, email }) => ({ id, email }));
+      return { ok: true, json: async () => postgrestPage(url, init, rows) };
     }
     return { ok: true, json: async () => CUSTOMERS.filter((c) => c.id === parsed.searchParams.get('id')?.replace('eq.', '')) };
   };

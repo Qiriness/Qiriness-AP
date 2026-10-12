@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { postgrestPage } from '../../../scripts/lib/postgrest-paging-fake.mjs';
 import { readStockByShopifyIds, stockOfAll } from './stock-by-id.mjs';
 
 const A = 'gid://shopify/Product/9001';
@@ -10,8 +11,7 @@ const B = 'gid://shopify/Product/9002';
 function stubProducts(rows) {
   const original = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
-    const from = Number(String(init?.headers?.Range || '0-999').split('-')[0]);
-    const page = from === 0 ? rows : [];
+    const page = postgrestPage(url, init, rows);
     return { ok: true, status: 200, async json() { return page; }, async text() { return JSON.stringify(page); } };
   };
   return () => { globalThis.fetch = original; };

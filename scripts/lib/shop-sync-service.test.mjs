@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { postgrestPage } from './postgrest-paging-fake.mjs';
 import { syncShop } from './shop-sync-service.mjs';
 import { readRetentionPolicy } from './order-retention.mjs';
 
@@ -54,10 +55,9 @@ function withFetch(handler, run) {
  * ever, which is exactly what the first version of this file did. A real
  * PostgREST honours the Range header and runs out; this does the same.
  */
-const ok = (body) => async (_url, init) => {
-  const range = init?.headers?.Range;
-  const firstPage = !range || range.startsWith('0-');
-  return new Response(JSON.stringify(firstPage ? body : []), {
+const ok = (body) => async (url, init) => {
+  const paged = Boolean(init?.headers?.Range) && Array.isArray(body);
+  return new Response(JSON.stringify(paged ? postgrestPage(url, init, body) : body), {
     status: 200,
     headers: { 'Content-Type': 'application/json' }
   });

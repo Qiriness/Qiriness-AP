@@ -6,6 +6,7 @@ import {
   processComplianceWebhook,
   verifyShopifyWebhookHmac
 } from './shopify-compliance-webhooks.mjs';
+import { postgrestPage } from './postgrest-paging-fake.mjs';
 
 test('verifyShopifyWebhookHmac accepts valid raw body signatures', () => {
   const rawBody = Buffer.from(JSON.stringify({ ok: true }));
@@ -69,7 +70,7 @@ test('processComplianceWebhook hard deletes matching customer rows idempotently'
       return jsonResponse([{ id: 'privacy-id', request_key: 'shopify-webhook:webhook-1' }]);
     }
     if (options.method === 'GET' && String(url).includes('/customers?')) {
-      return pagedResponse(options, [
+      return pagedResponse(url, options, [
         { id: 'customer-row-id', legacy_resource_id: '191167', email: 'jane@example.com', phone: '+33123456789' }
       ]);
     }
@@ -145,7 +146,7 @@ test('processComplianceWebhook finds a customer beyond the first 1000 rows', asy
       return jsonResponse([{ id: 'privacy-id', request_key: 'shopify-webhook:webhook-2' }]);
     }
     if (options.method === 'GET' && String(url).includes('/customers?')) {
-      return pagedResponse(options, customers);
+      return pagedResponse(url, options, customers);
     }
     if (options.method === 'DELETE' && String(url).includes('/customers?')) {
       deletes.push(String(url));
@@ -225,10 +226,9 @@ test('processComplianceWebhook skips completed duplicate deliveries', async () =
   }
 });
 
-/** Serves `rows` the way PostgREST does: the `Range` asked for, capped at 1000. */
-function pagedResponse(options, rows) {
-  const [from, to] = String(options.headers?.Range ?? '0-999').split('-').map(Number);
-  return jsonResponse(rows.slice(from, Math.min(to, from + 999) + 1));
+/** Serves `rows` the way PostgREST does: id order, keyset cursor, `Range`, capped at 1000. */
+function pagedResponse(url, options, rows) {
+  return jsonResponse(postgrestPage(url, options, rows));
 }
 
 function jsonResponse(payload) {

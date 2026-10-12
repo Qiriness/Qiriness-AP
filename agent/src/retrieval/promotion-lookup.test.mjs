@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { postgrestPage } from '../../../scripts/lib/postgrest-paging-fake.mjs';
 import { createPromotionLookup } from './promotion-lookup.mjs';
 
 // `listActive` answers "quelles promos avez-vous ?", and it once answered it per
@@ -19,8 +20,7 @@ import { createPromotionLookup } from './promotion-lookup.mjs';
 function stubFetch(getRows) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
-    const from = Number(String(init?.headers?.Range || '0-999').split('-')[0]);
-    const rows = from === 0 ? getRows() : [];
+    const rows = postgrestPage(url, init, getRows());
     return {
       ok: true,
       status: 200,
@@ -571,10 +571,9 @@ test('an outcome reference that resolves to nothing is refused, not approximated
 function lookupOverTables({ promotions = [], orders = [], collections = [], products = [] }) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
-    const from = Number(String(init?.headers?.Range || '0-999').split('-')[0]);
     const path = String(url);
     const table = path.includes('/orders') ? orders : path.includes('/advice_collections') ? collections : path.includes('/products') ? products : promotions;
-    const rows = from === 0 ? table : [];
+    const rows = postgrestPage(url, init, table);
     return { ok: true, status: 200, async json() { return rows; }, async text() { return JSON.stringify(rows); } };
   };
   const lookup = createPromotionLookup({ supabase: { baseUrl: 'https://example.test/rest/v1', key: 'k' }, shopId: 's1', logger: null });

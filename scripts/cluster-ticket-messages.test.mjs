@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { report, toClusterRecords } from './cluster-ticket-messages.mjs';
+import { postgrestPage } from './lib/postgrest-paging-fake.mjs';
 import { buildClusterRows } from './lib/cluster-store.mjs';
 
 // The report is the source of the stored map, so what is tested here is that
@@ -52,9 +53,8 @@ function stubSupabase(rowsByTable) {
 
   globalThis.fetch = async (url, init) => {
     const table = new URL(String(url)).pathname.split('/').pop();
-    const from = Number(String(init?.headers?.Range || '0-').split('-')[0]);
     const rows = rowsByTable[table] || [];
-    return { ok: true, status: 200, json: async () => rows.slice(from) };
+    return { ok: true, status: 200, json: async () => postgrestPage(url, init, rows) };
   };
 
   return {
