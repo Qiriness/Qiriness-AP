@@ -61,11 +61,10 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # investigation · resolution · routing · drafting · cases · casework ·
 |                    # outbound (THE ONLY SENDER) · lifecycle · reports · tools (one CLI per
 |                    # pass) · testing (rehearsal harness). eval/: offline scoring
-`-- supabase/migrations/  # BASELINE files by domain, run in order against an EMPTY database,
-                     # then numbered forward migrations. _shared.test.mjs: cross-file
-                     # invariants; each file has a sibling .test.mjs. _live.test.mjs APPLIES
-                     # the baseline into a throwaway schema; only with SUPABASE_TEST_DB_URL
-                     # (the dev project), never the app database
+`-- supabase/        # migrations/00_baseline.sql: the whole schema, GENERATED from production
+                     # (npm run db:generate:baseline; proven by db:check:baseline), its
+                     # catalogue JSON and tests; archive/ = the old 01..96 chain, never run.
+                     # seeds/: data a new deployment needs, after its first shop sync
 ```
 
 ## Database domains

@@ -88,7 +88,7 @@ export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
  * material, not something anyone emails support about, so they can never be a
  * forwarding target. `other`, the categoriser's catch-all, is a ticket subject
  * only: an article with no named subject is a general FAQ. Mirrors the check
- * constraint in supabase/migrations/04_support.sql.
+ * constraint in supabase/migrations/00_baseline.sql.
  */
 export const TICKET_CATEGORIES: KnowledgeCategory[] = [
   ...KNOWLEDGE_CATEGORIES.filter((category) => category !== "faq" && category !== "brand_story"),
@@ -151,7 +151,7 @@ export interface ForwardingConfig {
 /**
  * The one fixed knowledge slot: the Brand voice (BrandVoiceWorkspace), which
  * every draft is written with. Mirrors knowledge_documents_core_topic_check in
- * supabase/migrations/03_knowledge.sql. The « Core setup » checklist that
+ * supabase/migrations/00_baseline.sql. The « Core setup » checklist that
  * listed order policies, delivery & returns, confidentiality, locations and
  * FAQs was removed 2026-10-01: the company's policies live in Agent Setup →
  * Policies (company_policies), read by key rather than found by search.
@@ -298,7 +298,7 @@ export type SaveState = "saved" | "unsaved" | "saving";
 
 /* ---------------------------------------------------------------- tickets */
 
-/** Mirrors tickets_status_check in supabase/migrations/04_support.sql. */
+/** Mirrors tickets_status_check in supabase/migrations/00_baseline.sql. */
 export type TicketStatus =
   | "open"
   | "awaiting_customer"
@@ -1348,7 +1348,7 @@ export interface TicketManualReply {
   at: string | null;
 }
 
-/** Mirrors outbound_actions_state_check in supabase/migrations/07_drafting.sql. */
+/** Mirrors outbound_actions_state_check in supabase/migrations/00_baseline.sql. */
 export interface TicketDraftOutbound {
   state: "approved" | "draft_created" | "send_requested" | "sent_confirmed" | "cancelled" | "failed";
   /** Why it was cancelled (a pre-send check) or why it failed. */
@@ -1357,7 +1357,7 @@ export interface TicketDraftOutbound {
 }
 
 /**
- * Mirrors ticket_drafts_status_check in supabase/migrations/07_drafting.sql.
+ * Mirrors ticket_drafts_status_check in supabase/migrations/00_baseline.sql.
  * `sent` is written once the outbound worker has read the reply back from
  * Sent Items. `stale` is set by the fold when the case moved on since the
  * draft was written (stage 6).
@@ -1439,7 +1439,7 @@ export interface TicketStats {
 // ---------------------------------------------------------------- Insights
 //
 // The analytics panels, read over a date range. Every figure is the mapped form
-// of one row from a ranged function in `supabase/migrations/06_analytics.sql`
+// of one row from a ranged function in `supabase/migrations/00_baseline.sql`
 // (RANGED READS) — the panels never aggregate rows in the browser or the
 // server, because PostgREST caps a response at 1,000 rows and pages an
 // unordered query in overlapping slices. What IS decided in TypeScript is

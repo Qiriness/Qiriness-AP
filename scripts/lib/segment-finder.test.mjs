@@ -96,10 +96,11 @@ test('the RPC arguments carry the groups, the window and the member cap', () => 
 test('every metric and operator offered here is one the SQL function understands', () => {
   // Two vocabularies in two languages: if they drift, a condition the screen
   // offers fails closed in SQL and quietly matches nobody.
-  const sql = readFileSync(new URL('../../supabase/migrations/06_analytics.sql', import.meta.url), 'utf8');
-  const start = sql.indexOf('create or replace function public.customer_segment_find(');
-  assert.ok(start >= 0, 'customer_segment_find is not in 06');
-  const statement = sql.slice(start, sql.indexOf('\n$$;', start));
+  // The function as production has it, from the baseline's catalogue description.
+  const catalog = JSON.parse(readFileSync(new URL('../../supabase/migrations/00_baseline.catalog.json', import.meta.url), 'utf8'));
+  const key = Object.keys(catalog.functions).find((name) => name.startsWith('public.customer_segment_find('));
+  assert.ok(key, 'customer_segment_find is not in the schema');
+  const statement = catalog.functions[key].def;
   for (const metric of SEGMENT_METRICS) assert.ok(statement.includes(`when '${metric.id}' then`), metric.id);
   for (const operator of SEGMENT_OPERATORS) assert.ok(statement.includes(`when '${operator.id}' then`), operator.id);
 });

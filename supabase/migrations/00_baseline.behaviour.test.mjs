@@ -1,0 +1,332 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { buildFresh } from '../../scripts/check-baseline.mjs';
+
+/**
+ * The baseline, actually applied — and its projections asserted on rows.
+ *
+ * WHY THIS EXISTS. A text assertion over SQL is worth nothing for "does this view
+ * return the row we think it does": a join can be wrong in every way and still
+ * contain the words a regex looks for. This seeds the smallest population that
+ * can tell each projection right from wrong and checks what comes back.
+ *
+ * ON AN IN-PROCESS POSTGRES (PGlite), built from 00_baseline.sql and the numbered
+ * migrations after it — the same build `npm run db:check:baseline` proves equal
+ * to production. It used to need SUPABASE_TEST_DB_URL and was skipped whenever
+ * that was unset (nearly always); it now runs in every `npm test` and never
+ * touches a real database. Ported from the archived _live.test.mjs (2026-10-13),
+ * assertions unchanged.
+ */
+test('the baseline applies, and its projections return what they claim', async (t) => {
+  const schema = 'public';
+  const db = await buildFresh();
+  const client = { query: async (text, params) => ({ rows: (await db.query(text, params)).rows }) };
+  try {
+    // ---------------------------------------------------------------- seed
+    //
+    // The smallest population that can tell each projection right from wrong:
+    // two tickets on one shop, one of them soft-deleted; a thread with an
+    // outbound message BEFORE the first inbound one, so "first inbound" cannot
+    // be satisfied by "first message"; and a soft-deleted message, so the count
+    // and the first-inbound pick both have something to exclude.
+    const { rows: [shop] } = await client.query(
+      `insert into ${schema}.shops (shop_domain) values ('projections.test') returning id`
+    );
+    const { rows: [customer] } = await client.query(
+      `insert into ${schema}.customers (shop_id, shopify_customer_id, display_name, first_name, last_name, rfm_group)
+       values ($1, 'gid://c/1', 'Ada Lovelace', 'Ada', 'Lovelace', 'CHAMPIONS') returning id`,
+      [shop.id]
+    );
+    // Every thread has a case (61_cases.sql); each of these is its own.
+    const newCase = async () =>
+      (await client.query(`insert into ${schema}.cases (shop_id) values ($1) returning id`, [shop.id])).rows[0].id;
+    const liveCase = await newCase();
+    const { rows: [live] } = await client.query(
+      `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, customer_id, status, case_id)
+       values ($1, 'conv-live', 'Où est ma commande ?', $2, 'open', $3) returning id`,
+      [shop.id, customer.id, liveCase]
+    );
+    const { rows: [archived] } = await client.query(
+      `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, status, archived_at, case_id)
+       values ($1, 'conv-archived', 'Archivé', 'open', now(), $2) returning id`,
+      [shop.id, await newCase()]
+    );
+    const { rows: [erased] } = await client.query(
+      `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, deleted_at, case_id)
+       values ($1, 'conv-erased', 'Effacé', now(), $2) returning id`,
+      [shop.id, await newCase()]
+    );
+
+    const message = (ticketId, id, direction, receivedAt, body, deleted = null) =>
+      client.query(
+        `insert into ${schema}.ticket_messages
+           (ticket_id, shop_id, graph_message_id, graph_conversation_id, direction, subject, body_text, received_at, deleted_at)
+         values ($1, $2, $3, 'conv-live', $4, 'Où est ma commande ?', $5, $6, $7)`,
+        [ticketId, shop.id, id, direction, body, receivedAt, deleted]
+      );
+
+    // Our own reply lands first in time: the thread was opened by the desk.
+    await message(live.id, 'm-out', 'outbound', '2026-01-01T09:00:00Z', 'notre réponse');
+    await message(live.id, 'm-in-1', 'inbound', '2026-01-02T09:00:00Z', 'commande #4854 svp');
+    await message(live.id, 'm-in-2', 'inbound', '2026-01-03T09:00:00Z', 'toujours rien');
+    await message(live.id, 'm-gone', 'inbound', '2026-01-01T10:00:00Z', 'effacé', new Date().toISOString());
+
+    await client.query(
+      `update ${schema}.ticket_messages
+       set sent_at = received_at
+       where direction = 'outbound'`
+    );
+
+    await client.query(
+      `insert into ${schema}.orders (shop_id, shopify_order_id, name, order_number) values
+         ($1, 'gid://o/1', '#4716', 4716),
+         ($1, 'gid://o/2', '#6770', 6770),
+         ($1, 'gid://o/3', '#5000', null)`,
+      [shop.id]
+    );
+    await client.query(
+      `insert into ${schema}.orders (shop_id, shopify_order_id, name, order_number, deleted_at)
+       values ($1, 'gid://o/4', '#9999', 9999, now())`,
+      [shop.id]
+    );
+
+    // ------------------------------------------------------------ assertions
+
+    await t.test('ticket_message_counts counts live messages only', async () => {
+      const { rows } = await client.query(
+        `select ticket_id, message_count, inbound_count, latest_inbound_at, latest_outbound_at
+         from ${schema}.ticket_message_counts where shop_id = $1`,
+        [shop.id]
+      );
+      assert.equal(rows.length, 1, 'only the ticket with messages should appear');
+      assert.equal(rows[0].ticket_id, live.id);
+      // 4 written, 1 soft-deleted. Both directions count: the dashboard shows
+      // the size of the conversation, not the size of the customer's half.
+      assert.equal(Number(rows[0].message_count), 3);
+      assert.equal(Number(rows[0].inbound_count), 2);
+      assert.ok(rows[0].latest_inbound_at, 'latest inbound timestamp should be present');
+      assert.ok(rows[0].latest_outbound_at, 'latest outbound timestamp should be present');
+    });
+
+    await t.test('ticket_first_inbound picks the earliest inbound, ignoring ours and the erased', async () => {
+      const { rows } = await client.query(
+        `select ticket_id, message_id, body_text from ${schema}.ticket_first_inbound where shop_id = $1`,
+        [shop.id]
+      );
+      assert.equal(rows.length, 1);
+      // NOT m-out (outbound, and earlier), NOT m-gone (soft-deleted, and
+      // earlier than the message that should win), NOT m-in-2 (later).
+      assert.equal(rows[0].body_text, 'commande #4854 svp');
+    });
+
+    await t.test('ticket_queue joins the customer and the count, and hides erased tickets', async () => {
+      const { rows } = await client.query(
+        `select id, subject, customer_display_name, customer_rfm_group, message_count,
+                inbound_count, waiting_since, archived_at
+         from ${schema}.ticket_queue where shop_id = $1 order by subject`,
+        [shop.id]
+      );
+      const ids = rows.map((r) => r.id);
+      assert.ok(ids.includes(live.id), 'the live ticket is missing');
+      assert.ok(ids.includes(archived.id), 'archiving must not hide a ticket from the queue');
+      assert.ok(!ids.includes(erased.id), 'a soft-deleted ticket reached the queue');
+
+      const linked = rows.find((r) => r.id === live.id);
+      assert.equal(linked.customer_display_name, 'Ada Lovelace');
+      assert.equal(linked.customer_rfm_group, 'CHAMPIONS');
+      assert.equal(Number(linked.message_count), 3);
+      assert.equal(Number(linked.inbound_count), 2);
+      assert.ok(linked.waiting_since, 'the latest inbound is unanswered');
+
+      // An unlinked ticket with no messages: the join must yield nulls and a
+      // zero, not drop the row.
+      const unlinked = rows.find((r) => r.id === archived.id);
+      assert.equal(unlinked.customer_display_name, null);
+      assert.equal(Number(unlinked.message_count), 0);
+      assert.equal(Number(unlinked.inbound_count), 0);
+      assert.equal(unlinked.waiting_since, null);
+    });
+
+    await t.test('a case of two threads is one row in case_facts, and one lead in the queue', async () => {
+      // The customer writes again on a NEW thread, later, about the same
+      // problem: the second thread joins the first one's case.
+      const { rows: [second] } = await client.query(
+        `insert into ${schema}.tickets (shop_id, graph_conversation_id, subject, customer_id, status, case_id, level, happiness)
+         values ($1, 'conv-second', 'Toujours rien', $2, 'open', $3, 3, 4) returning id`,
+        [shop.id, customer.id, liveCase]
+      );
+      await client.query(
+        `insert into ${schema}.ticket_messages
+           (ticket_id, shop_id, graph_message_id, graph_conversation_id, direction, subject, body_text, received_at)
+         values ($1, $2, 'm-second', 'conv-second', 'inbound', 'Toujours rien', 'je relance', '2026-01-05T09:00:00Z')`,
+        [second.id, shop.id]
+      );
+      await client.query(
+        `update ${schema}.tickets set first_message_at = '2026-01-05T09:00:00Z', last_message_at = '2026-01-05T09:00:00Z' where id = $1`,
+        [second.id]
+      );
+      await client.query(
+        `update ${schema}.tickets set first_message_at = '2026-01-01T09:00:00Z', last_message_at = '2026-01-03T09:00:00Z' where id = $1`,
+        [live.id]
+      );
+      await client.query(`update ${schema}.cases set reply_thread_id = $1 where id = $2`, [second.id, liveCase]);
+
+      const { rows: facts } = await client.query(`select * from ${schema}.case_facts where case_id = $1`, [liveCase]);
+      assert.equal(facts.length, 1);
+      assert.equal(Number(facts[0].thread_count), 2);
+      assert.equal(facts[0].lead_ticket_id, second.id, 'the reply thread leads the case');
+      assert.equal(facts[0].level, 3, 'the highest level of any thread');
+      assert.equal(facts[0].happiness, 4, 'the worst mood of any thread');
+      assert.equal(facts[0].status, 'open');
+      // First inbound (01-02) to our first reply after it: none, ours was before.
+      assert.equal(facts[0].reply_hours, null);
+
+      const { rows: queue } = await client.query(
+        `select id, is_case_lead, case_thread_count, case_inbound_count, case_level, case_waiting_since
+         from ${schema}.ticket_queue where case_id = $1`,
+        [liveCase]
+      );
+      assert.equal(queue.length, 2);
+      const lead = queue.find((row) => row.is_case_lead);
+      assert.equal(lead.id, second.id);
+      assert.equal(queue.filter((row) => row.is_case_lead).length, 1, 'exactly one lead per case');
+      assert.equal(Number(lead.case_thread_count), 2);
+      // Two inbound on the first thread, one on the second: the case's chase count.
+      assert.equal(Number(lead.case_inbound_count), 3);
+      assert.ok(lead.case_waiting_since, 'the case still waits on us');
+
+      // Insights count the case once, not its two threads. The archived ticket
+      // has no first_message_at and falls in no range.
+      const { rows: [summary] } = await client.query(
+        `select tickets from ${schema}.insights_support_summary($1, '2025-12-01', '2026-02-01', 'UTC')`,
+        [shop.id]
+      );
+      assert.equal(Number(summary.tickets), 1, 'two threads of one case are one case');
+    });
+
+    await t.test('order_number_range reports the live extremes, in one row', async () => {
+      const { rows } = await client.query(`select * from ${schema}.order_number_range($1)`, [shop.id]);
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].min_order_number, 4716);
+      // 9999 is soft-deleted and must not set the ceiling; the null-numbered
+      // order must not sink the floor.
+      assert.equal(rows[0].max_order_number, 6770);
+    });
+
+    await t.test('order_number_range answers null for a shop with no orders', async () => {
+      const { rows: [empty] } = await client.query(
+        `insert into ${schema}.shops (shop_domain) values ('empty.test') returning id`
+      );
+      const { rows } = await client.query(`select * from ${schema}.order_number_range($1)`, [empty.id]);
+      // One row of nulls, not zero rows: the caller reads "we cannot judge
+      // whether a quoted number is ours", which is different from a range of 0.
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].min_order_number, null);
+      assert.equal(rows[0].max_order_number, null);
+    });
+
+    // ------------------------------------------------------- ranged reads
+    //
+    // Four orders either side of midnight in Paris (UTC+2 in summer). In UTC,
+    // A and B share 31 July; in Paris, A is 1 August. That single order is the
+    // whole reason the functions take a timezone.
+    const { rows: [ranges] } = await client.query(
+      `insert into ${schema}.shops (shop_domain) values ('ranges.test') returning id`
+    );
+    await client.query(
+      `insert into ${schema}.orders
+         (shop_id, shopify_order_id, name, processed_at, total_price, total_refunded, sales_channel_handle, cancelled_at)
+       values
+         ($1, 'gid://r/a', '#A', '2026-07-31T22:30:00Z', 100, 0, 'web', null),
+         ($1, 'gid://r/b', '#B', '2026-07-31T21:30:00Z', 50, 0, 'amazon', null),
+         ($1, 'gid://r/c', '#C', '2026-08-01T10:00:00Z', 30, 10, 'web', null),
+         ($1, 'gid://r/d', '#D', '2026-08-01T11:00:00Z', 999, 0, 'web', '2026-08-01T12:00:00Z')`,
+      [ranges.id]
+    );
+    const window = [ranges.id, '2026-07-31T00:00:00', '2026-08-02T00:00:00', 'Europe/Paris'];
+
+    await t.test('series bucket on the shop clock, not the database one', async () => {
+      const { rows } = await client.query(
+        `select bucket::text as bucket, orders, revenue
+         from ${schema}.insights_orders_series($1, $2, $3, $4, 'day')`,
+        window
+      );
+      assert.deepEqual(
+        rows.map((r) => [r.bucket, Number(r.orders)]),
+        [['2026-07-31 00:00:00', 1], ['2026-08-01 00:00:00', 3]]
+      );
+      // A's 100 plus C net of its refund; the cancelled D earns nothing.
+      assert.equal(Number(rows[1].revenue), 120);
+    });
+
+    await t.test('the channel filters keep and drop by handle', async () => {
+      const summary = async (channels, notChannels) =>
+        (
+          await client.query(
+            `select * from ${schema}.insights_orders_summary($1, $2, $3, $4, $5, $6)`,
+            [...window, channels, notChannels]
+          )
+        ).rows[0];
+
+      const all = await summary(null, null);
+      assert.equal(Number(all.orders), 4);
+      assert.equal(Number(all.cancelled_orders), 1);
+      assert.equal(Number(all.revenue), 170);
+
+      assert.equal(Number((await summary(['amazon'], null)).orders), 1);
+      const shopify = await summary(null, ['amazon']);
+      assert.equal(Number(shopify.orders), 3);
+      assert.equal(Number(shopify.revenue), 120);
+    });
+
+    await t.test('the VIP rule needs BOTH conditions, each strictly exceeded, inside the window', async () => {
+      // Four customers, rule "> €100 and > 1 order in 12 months":
+      //   both    — 2 orders, €150            -> VIP
+      //   spender — 1 order, €500             -> not: one condition is not both
+      //   regular — 3 orders, €60             -> not: the other one
+      //   stale   — 2 orders, €300, 2 years ago -> not: outside the window
+      //   edge    — 2 orders, exactly €100    -> not: "more than" is strict
+      const people = ['both', 'spender', 'regular', 'stale', 'edge'];
+      const ids = {};
+      for (const name of people) {
+        const { rows: [row] } = await client.query(
+          `insert into ${schema}.customers (shop_id, shopify_customer_id, display_name) values ($1, $2, $3) returning id`,
+          [ranges.id, `gid://vip/${name}`, name]
+        );
+        ids[name] = row.id;
+      }
+      const orders = [
+        ['both', 100, 'now()'], ['both', 50, 'now()'],
+        ['spender', 500, 'now()'],
+        ['regular', 20, 'now()'], ['regular', 20, 'now()'], ['regular', 20, 'now()'],
+        ['stale', 150, "now() - interval '2 years'"], ['stale', 150, "now() - interval '2 years'"],
+        ['edge', 50, 'now()'], ['edge', 50, 'now()']
+      ];
+      for (const [i, [name, price, at]] of orders.entries()) {
+        await client.query(
+          `insert into ${schema}.orders (shop_id, shopify_order_id, shopify_customer_id, name, processed_at, total_price, sales_channel_handle)
+           values ($1, $2, $3, $4, ${at}, $5, 'web')`,
+          [ranges.id, `gid://vip-order/${i}`, `gid://vip/${name}`, `#V${i}`, price]
+        );
+      }
+      const { rows } = await client.query(
+        `select customer_id from ${schema}.vip_customers($1, 100, 1, 12, array['amazon'])`,
+        [ranges.id]
+      );
+      assert.deepEqual(rows.map((r) => r.customer_id), [ids.both]);
+    });
+
+    await t.test('an empty range is one row of zeros, never no row', async () => {
+      const { rows } = await client.query(
+        `select * from ${schema}.insights_orders_summary($1, '2020-01-01T00:00:00', '2020-01-02T00:00:00', 'UTC')`,
+        [ranges.id]
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(Number(rows[0].orders), 0);
+      assert.equal(rows[0].p50_hours, null);
+    });
+  } finally {
+    await db.close();
+  }
+});

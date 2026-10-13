@@ -8,6 +8,8 @@
     "users": "node scripts/dashboard-users.mjs",
     "db:apply:migration": "node scripts/apply-supabase-migration.mjs",
     "db:check:chat": "node scripts/check-chat-contract.mjs",
+    "db:generate:baseline": "node scripts/generate-baseline.mjs",
+    "db:check:baseline": "node scripts/check-baseline.mjs",
     "sync:shopify:products": "node scripts/sync-shopify-products.mjs",
     "sync:shopify:products:dry-run": "node scripts/sync-shopify-products.mjs --dry-run --limit=5 --page-size=5",
     "sync:shopify:customers": "node scripts/sync-shopify-customers.mjs",
@@ -64,5 +66,8 @@
   },
   "dependencies": {
     "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.11"
   }
 }

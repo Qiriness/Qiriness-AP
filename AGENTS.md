@@ -48,7 +48,7 @@ This project is a customer-support operating system for **Qiriness**. Read [READ
 
 ## Database and Sync Rules
 
-- Use database migrations for every schema change.
+- Use database migrations for every schema change: a numbered `supabase/migrations/NN_*.sql`, applied with `npm run db:apply:migration`, then `npm run db:generate:baseline` and move the file to `archive/` (the workflow: `docs/schema/database.md` → Migration files). Never edit `00_baseline.sql` by hand; it is generated from production and proven by `npm run db:check:baseline`.
 - Make all sync operations idempotent.
 - Use Shopify IDs as external identifiers.
 - Store important Shopify fields in structured columns when needed for querying.

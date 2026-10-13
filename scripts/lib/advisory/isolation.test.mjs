@@ -40,7 +40,7 @@ test('the support agent and the dashboard do not import the advisory core', () =
     path.join(root, 'scripts', 'lib', 'storefront-chat'),
     path.join(root, 'scripts', 'advisor'),
     path.join(root, 'scripts', 'eval-advisory.mjs'),
-    path.join(root, 'supabase', 'migrations', '80_advisor.test.mjs'),
+    path.join(root, 'supabase', 'migrations', '00_baseline.test.mjs'), // the schema's checks against the advisory constants
     path.join(root, 'web', 'lib', 'server', 'storefront-chat-service.ts')
   ];
   const files = [...walk(path.join(root, 'agent')), ...walk(path.join(root, 'web')), ...walk(path.join(root, 'scripts')), ...walk(path.join(root, 'supabase'))];

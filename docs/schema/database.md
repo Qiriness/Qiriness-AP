@@ -228,105 +228,26 @@ Written by the worker and the CLIs, read only by the Insights panels.
 
 ### Migration files
 
-**Applying one:** `npm run db:apply:migration -- supabase/migrations/<file>.sql`. Afterwards it runs the **management chat contract check** (`npm run db:check:chat`, `scripts/check-chat-contract.mjs`). As the chat role (`CHAT_DB_URL`), every `chat` view must run, and the schema text the model is shown must equal `supabase/chat-contract.snapshot.txt`. A change you meant is accepted with `npm run db:check:chat -- --update`, and the snapshot diff then shows up in review.
+**One baseline, generated from production** (since 2026-10-13; why: `DECISIONS.md` → Migrations).
 
-**Nine files, by domain, run in order against an empty database.** The order is a plain dependency chain, and every table is created *complete* — there is no `alter table … add column` anywhere in the baseline, and a test asserts that.
+| Path | What |
+| --- | --- |
+| `supabase/migrations/00_baseline.sql` | the whole schema (`public` + `chat`): extensions, the chat role and its settings, text search, functions, tables, views, indexes, foreign keys, triggers, RLS, privileges, comments. **Generated** by `npm run db:generate:baseline`; never edited by hand. Builds a NEW database; production never runs it |
+| `supabase/migrations/00_baseline.catalog.json` | the comparable description of that schema, generated with it. What a fresh build must equal, and what the schema tests read |
+| `supabase/migrations/00_baseline.test.mjs` | the schema's invariants, read from the catalogue: every check constraint that mirrors an app constant equals it (taxonomy, actors, usage passes, outbound/snooze/case states, social and advisory vocabularies…); every `tables.mjs` name and `COLUMNS` projection exists; RLS everywhere; public views `security_invoker` and closed to anon; chat views readable by the chat role only; vector columns complete; `updated_at` triggers |
+| `supabase/migrations/00_baseline.behaviour.test.mjs` | the projections asserted on seeded rows, on a fresh build (PGlite, in every `npm test`) |
+| `supabase/migrations/NN_*.sql` | a change **not yet applied** to production (none at rest) |
+| `supabase/migrations/archive/` | the old chain, 01_foundation … 96_order_lines: history and prose only, never run (8 of its files fail on a fresh database) |
+| `supabase/seeds/` | data a new deployment needs: `issue_families.sql` (per shop, after its first sync), `carrier_aliases.sql` (once). Idempotent; `seeds.test.mjs` |
 
-| File | Creates | Depends on |
-| --- | --- | --- |
-| `01_foundation.sql` | extensions, `set_updated_at()`, `shops`, `integration_events`, `privacy_requests`, `data_access_events` | — |
-| `02_shopify.sql` | `is_valid_product_faqs()`, `customers`, `orders`, `products`, `shopify_metaobjects`, `promotions`, `shopify_content_sources`, `order_number_range()` | 01 |
-| `03_knowledge.sql` | `knowledge_documents` (+ `product_ids`), `knowledge_chunks` (+ `product_ids`), `match_knowledge_chunks()`, `search_knowledge_chunks_text()` — both RPCs return `product_ids` | 01 |
-| `04_support.sql` | `tickets`, `ticket_messages`, `email_blocklist`, `sender_directory`, `spam_audit`, `ticket_investigations`, `category_forwarding`, `ticket_forwards`, `forwarding_destinations`, `forwarding_settings`, `ticket_routing`, `categorisation_review`, the three views | 01, 02 |
-| `05_exemplars.sql` | `support_exemplars`, `support_exemplar_phrasings`, `support_answers`, `match_support_exemplars()` | 01, 03 (`french_unaccent`) |
-| `09_parameters.sql` | `support_parameters` | 01 |
-| `06_analytics.sql` | `normalise_carrier()`, `llm_usage`, `cluster_runs`, `ticket_clusters`, the **21 Insights views**, and the **28 ranged functions** | 01, 02, 04 |
-| `07_drafting.sql` | `ticket_drafts`, `ticket_draft_edits` | 01, 04 |
-| `08_testing.sql` | `agent_test_runs` | 01, 03 |
+**Changing the schema:**
+1. Write `supabase/migrations/01_<change>.sql` (next free number), idempotent. Prove it on production data first where it touches analytics: `node scripts/db-fingerprint.mjs out.json before.json --prelude 01_<change>.sql`.
+2. `npm run db:check:baseline`: the pending file must apply on top of the baseline (PGlite).
+3. `npm run db:apply:migration -- supabase/migrations/01_<change>.sql` (then runs the chat contract check).
+4. `npm run db:generate:baseline`, then **move `01_<change>.sql` to `archive/`**: the regenerated baseline already contains it.
+5. `npm run db:check:baseline -- --production` and `npm test`; commit the change, the baseline and the catalogue together.
 
-**Incremental migrations** run on top of the baseline, and are deliberately not part of it — the invariants above (creates schema, never migrates data; final shape with no corrective re-work) are properties of the baseline alone. Each is idempotent, so applying one to a fresh install is a no-op.
-
-| File | Does | Depends on |
-| --- | --- | --- |
-| `10_order_retention.sql` | order retention becomes a shop setting: adds the `shops` switch, rewrites `retention_rule` to reason-only names (reconciling a live/repo drift), sets this shop to `indefinite` and clears its delete dates | 01, 02 |
-| `12_vip_rule.sql` | adds the `shops` VIP rule columns + check, and `vip_customers()` / `vip_tickets()` / `vip_summary()`, copied from 06 (its test asserts it, and that the rule is AND with strict comparisons). Sets no rule. Applied 2026-09-11 | 01, 02, 04, 06 |
-| `11_insights_ranges.sql` | adds `shops.iana_timezone` and the 18 ranged Insights functions, **copied byte-for-byte from 06** (its test asserts it). Applied to the live database 2026-09-11 | 01, 02, 04, 06 |
-| `14_fulfilment_waiting.sql` | replaces `insights_fulfilment_buckets()` with the version that also returns a `Not shipped yet` bucket, counted as `open_orders()` counts it — orders with no duration to bucket were previously drawn nowhere. Copied byte-for-byte from 06; supersedes 11's copy of that one function. Applied 2026-09-12 | 01, 02, 06 |
-| `15_orders_list.sql` | adds `orders_list()` + `orders_list_facets()` for the Orders page, copied byte-for-byte from 06 (its test asserts it). No table, no data. Applied 2026-09-14 | 01, 02, 06, 12 |
-| `16_orders_search.sql` | drops the 11-argument `orders_list()` and recreates it with `p_search` and an `awaiting_fulfilment` column (open_orders()'s waiting rule); copied byte-for-byte from 06, supersedes 15's copy of that one function | 01, 02, 06, 12, 15 |
-| `17_management_chat.sql` | the management chat: login role `mgmt_chat_ro` (no password in the file), the `chat` schema of 13 owner-rights views with no personal data, and the log tables `chat_conversations` / `chat_turns` / `chat_queries` (named in `CHAT_T`, not `T`). Applied 2026-09-14 | 01, 02, 04, 06, 07 |
-| `18_product_customer_mix.sql` | drops the draft six-argument `insights_product_customer_mix()` and creates the one-product version (`p_product_id`): distinct Shopify customers who bought only it / with other products / not at all, plus its top 7 co-bought products; free lines ignored. Copied byte-for-byte from 06. Applied 2026-09-14 | 01, 02, 06 |
-| `19_product_mix_filters.sql` | drops 18's seven-argument `insights_product_customer_mix()` and recreates it with `p_country`, `p_vip_only` and the VIP rule arguments (through `vip_customers()`); both filters narrow the whole population. Copied byte-for-byte from 06, where the function now sits after `orders_list_facets()` because it calls `vip_customers()`. Supersedes 18's copy. Applied 2026-09-14 | 01, 02, 06, 12, 18 |
-| `20_best_products_vip.sql` | drops and recreates `insights_product_sales()` and `insights_country_product_sales()` with `p_vip_only` + the VIP rule arguments (through `vip_customers()`, off by default); both now sit below `vip_customers()` in 06. Copied byte-for-byte from 06, supersedes 11's copies. Applied 2026-09-14 | 01, 02, 06, 11, 12 |
-| `30_customer_mix_plan.sql` | replaces the body of `insights_customer_mix()` — same signature, same four numbers — grouping the range by customer before looking up each first order, because the old shape planned as a nested loop (~1 s on a year). Copied byte-for-byte from 06, supersedes 11's copy. Applied 2026-09-18 | 01, 02, 06, 11 |
-| `31_orders_status_filter.sql` | adds `order_fulfilment_display()` and re-creates `orders_list()` + `orders_list_facets()` to filter and group on it, so the status filter selects what the pill shows (Cancelled / Refunded instead of Unfulfilled for emptied orders). Same signatures: `create or replace`, nothing dropped. Copied byte-for-byte from 06, supersedes 16's `orders_list` and 15's `orders_list_facets`. Applied 2026-09-18 | 01, 02, 06, 15, 16 |
-| `40_customer_questions.sql` | widens `support_answers_ask_check` by five `MISSING_FIELDS` keys (postal_address, preferred_remedy, receipt_confirmation, skin_type, skin_concern). No data. Applied 2026-09-26 | 05 |
-| `48_ticket_overrides.sql` | `tickets.overrides` + its check, `ticket_overrides`, `ticket_queue` gains `overrides` last (copied from 04). No data. Applied 2026-09-29 | 04 |
-| `49_forwarding_destinations.sql` | `forwarding_destinations`, `forwarding_settings` (copied from 04). No data. Applied 2026-09-29 | 04 |
-| `50_forwarding_routing.sql` | `forwarding_settings.forward_since`, `ticket_forwards.destination_label`, `ticket_routing` (copied from 04). No data. Applied 2026-09-29 | 04, 49 |
-| `51_destination_switch.sql` | `forwarding_destinations.active_since` + its needs-an-address check (copied from 04); switches on the destinations that had an address. Applied 2026-09-29 | 49 |
-| `60_sales_channels.sql` | `sales_channels` (copied from 02); `chat.vip_customer_rows()` reads its handles instead of a literal; the chat comments naming Amazon/Yves Rocher made generic. No data (this shop's two rows were inserted separately). Applied 2026-10-02 | 02, 17, 21 |
-| `61_cases.sql` | `cases`, `case_links`, `issue_family_members` + `issue_family_transitions` (seeded per shop), `tickets.case_id` + `case_link_state`; **data**: one case per ticket (its own id), duplicates joined to their original's case (chains to the root, `backfill` rows), every ticket `decided`; `case_link` in the `agent_models` and `llm_usage` checks; `case_message_counts`, `case_facts`, `ticket_queue` (case columns appended), `customer_ticket_facts` + the three `insights_support_*` functions on `case_facts` (copied from 04/06), `chat.tickets.case_id`; trigger `tickets_open_case` (a ticket inserted without a case opens one). **Applied 2026-10-02**: 1015 tickets → 1003 cases, 12 `backfill` links (9 duplicates + 3 mutual pairs); then `npm run cases:targets` (agent/) | 04, 06, 17, 53 |
-| `64_casework_usage_pass.sql` | widens `llm_usage_pass_check` by `casework` and `closure` (copied from 06), which the sink was recording as `other`. No data. **Applied 2026-10-03** — before the worker that emits them | 06 |
-| `62_case_lead.sql` | `case_facts` re-stated, copied from 04: with nothing owed, a case's lead is its most recently active thread **still live**, not just the most recent. **Applied 2026-10-02** | 61 |
-| `59_order_identity_situations.sql` | data only: rules whose `when_conditions.order_identity` names `none` also name its five replacements (`none` kept so old and new code agree). 16 rules. Applied 2026-10-02 | 05 |
-| `65_inventory_stock_floor.sql` | drops 35's five-argument `insights_inventory_exceptions()` and recreates it with `p_max_stock_units`, so the stock card also lists every active product under the unit floor (`INVENTORY_MIN_STOCK_UNITS`, 50) whatever its cover. Copied from 06. No table, no data. **Applied 2026-10-04** | 01, 02, 06 |
-| `73_automated_actor.sql` | `ticket_messages_actor_check` gains `automated` (an automatic reply; messages only, not `ticket_case_state` or `case_current`). Copied from 04. No data. **Applied 2026-10-05** | 04, 41 |
-| `74_agent_models_casework.sql` | `agent_models_agent_check` gains `casework` and `closure`, so both can be chosen in Settings. Copied from 04. No data. **Applied 2026-10-05** | 53, 61 |
-| `75_queue_closed_at.sql` | `ticket_queue` gains `resolved_at` and `closed_at`, appended last (the Closed section's order). Copied from 04. No data. **Applied 2026-10-05** | 61, 62 |
-| `77_collection_range_axis.sql` | `advice_collections_axis_check` accepts `range` (a product line, « gamme »). Read by the storefront advisor only; `supportCollections` filters it out of the support intersection. No data. **Applied 2026-10-06** | 27 |
-| `76_storefront_chat.sql` | `storefront_chat_sessions` + `storefront_chat_messages` and three service-role functions (daily count, turn, purge). New tables only. No data. **Applied 2026-10-05** | 01 |
-| `72_refund_notice.sql` | `support_answers.notify_on` (`refund_recorded`; marks a notice template) + `ticket_drafts.purpose` (`reply` / `refund_notice`). Copied from 05 / 07. No data. **Applied 2026-10-05** | 05, 07 |
-| `84_post_non_followers.sql` | `social_posts.non_followers_pct` + 0-100 check. No data. **Applied 2026-10-08** | 70 |
-| `85_tiktok.sql` | TikTok provider/kind/band constraints, follower RPC widened; `social_refresh_token` rotates Vault bundle and expiry, service role only. **Applied and verified 2026-10-09** | 70, 82, 83, 84 |
-| `87_tiktok_post_series.sql` | `insights_tiktok_post_series`: TikTok lifetime views/interactions of videos *published* in each bucket + follower-snapshot differences; service role only | 70, 85 |
-| `88_manual_post_metrics.sql` | `social_post_manual_metrics` (shop/account/post/metric; rate carries its `basis`), unique key on `social_posts(shop_id,account_id,external_id)`, copies `non_followers_pct` across | 70, 84 |
-| `89_manual_audience.sql` | `social_audience_manual` (latest dated distribution per shop/platform/dimension) + `valid_manual_audience()` | 70 |
-| `90_non_followers_bands.sql` | `nonFollowersPct` added to the band metric check (no `followers` mode, absolute <= 100) | 83 |
-| `83_social_metric_bands.sql` | `social_metric_bands` (`SOCIAL_BAND_T`). New table only. No data. **Applied 2026-10-08** | 01 |
-| `82_engagement_basis.sql` | `social_accounts.engagement_basis` + check; `insights_social_post_totals` dropped and recreated with three more columns (same args and grants). No data. **Applied 2026-10-08** | 70, 81 |
-| `81_social_post_tags.sql` | `social_posts.insights_at`; `social_post_tags` + `social_post_tag_links` (`SOCIAL_TAG_T`). New column and tables only. No data. **Applied 2026-10-08** | 70 |
-| `71_ad_campaigns.sql` | `ad_campaigns` + `ad_campaign_days` (`CAMPAIGN_T`) and `insights_paid_campaigns()` (`CAMPAIGN_RPC`). No data. **Applied 2026-10-05** | 70 |
-| `70_social.sql` | the six social tables (`SOCIAL_T`), the Vault token functions and six reads (`SOCIAL_RPC`), and `mail_jobs_kind_check` widened to `sync_social` (copied from 04 / 46). No data. **Applied 2026-10-05** | 01, 46 |
-| `69_fact_drift.sql` | `tickets.fact_drift` jsonb (null until something moves; object check) + `outbound_actions.cancel_reason` comment gains `facts_pending`. Copied from 04 / 07. No data. **Applied 2026-10-04** | 04, 47 |
-| `68_order_gift_stock_need.sql` | widens `support_exemplars.requirement_needs` by `order_gift_stock` (whether the order's gift lines are in stock now). Copied from 05; head of the needs check since. No data. Applied 2026-10-04 | 05, 67 |
-| `67_sample_stock_need.sql` | widens `support_exemplars.requirement_needs` by `sample_stock` (whether the order's samples are in stock now). Copied from 05; head of the needs check until 68. No data. Applied 2026-10-04 | 05, 66 |
-| `66_promotion_reward_stock_need.sql` | widens `support_exemplars.requirement_needs` by `promotion_reward_stock` (whether the free item is in stock now). Copied from 05; head of the needs check until 67. No data. Applied 2026-10-04 | 05, 58 |
-| `58_promotion_outcome_need.sql` | widens `support_exemplars.requirement_needs` by `promotion_outcome` (why a promotion applied or not). Copied from 05; head of the needs check until 66. No data. Applied 2026-10-01 | 05, 56 |
-| `57_describable_offers.sql` | adds `promotions.describable_in_replies` (default true), the automatic-offer counterpart of `offerable_in_replies`. Copied from 02. No data. Applied 2026-10-01 | 02 |
-| `58_faq_articles.sql` | narrows `knowledge_documents_category_check`: `other` is no longer an article category (a ticket subject only); any article/chunk under it moves to `faq`. Copied from 03. None moved. Applied 2026-10-01 | 03 |
-| `57_situation_choose_rule.sql` | `support_exemplars.choose_rule` (copied from 05): when to pick a situation and when not to, shown to the situation chooser. No data in the migration; the 40 rules were written from `Email-Example-Queries.md` after it. Applied 2026-10-02 | 05 |
-| `56_policy_search_retired.sql` | Removes `policy_answer` from `support_exemplars.requirement_needs` (data: 20 situations) and from its check, adds `policy_attached`; narrows `knowledge_documents.core_topic` to `brand`. Copied from 03 and 05. Applied 2026-10-01 | 03, 05, 33 |
-| `55_company_policies.sql` | `company_policies`, `company_policy_versions`, `company_policy_links` (copied from 05) + `ticket_investigations.company_policies`. No data (the library starts empty). Applied 2026-09-30 | 04, 05 |
-| `54_ticket_snoozes.sql` | `ticket_snoozes` (copied from 04). No data. Applied 2026-09-30 | 04 |
-| `53_agent_models.sql` | `agent_models` (copied from 04). No data. Applied 2026-09-30 | 01 |
-| `52_manual_replies.sql` | `outbound_actions`: `draft_id` nullable, `client_key`, `body_html`; `manual` mode + `manual_reply` type + their shape check; the version key narrowed to `reply`, `client_key` unique. `ticket_drafts.approved_body_html`. Copied from 07. No data. Applied 2026-09-30 | 07, 47 |
-| `47_outbound_actions.sql` | `outbound_actions` (copied from 07) and the new `ticket_drafts.status` comment. No data. Applied 2026-09-28 | 04, 07, 45 |
-| `46_mail_jobs.sql` | `mail_jobs`, `enqueue_mail_job()`, `claim_mail_jobs()`, `mail_subscriptions` (copied from 04). No data. Applied 2026-09-28 | 01 |
-| `45_draft_versions.sql` | `ticket_drafts`: `case_version`, `trigger_event_id`, `stale_reason`, `stale` status, key `(shop_id, ticket_id, case_version)` (the old key dropped by its columns). Copied from 07. No data. Applied 2026-09-28 | 07 |
-| `44_rule_checks.sql` | `support_answers.checks` + its array check (copied from 05). No data. Applied 2026-09-27 | 05 |
-| `43_case_actions.sql` | `ticket_case_actions` (copied from 04). No data. Applied 2026-09-27 | 04 |
-| `42_case_state_every_message.sql` | `ticket_case_state`: nullable `case_relationship` + `actor`, `effect`, `asked`, `obligations_opened`, `obligations_cleared` with checks (copied from 04). No data. Applied 2026-09-27 | 04, 34 |
-| `41_case_current.sql` | `ticket_messages.actor` + its check, and the `case_current` table (copied from 04). No data. Applied 2026-09-26 | 04 |
-| `39_klaviyo.sql` | the three Klaviyo tables (`KLAVIYO_T`), the Vault key functions and `insights_klaviyo_messages()` (`KLAVIYO_RPC`). No data. Applied 2026-09-25 | 01 |
-| `38_storefront_months.sql` | the `storefront_session_months` table (named in `STOREFRONT_T`, not `T`). Applied 2026-09-24 and backfilled (36 months) | 01 |
-| `37_collection_handles.sql` | drops 36's seven-argument `insights_collection_sales()` and recreates it with `p_handles`, so the Collection mix card reports the six ranges rather than all 176 collections. Copied byte-for-byte from 06 (its test asserts it); supersedes 36. Applied 2026-09-23 | 01, 02, 06, 27, 36 |
-| `36_collection_sales.sql` | adds `insights_collection_sales()`: per collection for a range, on `insights_product_sales` line rules, plus a null-id row for paid lines in no reported collection. Superseded by 37. Applied 2026-09-23 | 01, 02, 06, 27 |
-| `35_sales_overview.sql` | adds `insights_sales_overview()`, `insights_promotions()` and `insights_inventory_exceptions()` for Overview, Marketing & funnel, the stock card and the monthly report, copied byte-for-byte from 06 (its test asserts it). No table, no data. Applied 2026-09-22 | 01, 02, 06 |
-| `32_investigation_recommendations.sql` | adds `ticket_investigations.recommendations jsonb` — the shop's own product list, carried verbatim so the drafting stage reads what the tool said rather than a paraphrase of it. Idempotent, no data written. Applied 2026-09-20 | 04 |
-| `23_agent_situations.sql` | adds `insights_agent_situations()`: tickets investigated in a range (latest run each) split by how the situation was picked — matched, tie settled by rules, near miss chosen by the model, chooser said none, not settled, no match, not recorded — from `ticket_investigations.exemplar_match`. Always one row. Copied byte-for-byte from 06. Applied 2026-09-15 | 04, 06 |
-| `24_rule_tones.sql` | adds `support_answers.tones text[] not null default '{}'` and `support_answers_tones_check` (the keys of `scripts/lib/reply-tones.mjs`), with the column comment — all copied from 05, which its test asserts. Every existing rule takes `{}`. Applied 2026-09-15 | 05 |
-| `29_order_promotion_need.sql` | widens `support_exemplars.requirement_needs` by one value, `order_promotion`, so a situation can declare "was the promotion applied to this order?". Copied from 05. No data. Applied 2026-09-17 | 05 |
-| `28_order_discounts.sql` | adds `orders.discount_applications` (one entry per promotion: kind, name, percentage or amount, target) and `orders.discount_codes`. The order already stored how much came off; this stores WHAT came off, which is what answers « mon cadeau a-t-il été appliqué ? ». Copied from 02. No data — the values arrive with a re-sync. Applied 2026-09-17 | 02 |
-| `27_advice_collections.sql` | adds `advice_collections`: one row per Shopify collection (175 on this shop), with `is_active` / `axis` / `note` owned by the team and `product_ids` refreshed from Shopify for active ones only. Copied byte-for-byte from 02. No data. Applied 2026-09-16 | 01, 02 |
-| `26_product_order_frequency.sql` | adds `insights_product_orders_per_customer()`: for one product, how many of its buyers placed 1, 2, 3… orders carrying a paid line of it, on the same filters as `insights_product_customer_mix()`. Copied byte-for-byte from 06. No table, no data. Applied 2026-09-16 | 01, 02, 06, 12, 19 |
-| `25_rule_links.sql` | adds `support_answers.link_url` / `link_label` (checks: https only; both or neither, label ≤ 120) with their comments, and `ticket_drafts.reply_link jsonb` (object check) — copied from 05 and 07, which its test asserts. All null. Applied 2026-09-15 | 05, 07 |
-| `22_segment_finder.sql` | adds `customer_segment_find()`: customers matching OR-of-AND conditions over orders and net spend in the last N months and lifetime net spend, every customer on file except marketplace-synthetic records; always one totals row plus the top 25 by lifetime spend. Copied byte-for-byte from 06. Applied 2026-09-14 | 01, 02 |
-| `21_chat_vip.sql` | VIP status for the management chat: `chat.vip_customer_rows()` (security definer, no arguments, fixed `search_path`) applies `vip_customers()` with the shop's thresholds and the marketplace handles `vipArgs` excludes; `chat.vip_customers` reads it (ids, windowed orders + net spend), `SELECT` for `mgmt_chat_ro` only. Updates the `chat.shop` comment. Applied 2026-09-14 | 06, 12, 17 |
-
-`_shared.test.mjs` holds the cross-file invariants (no data statements, RLS on every table, every table and view documented, nothing referenced before it is created, every view `security_invoker` and revoked from the anon roles, every embedded table carrying the whole determinism quadruple, and `scripts/lib/tables.mjs` naming exactly what the baseline creates). Each file has a sibling test for its own contents.
-
-`_live.test.mjs` is the only test that **runs** the SQL: it applies the baseline into a throwaway schema, seeds a handful of rows, asserts each projection returns what it claims, and drops the schema. Skipped unless `SUPABASE_TEST_DB_URL` (the dev project) is set, and refuses a value equal to `SUPABASE_DB_URL`, so `npm test` never builds schemas in the app database.
+**Building a new database:** run `00_baseline.sql` on an empty Supabase project (as `postgres`), set the chat role's password (`alter role mgmt_chat_ro password …`, for `CHAT_DB_URL`), sync the shop, then the seeds.
 
 ### Read-only reports
 

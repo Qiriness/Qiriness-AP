@@ -19,10 +19,11 @@
  * every select in the codebase; it is the set of names that would otherwise
  * drift apart.
  *
- * `_shared.test.mjs` asserts both halves against the .sql files: every name in
- * `T` is created by the baseline, and every column in `COLUMNS` exists on the
- * table it projects. A rename that misses a call site now fails the suite
- * instead of failing in production.
+ * `supabase/migrations/00_baseline.test.mjs` asserts both halves against the
+ * schema production has (the baseline's catalogue): every name in every `*_T`,
+ * `V` and `*_RPC` map exists, and every column in `COLUMNS` exists on the
+ * relation it projects. A rename that misses a call site fails the suite instead
+ * of failing in production.
  */
 
 /**
@@ -101,10 +102,9 @@ export const T = {
 };
 
 /**
- * The management chat's log tables. Created by the INCREMENTAL migration
- * `17_management_chat.sql`, not the baseline, so they are kept out of `T` —
- * `_shared.test.mjs` asserts `T` names exactly what the baseline creates.
- * `17_management_chat.test.mjs` asserts these instead.
+ * The management chat's log tables, kept in their own map (they were added by
+ * the archived migration 17, outside the original baseline). Checked with every
+ * other map by `supabase/migrations/00_baseline.test.mjs`.
  */
 export const CHAT_T = {
   CONVERSATIONS: 'chat_conversations',
@@ -124,7 +124,7 @@ export const STOREFRONT_T = {
 /**
  * The storefront advisor's anonymous conversations. Created by the INCREMENTAL
  * migration `76_storefront_chat.sql`, so kept out of `T` and `RPC`;
- * `76_storefront_chat.test.mjs` asserts these. Not `CHAT_T`: that is the
+ * `supabase/migrations/00_baseline.test.mjs` checks them. Not `CHAT_T`: that is the
  * management chat, a different audience on a different trust boundary.
  */
 export const STOREFRONT_CHAT_T = {
@@ -141,7 +141,7 @@ export const STOREFRONT_CHAT_RPC = {
 /**
  * The storefront advisor's advice config and its analytics events. Created by
  * the INCREMENTAL migration `80_advisor.sql`, so kept out of `T` and `RPC`;
- * `80_advisor.test.mjs` asserts these, and that the advisory core's own copy
+ * `supabase/migrations/00_baseline.test.mjs` checks them, and that the advisory core's own copy
  * (scripts/lib/advisory/advisory-repository.mjs, which imports nothing outside
  * its directory) matches.
  */
@@ -159,7 +159,7 @@ export const ADVISOR_RPC = {
 /**
  * Klaviyo: the connection (the key itself is in Vault) and what each flow and
  * campaign earned. Created by the INCREMENTAL migration `39_klaviyo.sql`, so
- * kept out of `T` and `RPC`; `39_klaviyo.test.mjs` asserts these instead.
+ * kept out of `T` and `RPC`; `supabase/migrations/00_baseline.test.mjs` checks them.
  */
 export const KLAVIYO_T = {
   CONNECTIONS: 'klaviyo_connections',
@@ -177,7 +177,7 @@ export const KLAVIYO_RPC = {
 /**
  * Social and paid media (Meta, Google Ads): the OAuth connections (tokens in
  * Vault), the accounts they see, and what each earned. Created by the
- * INCREMENTAL migration `70_social.sql`; `70_social.test.mjs` asserts these.
+ * INCREMENTAL migration `70_social.sql`; `supabase/migrations/00_baseline.test.mjs` checks them.
  */
 export const SOCIAL_T = {
   CONNECTIONS: 'social_connections',
