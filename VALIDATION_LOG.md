@@ -42,6 +42,14 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 56. Adding to the cart from the advisor: built, never clicked in a browser — 2026-10-13
+
+Needs the dev store (Supabase back) and `shopify app dev` restarted.
+
+1. **The routine button.** **Check:** build a routine; « Ajouter la routine au panier » adds every single-size product in one go, the cart count updates (or the next page shows them), the button reads « Ajouté au panier », and `advisory_events` has one `added_to_cart` per product. A product with several sizes is named under the button and not added.
+2. **The question.** **Check:** after the routine, « Souhaitez-vous que j'ajoute cette routine à votre panier ? »; « Oui, ajouter » adds them and shows « C'est dans votre panier. »; reloading the page adds nothing a second time. « Je cherche encore » adds nothing and the treat follows.
+3. **A single product.** **Check:** after the routine offer has been answered, a product answer asks « …l'ajoute à votre panier ? » once for that product; a typed « oui, ajoutez-le » adds it.
+
 ## 55. Order status by number, the contact form link, the routine builder skill: live model on invented orders only — 2026-10-13
 
 Needs Supabase back, `STOREFRONT_CHAT_ORDER_STATUS=on` and `shopify app dev` restarted.

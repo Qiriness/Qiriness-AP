@@ -14,6 +14,14 @@ Purchase history (plan § 5) needs to know who is asking. Phase 0 settles who, a
 - **What the model may see is a shape, not a query.** `toPurchaseSummary` keeps product id, title, first and last purchase day, how many orders held it, returned and free-gift flags, and drops everything else. Addresses, emails, names, order numbers and amounts paid can never leave, even if a reader returns them. A €0 line is a promotional gift (about half of Wrap lines), never a preference.
 - **Before anything was read** (done with Phase 1): each read is logged in `data_access_events`, the use is stated in `MERCHANT_DATA_USE_DISCLOSURE.md`, and marketplace orders are excluded. The shop's own privacy notice is the owner's to review.
 
+### Adding to the cart: the customer's click, never the model's (2026-10-13)
+
+The owner's design: « Ajouter la routine au panier » under a routine, and « Souhaitez-vous que je l'ajoute à votre panier ? » with « Oui, ajouter » / « Je cherche encore ».
+
+- **The server never holds the customer's cart** (it lives in their browser session), so nothing is added server-side and the model has no cart tool. The widget adds, through the shop's `/cart/add.js`, on the customer's click only: the routine button, a card's button, or « Oui, ajouter » (then the reply carries `cart.add` and the widget adds it once, never on a re-render). Every add is recorded as `added_to_cart`.
+- **Only products with one size to buy are added**; the others are named with « choisissez la taille sur sa page », since the size is the customer's choice.
+- **The question is the code's** (routine-flow.mjs), like the routine offer: after a recommended routine (in place of the treat, which follows the answer) and after a single product once the routine offer has had its turn, never twice for the same product, never after top choices (« this » would be ambiguous). A typed « oui » or « je cherche encore » answers it. « Oui, ajouter » is a code-written turn with no model call. If the model builds the routine itself during its turn (through `advise`), the question is added after its reply.
+
 ### The routine engine follows the foundations (2026-10-13)
 
 The owner's model (plan § 3.1–3.4): a routine is a foundation's ordered list of product TYPES, each step filled by the product of that type that best targets the customer's concern or combination of concerns. `scripts/lib/advisory/foundations.mjs`.
@@ -30,6 +38,10 @@ The owner's model (plan § 3.1–3.4): a routine is a foundation's ordered list 
   - a ceiling (« moins de 60 € », « 40 euros max », "under 60"; a number under 5 or followed by « ans », « produits », « étapes » is not a price) cuts the routine to fit: optional steps first, then the required ones that are not the concern's step, the concern's step last; what was left out is said (`over_budget`), and when even that step is over, a treat within the ceiling;
   - with a budget, the cheaper of two products within 0.15 of the best fit;
   - the routine's price (`total_price`) and each size's price on its button come from the engine; the model quotes them, never adds them up.
+- **Outside the builder, a need gets our top choices** (owner, 2026-10-13): the best product of each type that targets that need (dehydration: a serum, a cream, a lotion), up to three, each presented with why; never a cleanser unless the foundation says it treats the need (Imperfections). A type they asked for (« juste un sérum ») keeps its own alternatives. The builder never shows top choices: it builds the routine.
+- **« Trop cher » just after one product** (owner, 2026-10-13): the cheapest product of the same type that passes the same hard rules and targets the MAIN need, cheaper than it (`playbook cheaper`); only when there is none, the « petit plaisir ». A side concern of the first product does not count (in a test, a radiance serum « matched » a hydrating serum's « ridules »). In the builder the budget rules above stay.
+- **From the customer batch (2026-10-13):** a man's range comes first among the suitable products (a sensitive-skin cleanser had outscored his); « vous avez autre chose ? » gives the next products for the same need, never those already shown (`no_other_option` when there are none); body care only when the customer says it, not when the model reader guesses it from « after showering ».
+- **One product proposed comes with its offer** (owner, 2026-10-13; foundation engine): the public offers running on that product now (its own, a collection it is in, or every product; never free shipping or a private code; at most two), from the synced promotions the shopping tools read. The model mentions it once, as given, and never promises it applies to their cart. A routine of several products gets none here: its offers stay the shopping tools' (`simulate_offers`).
 - **Measured:** `npm run advisor:score` 44/44 on the bench with the budget cases (the playbooks: 14/38 before them). The bench is invented: the real score waits for Qiriness's spreadsheet.
 
 ### The routine builder is a skill: its rules and tools only while it is open (2026-10-13)
