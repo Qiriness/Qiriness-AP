@@ -5,18 +5,20 @@
  *
  *   { profile, mode, asked: [field], last_question: field | null,
  *     last_advice: { status, playbook, scope, product_ids } | null,
- *     purchases: { asked, using, finished, gift } }   (purchase-turn.mjs; product ids only)
+ *     purchases: { asked, around, running_low, focus },   (purchase-turn.mjs; product ids only)
+ *     flow: { offer, anchor, treat_offered } }            (routine-flow.mjs)
  *
  * The log is the public internet's input once removed: everything is
  * re-checked here, and the profile is re-validated by `mergeProfile` on use.
  */
 
 import { cleanPurchaseState, emptyPurchaseState } from './purchase-turn.mjs';
+import { cleanFlow, emptyFlow } from './routine-flow.mjs';
 
 export const MODES = ['conversation', 'routine_builder'];
 
 export function emptyAdvisorState() {
-  return { profile: {}, mode: 'conversation', asked: [], last_question: null, last_advice: null, purchases: emptyPurchaseState() };
+  return { profile: {}, mode: 'conversation', asked: [], last_question: null, last_advice: null, purchases: emptyPurchaseState(), flow: emptyFlow() };
 }
 
 const FIELD = /^[a-z_]{1,40}$/;
@@ -46,6 +48,7 @@ function clean(saved) {
           product_ids: Array.isArray(advice.product_ids) ? advice.product_ids.filter((id) => typeof id === 'string').slice(0, 12) : []
         }
       : null,
-    purchases: cleanPurchaseState(saved.purchases)
+    purchases: cleanPurchaseState(saved.purchases),
+    flow: cleanFlow(saved.flow)
   };
 }

@@ -39,7 +39,11 @@ import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
 import { displayLanguage, languageContext, validReplyLanguage } from './conversation-language.mjs';
 import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
-import { describePurchases, emptyPurchaseState, mentionsPastPurchase, parsePurchaseChoice, purchaseChoices, purchaseItems, purchaseToAsk, recordAnswer } from './purchase-turn.mjs';
+import { ORDER_TOOL, orderToolDefinition, runOrderTool } from './order-tools.mjs';
+import { USE_SKILL, activeSkill, skillBlock, skillNamed, useSkillDefinition } from './skills.mjs';
+import { GET_PAST_PURCHASES } from './skills/routine-builder.mjs';
+import { FLOW_CHOICE, anchorFor, beforeAdvice, emptyFlow, followUpFor, followUpNote } from './routine-flow.mjs';
+import { cleanPurchaseState, customerRanges, describePurchases, mayBeRunningLow, emptyPurchaseState, mentionsPastPurchase, parsePurchaseChoice, purchaseChoices, purchaseItems, purchaseToAsk, recordAnswer } from './purchase-turn.mjs';
 import { READER_TIMEOUT_MS, mentionsSkin, readProfile, shouldRead } from './profile-reader.mjs';
 
 export const DEFAULT_STOREFRONT_MODEL = 'gpt-6-luna';
@@ -75,11 +79,16 @@ const REPLY_SCHEMA = {
         required: ['handle', 'rationale'],
         additionalProperties: false
       }
-    }
+    },
+    contact_link: { type: 'boolean', description: 'true whenever the reply directs the customer to customer service or to contact the shop: the app then shows the contact form link. Never write a link yourself.' }
   },
-  required: ['reply', 'reply_language', 'products'],
+  required: ['reply', 'reply_language', 'products', 'contact_link'],
   additionalProperties: false
 };
+
+// A reply that sends them to customer service always carries the contact form,
+// whatever the model set (owner, 2026-10-13). French and English.
+const CONTACT_WORDS = /service (?:client|clientèle|consommateurs?)|nous contacter|contactez[- ]nous|formulaire de contact|notre équipe|customer (?:service|care|support)|contact us|contact form|get in touch|reach (?:out to )?us/iu;
 
 const FINAL_ROUND_NOTE =
   'No more tool calls are available. Answer now from the authoritative facts already returned above. Product data may support product cards; policy passages keep their conditions. If an answer is missing, uncertain or unavailable, say so or refer to customer service. Never fill a gap from training.';
@@ -102,8 +111,18 @@ export class StorefrontAgentError extends Error {}
  *   deadlineMs?: number,
  *   maxToolRounds?: number,
  *   advisor?: ReturnType<import('../advisory/recommend.mjs').createAdvisor> | null,
- *   readerTimeoutMs?: number
+ *   readerTimeoutMs?: number,
+ *   readOrder?: ((query: { shopDomain: string, orderNumber: number }) => Promise<object | null>) | null,
+ *   orderShopDomain?: string | null,
+ *   productKnowledge?: Map<string, object> | null,
+ *   repurchaseIntervals?: Map<string, object> | null
  * }} deps
+ *
+ * `readOrder`: one order's status by its number (order-status-repository.mjs),
+ * on `orderShopDomain`, the shop whose orders are synced (default:
+ * catalogueShopDomain). `productKnowledge`: the brand's product knowledge by
+ * handle (product-knowledge.mjs). `repurchaseIntervals`: measured repurchase by
+ * handle (replenishment.mjs measuredIndex).
  *
  * `advisor` is the beauty consultation engine (scripts/lib/advisory/), built
  * from the shop's playbooks over the catalogue. Without it the agent advises
@@ -124,12 +143,25 @@ export function createLlmAgent({
   deadlineMs = DEFAULT_TURN_DEADLINE_MS,
   maxToolRounds = DEFAULT_MAX_TOOL_ROUNDS,
   advisor = null,
-  readerTimeoutMs = READER_TIMEOUT_MS
+  readerTimeoutMs = READER_TIMEOUT_MS,
+  productKnowledge = null,
+  repurchaseIntervals = null,
+  readOrder = null,
+  orderShopDomain = null
 }) {
   if (!client?.completeWithTools) throw new Error('createLlmAgent needs an OpenAI client.');
   if (advisor && !catalogue) advisor = null;
-  const definitions = [...(catalogue ? toolDefinitions(catalogue) : []), ...(advisor ? [adviseToolDefinition(advisor)] : []), ...(knowledge ? knowledgeToolDefinitions(knowledge) : []), ...(readShopping ? shoppingToolDefinitions() : [])];
-  const tools = definitions.length ? definitions : null;
+  // The base tools. A skill's tools join them only while the skill is open
+  // (skills.mjs); the routine builder brings its own `advise` (routine mode).
+  const baseDefinitions = [...(catalogue ? toolDefinitions(catalogue) : []), ...(knowledge ? knowledgeToolDefinitions(knowledge) : []), ...(readShopping ? shoppingToolDefinitions() : []), ...(readOrder ? [orderToolDefinition()] : [])];
+  const targetedAdvise = advisor ? adviseToolDefinition(advisor) : null;
+  const builderAdvise = advisor ? adviseToolDefinition(advisor, { builder: true }) : null;
+  const toolsFor = (skill, signedIn) => {
+    const list = skill
+      ? [...baseDefinitions, ...skill.tools({ adviseDefinition: builderAdvise, signedIn })]
+      : [...baseDefinitions, ...(targetedAdvise ? [targetedAdvise, useSkillDefinition()] : [])];
+    return list.length ? list : null;
+  };
   const linkBase = productLinkBase(productBaseUrl);
   const resolutionIndex = catalogue ? buildResolutionIndex(catalogue) : null;
 
@@ -155,6 +187,10 @@ export function createLlmAgent({
      */
     async respond({ message, context = {}, history = [], refs = null, choice = null, cart = null, shopDomain = null, action = null, advisorState = null, conversationRef = null, purchases = null }) {
       const endsAt = Date.now() + deadlineMs;
+      // Order lookups so far in this conversation (each assistant row keeps its own count).
+      const priorLookups = history.reduce((n, m) => n + (Number(m?.context?.order_lookups) || 0), 0);
+      let orderLookups = 0;
+      let orderAnswered = false;
       const locale = context.locale || 'fr';
       const money = priceFormatter(currency, locale);
       const pageProduct = catalogue && context.productHandle
@@ -168,10 +204,15 @@ export function createLlmAgent({
       const profileChoice = typeof choice === 'string' && PROFILE_CHOICE.test(choice);
       // A purchase chip (« Je l'utilise encore ») answers the consultant's purchase question.
       const purchaseAnswer = parsePurchaseChoice(choice);
-      let purchaseState = advisorState?.purchases ?? emptyPurchaseState();
+      // Re-checked: a session saved before 2026-10-13 holds the old answer lists.
+      let purchaseState = cleanPurchaseState(advisorState?.purchases ?? emptyPurchaseState());
       if (purchaseAnswer) purchaseState = recordAnswer(purchaseState, purchaseAnswer);
+      // The routine builder flow (routine-flow.mjs): the offer's answer, by button or typed.
+      const flowChoice = typeof choice === 'string' && FLOW_CHOICE.test(choice);
+      const flowStart = advisor ? beforeAdvice(advisorState?.flow ?? emptyFlow(), { choice, message }) : { flow: emptyFlow(), answer: null, startBuilder: false };
+      let flow = flowStart.flow;
       let resolution = resolutionIndex
-        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || purchaseAnswer ? null : choice })
+        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || purchaseAnswer || flowChoice ? null : choice })
         : null;
       const resolvedIds = new Set(resolution?.products.map((p) => p.id) ?? []);
       const productDataIds = new Set(resolution?.products.slice(0, 3).map((p) => p.id) ?? []);
@@ -188,15 +229,19 @@ export function createLlmAgent({
             state: advisorState,
             message,
             choice,
-            action,
+            // « Oui » to the routine offer starts the builder, as its quick action does.
+            action: flowStart.startBuilder ? 'build_routine' : action,
             // Chips in the customer's language, not the store's: an English speaker on the French store gets English chips.
             locale: displayLanguage(language, locale),
             catalogue,
             money,
-            productQuestion: !profileChoice && !purchaseAnswer && (resolution?.products.length ?? 0) > 0,
+            productQuestion: !profileChoice && !purchaseAnswer && !flowStart.answer && (resolution?.products.length ?? 0) > 0,
             turn: history.filter((m) => m.role === 'user').length + 1,
-            consultation: Boolean(purchaseAnswer),
-            stillUsing: purchaseState.using
+            consultation: Boolean(purchaseAnswer) || flowStart.startBuilder,
+            // « Construire autour »: theirs, it fills its step. « Il m'en reste peu »: put in its step.
+            stillUsing: purchaseState.around,
+            // The product they came in with, built into the routine (builder only).
+            pinned: [...new Set([(flow.anchor ?? anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds] }))?.id, ...purchaseState.running_low].filter(Boolean))]
           })
         : null;
       const opening = knowledge ? retrieveKnowledge({ message, knowledge, resolution, context, history, currency }) : null;
@@ -238,18 +283,96 @@ export function createLlmAgent({
         purchaseTrace.status = summary === undefined ? 'failed' : 'read';
         const items = purchaseItems(summary ?? null, catalogue);
         purchaseTrace.products = items.length;
-        if (advice && !resolution?.clarification) purchaseAsk = purchaseToAsk(items, purchaseState);
+        // Inside the builder only, once the concern is known (a playbook is
+        // chosen); never on the turn that receives an answer.
+        if (advisorTurn?.mode === 'routine_builder' && advice?.playbook && !purchaseAnswer && !resolution?.clarification) {
+          purchaseAsk = purchaseToAsk(items, purchaseState, { isDue: (i) => mayBeRunningLow(i, purchaseState, { knowledge: productKnowledge, measured: repurchaseIntervals }) });
+        }
         if (purchaseAsk) purchaseState = { ...purchaseState, asked: [...purchaseState.asked, purchaseAsk.product_id] };
         const answered = purchaseAnswer
           ? items.find((i) => i.product_id === purchaseAnswer.productId) ?? { product_id: purchaseAnswer.productId, name: byId(purchaseAnswer.productId)?.name ?? null }
           : null;
-        if (items.length || answered?.name) purchaseView = describePurchases(items, purchaseState, { ask: purchaseAsk, answered: answered?.name ? answered : null });
+        // Phase 3: the ranges they use nudge the routine already computed.
+        const ranges = customerRanges(items, purchaseState, productKnowledge);
+        if (advisorTurn?.useRanges(ranges)) for (const h of advisorTurn.handles()) offered.add(h);
+        if (ranges.length) purchaseTrace.ranges = ranges.length;
+        if (items.length || answered?.name) {
+          purchaseView = describePurchases(items, purchaseState, { answered: answered?.name ? answered : null, knowledge: productKnowledge, measured: repurchaseIntervals });
+          const low = purchaseView.purchases.filter((p) => p.may_be_running_low).length;
+          if (low) purchaseTrace.running_low = low;
+        }
         purchaseTrace.asked = purchaseAsk?.product_id ?? null;
         if (purchaseAnswer) purchaseTrace.answered = purchaseAnswer.answer;
       }
-      const describedAdvice = advice ? advisorTurn.describe() : null;
-      // One question per turn: the purchase question waits for no one, the engine's waits a turn.
-      if (describedAdvice && purchaseAsk) describedAdvice.next_question = null;
+      // THE FOLLOW-UP MESSAGE (routine-flow.mjs): the routine offer, the purchase
+      // question, the card of what they are running low on, or a treat. Its
+      // words and buttons are the code's; the model is only told it comes.
+      let followUp = null;
+      const flowBefore = flow;
+      if (advisorTurn) {
+        const builder = advisorTurn.mode === 'routine_builder';
+        const lang = displayLanguage(language, locale);
+        // Entering the builder without an offer (« construisez-moi une routine »): the product they came for still counts.
+        if (builder && !flow.anchor) {
+          const anchor = anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds] });
+          flow = { ...flow, offer: flow.offer ?? 'accepted', anchor };
+        }
+        const finalAdvice = advisorTurn.advice;
+        const runningLow = purchaseAnswer?.answer === 'running_low' ? { product_id: purchaseAnswer.productId, name: byId(purchaseAnswer.productId)?.name ?? '' } : null;
+        const treatDue = !flow.treat_offered && (flowStart.answer === 'no' || (builder && finalAdvice?.status === 'recommended'));
+        const treat = treatDue
+          ? advisor.treat({ profile: advisorTurn.profile, exclude: [...(finalAdvice?.steps ?? []).flatMap((s) => [s.product_id]), ...purchaseState.around] })
+          : null;
+        const otherTopic = Boolean(shoppingOpening) || ['general_policy', 'general_faq', 'product_and_policy'].includes(opening?.route);
+        const decided = followUpFor({
+          flow,
+          lang,
+          builder,
+          answer: flowStart.answer,
+          advice: finalAdvice,
+          showsProducts: !otherTopic && (finalAdvice?.status === 'recommended' || resolvedIds.size > 0),
+          anchor: anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds], advice: finalAdvice }),
+          purchaseAsk,
+          runningLow,
+          treat,
+          purchaseChoices: (item) => purchaseChoices(item, lang)
+        });
+        flow = decided.flow;
+        followUp = decided.followUp;
+        // The purchase question is asked in the follow-up, and only there.
+        if (followUp?.kind !== 'purchase' && purchaseAsk) {
+          purchaseState = { ...purchaseState, asked: purchaseState.asked.filter((id) => id !== purchaseAsk.product_id) };
+          purchaseAsk = null;
+        }
+        for (const id of followUp?.productIds ?? []) if (byId(id)) offered.add(byId(id).handle);
+      }
+      // SKILLS (skills.mjs). Open: its instructions in the prompt. Opened by the
+      // model mid-turn: builder mode now, the advice again, the offer moot.
+      const openSkill = (name) => {
+        const skill = skillNamed(name);
+        if (!skill || !advisorTurn) return { status: 'unavailable' };
+        if (skill.name === 'routine_builder' && advisorTurn.enterBuilder()) {
+          skillOpenedByModel = true;
+          if (!flow.anchor) flow = { ...flow, anchor: anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds], advice: advisorTurn.advice }) };
+          flow = { ...flow, offer: 'accepted' };
+        }
+        return { status: 'open', skill: skill.name, instructions: skill.instructions({}), advice: advisorTurn.describe() };
+      };
+      const pastPurchases = async () => {
+        if (!purchases) return { status: 'unavailable' };
+        const summary = await withDeadline(Promise.resolve().then(purchases), Math.min(1500, Math.max(1, endsAt - Date.now() - 1500))).catch(() => undefined);
+        if (summary === undefined) return { status: 'unavailable' };
+        const items = purchaseItems(summary ?? null, catalogue);
+        return { status: 'found', ...describePurchases(items, purchaseState, { knowledge: productKnowledge, measured: repurchaseIntervals }) };
+      };
+      const openAtStart = advisorTurn ? activeSkill({ mode: advisorTurn.mode }) : null;
+      let describedAdvice = advice ? advisorTurn.describe() : null;
+      // One question per turn: a follow-up that asks (the offer, the purchase
+      // question) goes first, and the engine's question waits a turn.
+      const followUpAsks = Boolean(followUp?.choices.length);
+      if (describedAdvice && followUpAsks && describedAdvice.status !== 'recommended') {
+        describedAdvice = { ...describedAdvice, status: 'waiting_for_follow_up', next_question: null };
+      } else if (describedAdvice && followUpAsks) describedAdvice.next_question = null;
 
       const responseSchema = language.neutral_followup && language.previous_language
         ? { ...REPLY_SCHEMA, properties: { ...REPLY_SCHEMA.properties, reply_language: { type: 'string', enum: [language.previous_language] } } }
@@ -263,12 +386,15 @@ export function createLlmAgent({
         hasKnowledge: Boolean(knowledge),
         hasShopping: Boolean(shopping),
         hasAdvisor: Boolean(advisor),
+        hasOrders: Boolean(readOrder),
         advice: describedAdvice,
         purchases: purchaseView,
         shopping: shoppingOpening,
         knowledge: opening,
         pageProduct: pageProduct && !resolvedIds.has(pageProduct.id) ? productDetail(pageProduct, money, message) : null,
-        resolution: resolution ? describeResolution(resolution, byId, money, message) : null
+        resolution: resolution ? describeResolution(resolution, byId, money, message) : null,
+        followUp: followUpNote(followUp),
+        skill: openAtStart ? skillBlock(openAtStart, {}) : null
       });
       const messages = [...historyMessages(history), { role: 'user', content: message }];
       const trace = { calls: [], tools: [] };
@@ -292,11 +418,37 @@ export function createLlmAgent({
       // The engine's question was not asked this turn when the purchase question took its place.
       const advisorState_ = (next) => ({
         ...next,
-        ...(purchaseAsk ? { asked: advisorState?.asked ?? [], last_question: null } : {}),
-        purchases: purchaseState
+        ...(followUp?.choices.length ? { asked: advisorState?.asked ?? [], last_question: null } : {}),
+        purchases: purchaseState,
+        flow
       });
 
+      // THE PURCHASE QUESTION IS THE WHOLE TURN, from the code, with no model
+      // call: told to ask nothing, the model still added its own question
+      // beside it in two live runs (2026-10-13). The engine's question waits a turn.
+      if (followUp?.kind === 'purchase') {
+        trace.follow_up = 'purchase';
+        trace.model_skipped = 'purchase_question';
+        return {
+          text: followUp.text,
+          replyLanguage: displayLanguage(language, locale),
+          products: [],
+          choices: followUp.choices,
+          model,
+          usage: usage.inputTokens || usage.outputTokens ? usage : null,
+          trace,
+          resolution: resolution ? { status: resolution.status, ids: [...resolvedIds], pending: resolution.pending ?? null } : null,
+          refs: { recommended: [], mentioned: [...resolvedIds] },
+          advisor: advisorState_(advisorTurn.nextState()),
+          events: conversationRef ? advisorTurn.events({ conversationRef, firstTurn: !history.length }) : []
+        };
+      }
+
+      // The skill open this turn (the routine builder in builder mode), and
+      // whether the model opened it itself (use_skill) during the turn.
+      let skillOpenedByModel = false;
       for (let round = 0; ; round += 1) {
+        const tools = toolsFor(advisorTurn ? activeSkill({ mode: advisorTurn.mode }) : null, Boolean(purchases));
         const mustAnswer = !tools || round >= maxToolRounds;
         const remaining = endsAt - Date.now();
         if (remaining <= 0) throw new StorefrontAgentError(`no reply within ${deadlineMs} ms`);
@@ -345,6 +497,12 @@ export function createLlmAgent({
               : null;
             const ran = call.argsError
               ? { result: { error: `arguments were not valid JSON: ${call.argsError}` }, handles: [] }
+              : call.name === USE_SKILL
+                ? { result: openSkill(call.args?.name), handles: advisorTurn ? advisorTurn.handles() : [] }
+              : call.name === GET_PAST_PURCHASES
+                ? { result: await pastPurchases(), handles: [] }
+              : call.name === ORDER_TOOL
+                ? { result: await withDeadline(runOrderTool(call.args, { readOrder, shopDomain: orderShopDomain ?? catalogueShopDomain, knowledge, lookupsSoFar: priorLookups + orderLookups }), Math.max(1, endsAt - Date.now())).catch(() => ({ status: 'unavailable' })), handles: [] }
               : call.name === ADVISE
                 ? advisorTurn ? { result: advisorTurn.run(call.args), handles: advisorTurn.handles() } : { result: { error: 'advice unavailable' }, handles: [] }
               : isShopping
@@ -358,6 +516,10 @@ export function createLlmAgent({
                   resolution: { index: resolutionIndex, refs, pageProductId: pageProduct?.id ?? null }
                 });
             const { result: output, handles } = ran;
+            if (call.name === ORDER_TOOL) {
+              orderAnswered = true;
+              if (output.looked_up) orderLookups += 1;
+            }
             handles.forEach((h) => offered.add(h));
             if (call.name === 'get_product' && output.id) productDataIds.add(output.id);
             // A resolution the model asked for joins the turn's own.
@@ -367,7 +529,8 @@ export function createLlmAgent({
               if (!resolution?.clarification && ran.resolution.clarification) resolution = { ...(resolution ?? {}), ...ran.resolution };
             }
             messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) });
-            trace.tools.push(isShopping
+            trace.tools.push(isShopping || call.name === ORDER_TOOL
+              // An order lookup is traced by its outcome, never its number.
               ? { name: call.name, status: output.status, ms: Date.now() - toolStarted }
               : isKnowledge
               ? { name: call.name, topic: call.args?.topic ?? null, product_id: call.args?.product_id ?? null, status: output.status, ms: Date.now() - toolStarted, sources: (output.sources ?? []).map((s) => ({ key: s.policy_key, version: s.version })), ids: (output.matches ?? []).map((m) => m.id) }
@@ -393,9 +556,27 @@ export function createLlmAgent({
         if (!products.length && finalAdvice?.status === 'recommended') {
           products = toCards(finalAdvice.steps.map((s) => ({ handle: s.handle, rationale: '' })), offered, catalogue, money, linkBase);
         }
+        // The offer follows products: shown as cards, or the product the conversation is about
+        // (its page, or the one they named). A reply about none is not followed by it, and
+        // nor is one where the model opened the routine builder itself.
+        // Nor one that already showed a routine (several steps): the offer would repeat it.
+        const routineShown = (advisorTurn?.advice?.steps?.length ?? 0) > 1;
+        if (followUp?.kind === 'offer' && (skillOpenedByModel || routineShown || (!products.length && !pageProduct && !resolvedIds.size))) {
+          followUp = null;
+          if (!skillOpenedByModel) flow = flowBefore;
+        }
+        if (skillOpenedByModel) trace.skill_opened = 'routine_builder';
         const cardIds = products.map((c) => c.id);
+        // The contact form: on every order answer and every « contact us ».
+        const contactPath = company.contactFormPath ?? null;
+        const contact = contactPath && (parsed.contactLink || orderAnswered || CONTACT_WORDS.test(parsed.text)) ? { url: contactPath } : null;
         if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace };
-        const advisorChoices = purchaseAsk ? purchaseChoices(purchaseAsk, displayLanguage(language, locale)) : advisorTurn ? advisorTurn.choices() : [];
+        if (followUp) trace.follow_up = followUp.kind;
+        const engineChoices = advisorTurn && !purchaseAsk ? advisorTurn.choices() : [];
+        // Only the last bubble's buttons are live: a follow-up without its own carries the engine's.
+        const followUpChoices = followUp ? (followUp.choices.length ? followUp.choices : engineChoices) : [];
+        const advisorChoices = followUp ? [] : engineChoices;
+        const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
         return {
           text: shopping ? shopping.sanitizeReply(parsed.text, parsed.replyLanguage ?? language.previous_language ?? 'fr') : parsed.text,
           replyLanguage: parsed.replyLanguage ?? null,
@@ -411,6 +592,10 @@ export function createLlmAgent({
             ? { status: resolution.status, ids: [...resolvedIds], pending: resolution.pending ?? null }
             : null,
           refs: { recommended: cardIds, mentioned: [...new Set([...resolvedIds, ...cardIds])] },
+          ...(contact ? { contact } : {}),
+          ...(orderLookups ? { orderLookups } : {}),
+          // The app's own second message (routine-flow.mjs): its text, cards and buttons.
+          ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUpChoices } } : {}),
           // The consultation's memory and this turn's analytics events.
           ...(advisorTurn
             ? {
@@ -444,6 +629,7 @@ export function parseReply(content) {
   return {
     text: text.length > MAX_REPLY_CHARS ? `${text.slice(0, MAX_REPLY_CHARS - 1).trimEnd()}…` : text,
     products: Array.isArray(parsed.products) ? parsed.products : [],
+    contactLink: parsed.contact_link === true,
     ...(validReplyLanguage(parsed.reply_language) ? { replyLanguage: parsed.reply_language } : {})
   };
 }
@@ -452,6 +638,13 @@ export function parseReply(content) {
  * Cards for the widget, from the catalogue, never from the model's words: the
  * model contributes a handle and a rationale; name, price and link are ours.
  */
+/** The one variant a card may add to the cart: the product's only purchasable size, in stock. */
+export function cartVariant(product) {
+  if (!product?.inStock) return null;
+  const buyable = (product.variants ?? []).filter((v) => v.inStock !== false && v.price > 0);
+  return buyable.length === 1 && buyable[0].id ? buyable[0].id : null;
+}
+
 export function toCards(suggested, offered, catalogue, money, linkBase = '') {
   if (!catalogue) return [];
   const seen = new Set();
@@ -462,13 +655,17 @@ export function toCards(suggested, offered, catalogue, money, linkBase = '') {
     const product = catalogue.products.find((p) => p.handle === handle);
     if (!product) continue;
     seen.add(handle);
+    const variantId = cartVariant(product);
     cards.push({
       id: product.id,
       title: product.name,
       url: `${linkBase}/products/${encodeURIComponent(product.handle)}`,
       image: null,
       price: product.priceFrom === null ? null : money(product.priceFrom),
-      rationale: typeof item.rationale === 'string' ? item.rationale.trim().slice(0, MAX_RATIONALE_CHARS) : ''
+      rationale: typeof item.rationale === 'string' ? item.rationale.trim().slice(0, MAX_RATIONALE_CHARS) : '',
+      // « Ajouter au panier » on the card: only with one size to buy. With
+      // several, the size is the customer's choice, on the product page.
+      ...(variantId ? { variantId } : {})
     });
     if (cards.length === MAX_CARDS) break;
   }

@@ -21,7 +21,9 @@ export function companyFrom({ shopName = null, parameters = new Map() } = {}) {
   return {
     name: name || null,
     description: text(parameters, 'company_description'),
-    logisticsProvider: text(parameters, 'logistics_provider_name')
+    logisticsProvider: text(parameters, 'logistics_provider_name'),
+    // The storefront advisor's « contact us » link: a path on the shop's own site.
+    contactFormPath: contactPath(text(parameters, 'contact_form_path'))
   };
 }
 
@@ -44,4 +46,10 @@ export function serviceClientOf(company = {}) {
   return company.description
     ? `service client de ${company.name}, ${company.description}`
     : `service client de ${company.name}`;
+}
+
+/** Shopify's own contact page unless the shop set another path; a path on the shop's site only. */
+export const DEFAULT_CONTACT_FORM_PATH = '/pages/contact';
+function contactPath(value) {
+  return typeof value === 'string' && /^\/[A-Za-z0-9/_\-.%]{1,200}$/.test(value) && !value.startsWith('//') ? value : DEFAULT_CONTACT_FORM_PATH;
 }

@@ -26,9 +26,17 @@ test('it forbids exactly what Phase 2 cannot know', () => {
 
 test('orders go to customer service, and nothing personal is asked for', () => {
   const prompt = buildStorefrontSystemPrompt({ company: COMPANY });
-  assert.match(prompt, /any question about an order[^\n]*customer service handles it/);
+  assert.match(prompt, /any question about an individual order[^\n]*customer service handles it/);
   assert.match(prompt, /Never ask for an order number or an email address/);
   assert.match(prompt, /Ask for no personal data/);
+  assert.match(prompt, /set contact_link true/);
+});
+
+test('with the order tool: the order number only, never an email; the contact form after every order answer', () => {
+  const prompt = buildStorefrontSystemPrompt({ company: COMPANY, hasOrders: true });
+  assert.match(prompt, /ask for its order number only \(never an email, a name or an address\), then call get_order_status/);
+  assert.match(prompt, /Every order answer ends by inviting them to use the contact form/);
+  assert.doesNotMatch(prompt, /Never ask for an order number/);
 });
 
 test('health questions go to a professional', () => {

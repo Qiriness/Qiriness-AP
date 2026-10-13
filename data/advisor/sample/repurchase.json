@@ -1,0 +1,54 @@
+{
+  "_about": "INVENTED measured repurchase, in the format `npm run advisor:repurchase` writes.",
+  "shop": "test.myshopify.com",
+  "window": [
+    "2024-05-16",
+    "2026-10-10"
+  ],
+  "products": [
+    {
+      "handle": "test-creme-hydratante-riche",
+      "size": "—",
+      "buyers": 120,
+      "repeat_rate": 18,
+      "gaps": 20,
+      "median_weeks": 17,
+      "p25_weeks": 9,
+      "p75_weeks": 22,
+      "median_weeks_per_unit": 12.9
+    },
+    {
+      "handle": "test-serum-hydratant-aqua",
+      "size": "—",
+      "buyers": 60,
+      "repeat_rate": 22,
+      "gaps": 14,
+      "median_weeks": 11,
+      "p25_weeks": 8,
+      "p75_weeks": 18,
+      "median_weeks_per_unit": 10.7
+    },
+    {
+      "handle": "test-masque-hydratant-wrap",
+      "size": "—",
+      "buyers": 200,
+      "repeat_rate": 10,
+      "gaps": 30,
+      "median_weeks": 12,
+      "p25_weeks": 3,
+      "p75_weeks": 23,
+      "median_weeks_per_unit": 6.4
+    },
+    {
+      "handle": "test-lait-nettoyant-doux",
+      "size": "—",
+      "buyers": 40,
+      "repeat_rate": 15,
+      "gaps": 6,
+      "median_weeks": 14,
+      "p25_weeks": 9,
+      "p75_weeks": 20,
+      "median_weeks_per_unit": 12
+    }
+  ]
+}

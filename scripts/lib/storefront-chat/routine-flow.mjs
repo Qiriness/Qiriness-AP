@@ -1,0 +1,155 @@
+/**
+ * The routine builder flow (owner, 2026-10-13): how a conversation leads to a
+ * personalised routine, decided here and never in the prompt.
+ *
+ *   entry       a product question, a concern (« pour les imperfections »), or
+ *               « construisez-moi une routine » (straight into the builder)
+ *   offer       after we propose products, a FOLLOW-UP message: « Souhaitez-vous
+ *               une routine personnalisée ? » Oui / Non (buttons or typed)
+ *   builder     the engine asks the concern; then, signed in, ONE past purchase:
+ *               build around it / « il m'en reste peu » (its card, view or add
+ *               to cart) / focus on the concern
+ *   anchor      the product they came in with (page, named, our top pick) is
+ *               built into the routine (`pinned` in the engine)
+ *   treat       one « petit plaisir » after the routine, or after a « Non »
+ *
+ * The follow-up's words and buttons both come from here, so they always agree
+ * (the live run of 2026-10-13 had the model's text ask one thing and the
+ * buttons answer another). The model is only told that a follow-up comes.
+ *
+ * State, with the consultation (`context.advisor.flow`):
+ *   { offer: null | 'offered' | 'accepted' | 'declined',
+ *     anchor: { id, source: 'page' | 'request' | 'suggested' } | null,
+ *     treat_offered: boolean }
+ */
+
+export const FLOW_CHOICE = /^flow:routine:(yes|no)$/;
+const OFFERS = ['offered', 'accepted', 'declined'];
+const SOURCES = ['page', 'request', 'suggested'];
+const ID = /^[0-9a-f-]{36}$/;
+
+const TEXT = {
+  fr: {
+    offer: 'Souhaitez-vous que je vous construise une routine personnalisée ?',
+    yes: 'Oui, avec plaisir',
+    no: 'Non merci',
+    purchase: (name) => `Je vois que vous avez déjà acheté ${name}. Souhaitez-vous construire votre routine autour, vous en reste-t-il peu, ou préférez-vous vous concentrer sur votre préoccupation ?`,
+    runningLow: (name) => `Vous pouvez retrouver ${name} ici, ou l'ajouter directement à votre panier.`,
+    treatAfterRoutine: 'Et pour un moment de douceur, ce petit plaisir pourrait vous plaire :',
+    treatAfterNo: "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :",
+  },
+  en: {
+    offer: 'Would you like me to build you a personalised routine?',
+    yes: 'Yes please',
+    no: 'No thanks',
+    purchase: (name) => `I can see you've bought ${name} before. Would you like to build your routine around it, are you running low on it, or would you rather focus on your concern?`,
+    runningLow: (name) => `You'll find ${name} here, or you can add it straight to your cart.`,
+    treatAfterRoutine: 'And for a little moment of pampering, you might like this treat:',
+    treatAfterNo: 'Of course. If you fancy a little treat, you might like this one:',
+  },
+};
+const text = (lang) => TEXT[String(lang).slice(0, 2)] ?? TEXT.fr;
+
+// A typed answer to the offer, French and English. Only read while an offer is pending.
+const YES = /^\s*(oui|ouais|volontiers|avec plaisir|d'accord|ok(ay)?|bien s[uû]r|carr[ée]ment|go|yes|yeah|yep|sure|please|of course|let'?s (do it|go))\b(?!.*\b(pas|not|non|no)\b)/iu;
+const NO = /^\s*(non|nan|pas (maintenant|pour l'instant|besoin)|sans fa[cç]on|no|nope|not (now|right now|today)|no thanks?)\b/iu;
+
+export function emptyFlow() {
+  return { offer: null, anchor: null, treat_offered: false };
+}
+
+/** From the message log: re-checked like the rest of the state. */
+export function cleanFlow(saved) {
+  const anchor = saved?.anchor && ID.test(saved.anchor.id ?? '') && SOURCES.includes(saved.anchor.source) ? { id: saved.anchor.id, source: saved.anchor.source } : null;
+  return { offer: OFFERS.includes(saved?.offer) ? saved.offer : null, anchor, treat_offered: saved?.treat_offered === true };
+}
+
+/** The customer's answer to the offer: a button, or typed words while it is pending. */
+export function offerAnswer(flow, { choice = null, message = '' } = {}) {
+  const m = typeof choice === 'string' ? choice.match(FLOW_CHOICE) : null;
+  if (m) return m[1];
+  if (cleanFlow(flow).offer !== 'offered' || choice) return null;
+  if (NO.test(message)) return 'no';
+  if (YES.test(message)) return 'yes';
+  return null;
+}
+
+/**
+ * Before the advice: the offer answered, and whether the builder starts.
+ * @returns {{ flow: object, answer: 'yes' | 'no' | null, startBuilder: boolean }}
+ */
+export function beforeAdvice(flow, { choice, message }) {
+  const next = cleanFlow(flow);
+  const answer = offerAnswer(next, { choice, message });
+  if (answer === 'yes') next.offer = 'accepted';
+  if (answer === 'no') next.offer = 'declined';
+  return { flow: next, answer, startBuilder: answer === 'yes' };
+}
+
+/**
+ * The product they came in with: the page they are on, else the product they
+ * named, else our top pick for their concern.
+ */
+export function anchorFor({ pageProductId = null, resolvedIds = [], advice = null }) {
+  if (pageProductId) return { id: pageProductId, source: 'page' };
+  if (resolvedIds.length) return { id: resolvedIds[0], source: 'request' };
+  const top = advice?.status === 'recommended' ? advice.steps?.[0]?.product_id : null;
+  return top ? { id: top, source: 'suggested' } : null;
+}
+
+/**
+ * After the advice, before the model: this turn's follow-up message (one at
+ * most), in this order: the answer to « il m'en reste peu », the treat after a
+ * « Non », the purchase question, the treat after the routine, the offer.
+ *
+ * @param {{
+ *   flow: object, lang: string, builder: boolean, answer: 'yes' | 'no' | null,
+ *   advice: object | null,           the engine's advice this turn
+ *   showsProducts: boolean,          this reply will show product cards
+ *   anchor: { id: string, source: string } | null,
+ *   purchaseAsk: { product_id: string, name: string } | null,   purchase-turn's pick, builder only
+ *   runningLow: { product_id: string, name: string } | null,    just answered « il m'en reste peu »
+ *   treat: { product_id: string } | null,                        the engine's treat, when one is due
+ *   purchaseChoices: (item) => { label: string, value: string }[]
+ * }} input
+ * @returns {{ flow: object, followUp: { kind: string, text: string, choices: object[], productIds: string[] } | null }}
+ */
+export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices }) {
+  const next = cleanFlow(flow);
+  const t = text(lang);
+  const say = (kind, words, { choices = [], productIds = [] } = {}) => ({ flow: next, followUp: { kind, text: words, choices, productIds } });
+
+  if (runningLow) return say('running_low', t.runningLow(runningLow.name), { productIds: [runningLow.product_id] });
+  if (answer === 'no' && treat && !next.treat_offered) {
+    next.treat_offered = true;
+    return say('treat', t.treatAfterNo, { productIds: [treat.product_id] });
+  }
+  if (builder && purchaseAsk) return say('purchase', t.purchase(purchaseAsk.name), { choices: purchaseChoices(purchaseAsk) });
+  if (builder && advice?.status === 'recommended' && treat && !next.treat_offered) {
+    next.treat_offered = true;
+    return say('treat', t.treatAfterRoutine, { productIds: [treat.product_id] });
+  }
+  if (!builder && next.offer === null && showsProducts) {
+    next.offer = 'offered';
+    if (anchor) next.anchor = anchor;
+    return say('offer', t.offer, { choices: [{ label: t.yes, value: 'flow:routine:yes' }, { label: t.no, value: 'flow:routine:no' }] });
+  }
+  return { flow: next, followUp: null };
+}
+
+/**
+ * What the model is told: the app sends this itself, after its reply. When the
+ * follow-up is a question, the reply asks none (the live run had the reply ask
+ * the skin type while the follow-up asked about a purchase).
+ */
+const ABOUT = {
+  offer: 'asks whether they would like a personalised routine',
+  purchase: 'asks what to do about a product they bought before',
+  running_low: 'shows the card of the product they are running low on, to view or add to cart',
+  treat: 'suggests one small treat, with its card',
+};
+export function followUpNote(followUp) {
+  if (!followUp) return null;
+  const base = `After your reply, the app sends its own message that ${ABOUT[followUp.kind] ?? 'follows up'}. Never write it, quote it or announce it; do not offer a routine or a treat yourself.`;
+  return followUp.choices.length ? `${base} That message is this turn's only question: your reply asks none.` : `${base} Ask ADVICE next_question as usual, if there is one.`;
+}

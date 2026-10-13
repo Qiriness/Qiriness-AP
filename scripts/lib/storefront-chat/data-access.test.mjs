@@ -4,17 +4,17 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-// THE STOREFRONT ADVISOR NEVER READS CUSTOMERS OR ORDERS, except through one
-// narrow function: a signed-in customer's own purchase summary
+// THE STOREFRONT ADVISOR NEVER READS CUSTOMERS OR ORDERS, except through two
+// narrow functions: a signed-in customer's own purchase summary
 // (docs/decisions/storefront-advisor.md § Purchase history: identity from the
-// signature only). That reader is the one file allowed below, and its output
-// goes through toPurchaseSummary.
+// signature only), and one order's status by its number (§ The storefront agent
+// reads one order's status by its number). Those readers are the files allowed below.
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
 
-/** The only file that may name these tables. */
-const PURCHASE_READER = 'purchase-summary-repository.mjs';
+/** The only files that may name these tables. */
+const READERS = new Set(['purchase-summary-repository.mjs', 'order-status-repository.mjs']);
 
 const PERSONAL_TABLES = /['"`](customers|orders|order_lines|customer_addresses)['"`]|\b(?:T|TABLES)\.(CUSTOMERS|ORDERS|ORDER_LINES)\b/;
 
@@ -25,9 +25,9 @@ const sources = [
   path.join(root, 'web', 'app', 'api', 'storefront', 'event', 'route.ts'),
 ];
 
-test('no storefront module but the purchase reader names the customer or order tables', () => {
+test('no storefront module but the two readers names the customer or order tables', () => {
   for (const file of sources) {
-    if (path.basename(file) === PURCHASE_READER) continue;
+    if (READERS.has(path.basename(file))) continue;
     const match = PERSONAL_TABLES.exec(fs.readFileSync(file, 'utf8'));
     assert.equal(match, null, `${path.relative(root, file)} names ${match?.[0]}`);
   }

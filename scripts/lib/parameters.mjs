@@ -187,6 +187,15 @@ export const PARAMETERS = {
       'The warehouse or logistics provider, by name. Used in the reasons the queue ' +
       'gives for a ticket\'s priority. Unset: « the logistics provider ».',
     usedBy: 'ticket priority reasons'
+  },
+  contact_form_path: {
+    kind: 'text',
+    label: 'Where is the contact form on the shop (a path, e.g. /pages/contact)?',
+    description:
+      'The link the storefront advisor shows whenever it sends a customer to customer ' +
+      'service, and under every order answer. A path on the shop\'s own site. Unset: ' +
+      'Shopify\'s /pages/contact.',
+    usedBy: 'the storefront advisor\'s contact link'
   }
 };
 

@@ -1,0 +1,540 @@
+{
+  "_about": "INVENTED products for tests: no real product, price or customer. Same columns as the Products tab of qiriness-knowledge-template.xlsx, keyed by its (key) names, values as Qiriness would type them. Collections and tags are the real config's, so the real playbooks fill steps.",
+  "products": [
+    {
+      "id": "00000000-0000-4000-a000-000000000001",
+      "shopifyId": "gid://shopify/Product/900001",
+      "handle": "test-lait-nettoyant-doux",
+      "name": "Lait Nettoyant Doux (test)",
+      "type": "Nettoyant",
+      "tags": [
+        "visage",
+        "tous les types de peaux",
+        "peaux sensibles",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Lait Nettoyant Doux (test).",
+      "description": "Produit inventé, aucune donnée réelle. Lait Nettoyant Doux (test).",
+      "keyIngredients": "Parfum",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800001",
+          "title": null,
+          "price": 22,
+          "sku": "TEST-001",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-001"
+      ],
+      "priceFrom": 22,
+      "inStock": true,
+      "collections": [
+        "nettoyants-et-lotions"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000002",
+      "shopifyId": "gid://shopify/Product/900002",
+      "handle": "test-gel-nettoyant-purifiant",
+      "name": "Gel Nettoyant Purifiant (test)",
+      "type": "Nettoyant",
+      "tags": [
+        "visage",
+        "peaux mixtes",
+        "peaux grasses",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Gel Nettoyant Purifiant (test).",
+      "description": "Produit inventé, aucune donnée réelle. Gel Nettoyant Purifiant (test).",
+      "keyIngredients": "Alcool",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800002",
+          "title": null,
+          "price": 20,
+          "sku": "TEST-002",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-002"
+      ],
+      "priceFrom": 20,
+      "inStock": true,
+      "collections": [
+        "nettoyants-et-lotions"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000003",
+      "shopifyId": "gid://shopify/Product/900003",
+      "handle": "test-lotion-exfoliante-eclat",
+      "name": "Lotion Exfoliante Éclat (test)",
+      "type": "Exfoliant",
+      "tags": [
+        "visage",
+        "éclat",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Lotion Exfoliante Éclat (test).",
+      "description": "Produit inventé, aucune donnée réelle. Lotion Exfoliante Éclat (test).",
+      "keyIngredients": "AHA",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800003",
+          "title": null,
+          "price": 26,
+          "sku": "TEST-003",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-003"
+      ],
+      "priceFrom": 26,
+      "inStock": true,
+      "collections": [
+        "exfoliant-lotion-gommage",
+        "eclat-et-bonne-mine-1"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000004",
+      "shopifyId": "gid://shopify/Product/900004",
+      "handle": "test-serum-hydratant-aqua",
+      "name": "Sérum Hydratant Aqua (test)",
+      "type": "Sérum",
+      "tags": [
+        "visage",
+        "hydratation",
+        "tous les types de peaux",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Hydratant Aqua (test).",
+      "description": "Produit inventé, aucune donnée réelle. Sérum Hydratant Aqua (test).",
+      "keyIngredients": "Eau, glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800004",
+          "title": null,
+          "price": 39,
+          "sku": "TEST-004",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-004"
+      ],
+      "priceFrom": 39,
+      "inStock": true,
+      "collections": [
+        "serums-visage",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000005",
+      "shopifyId": "gid://shopify/Product/900005",
+      "handle": "test-serum-anti-age-lift",
+      "name": "Sérum Anti-âge Lift (test)",
+      "type": "Sérum",
+      "tags": [
+        "visage",
+        "rides",
+        "anti-âge",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Anti-âge Lift (test).",
+      "description": "Produit inventé, aucune donnée réelle. Sérum Anti-âge Lift (test).",
+      "keyIngredients": "Rétinol",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800005",
+          "title": null,
+          "price": 55,
+          "sku": "TEST-005",
+          "compareAt": null,
+          "inStock": true
+        },
+        {
+          "id": "gid://shopify/ProductVariant/810005",
+          "title": "50 ml",
+          "price": 85,
+          "sku": "TEST-005-50",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-005"
+      ],
+      "priceFrom": 55,
+      "inStock": true,
+      "collections": [
+        "serums-visage",
+        "cremes-anti-age-anti-rides",
+        "gamme-anti-age-temps-sublime"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000006",
+      "shopifyId": "gid://shopify/Product/900006",
+      "handle": "test-serum-booster-eclat",
+      "name": "Sérum Booster Éclat (test)",
+      "type": "Sérum",
+      "tags": [
+        "visage",
+        "éclat",
+        "tous les types de peaux",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Booster Éclat (test).",
+      "description": "Produit inventé, aucune donnée réelle. Sérum Booster Éclat (test).",
+      "keyIngredients": "Vitamine C",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800006",
+          "title": null,
+          "price": 34,
+          "sku": "TEST-006",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-006"
+      ],
+      "priceFrom": 34,
+      "inStock": true,
+      "collections": [
+        "serums-visage",
+        "eclat-et-bonne-mine-1"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000007",
+      "shopifyId": "gid://shopify/Product/900007",
+      "handle": "test-creme-hydratante-riche",
+      "name": "Crème Hydratante Riche (test)",
+      "type": "Crème",
+      "tags": [
+        "visage",
+        "hydratation",
+        "peaux sèches",
+        "crème riche",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Crème Hydratante Riche (test).",
+      "description": "Produit inventé, aucune donnée réelle. Crème Hydratante Riche (test).",
+      "keyIngredients": "Parfum",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800007",
+          "title": null,
+          "price": 42,
+          "sku": "TEST-007",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-007"
+      ],
+      "priceFrom": 42,
+      "inStock": true,
+      "collections": [
+        "cremes-hydratantes",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000008",
+      "shopifyId": "gid://shopify/Product/900008",
+      "handle": "test-creme-hydratante-light",
+      "name": "Crème Hydratante Light (test)",
+      "type": "Crème",
+      "tags": [
+        "visage",
+        "hydratation",
+        "peaux mixtes",
+        "peaux grasses",
+        "légère",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Crème Hydratante Light (test).",
+      "description": "Produit inventé, aucune donnée réelle. Crème Hydratante Light (test).",
+      "keyIngredients": "Eau, glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800008",
+          "title": null,
+          "price": 38,
+          "sku": "TEST-008",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-008"
+      ],
+      "priceFrom": 38,
+      "inStock": true,
+      "collections": [
+        "cremes-hydratantes",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000009",
+      "shopifyId": "gid://shopify/Product/900009",
+      "handle": "test-creme-de-nuit-regenerante",
+      "name": "Crème de Nuit Régénérante (test)",
+      "type": "Crème",
+      "tags": [
+        "visage",
+        "rides",
+        "anti-âge",
+        "tous les types de peaux",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Crème de Nuit Régénérante (test).",
+      "description": "Produit inventé, aucune donnée réelle. Crème de Nuit Régénérante (test).",
+      "keyIngredients": "Rétinol",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800009",
+          "title": null,
+          "price": 48,
+          "sku": "TEST-009",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-009"
+      ],
+      "priceFrom": 48,
+      "inStock": true,
+      "collections": [
+        "creme-de-nuit",
+        "cremes-visage-nuit",
+        "cremes-anti-age-anti-rides",
+        "gamme-anti-age-temps-sublime"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000010",
+      "shopifyId": "gid://shopify/Product/900010",
+      "handle": "test-contour-des-yeux-defatigant",
+      "name": "Contour des Yeux Défatigant (test)",
+      "type": "Yeux",
+      "tags": [
+        "yeux",
+        "défatiguant",
+        "Anti-Cernes",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Contour des Yeux Défatigant (test).",
+      "description": "Produit inventé, aucune donnée réelle. Contour des Yeux Défatigant (test).",
+      "keyIngredients": "Caféine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800010",
+          "title": null,
+          "price": 32,
+          "sku": "TEST-010",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-010"
+      ],
+      "priceFrom": 32,
+      "inStock": true,
+      "collections": [
+        "soins-contour-des-yeux",
+        "anti-fatigue",
+        "diag-cernes-et-poches"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000011",
+      "shopifyId": "gid://shopify/Product/900011",
+      "handle": "test-masque-hydratant-wrap",
+      "name": "Masque Hydratant Wrap (test)",
+      "type": "Masque",
+      "tags": [
+        "visage",
+        "hydratation",
+        "tous les types de peaux",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Masque Hydratant Wrap (test).",
+      "description": "Produit inventé, aucune donnée réelle. Masque Hydratant Wrap (test).",
+      "keyIngredients": "Eau, glycérine",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800011",
+          "title": null,
+          "price": 12,
+          "sku": "TEST-011",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-011"
+      ],
+      "priceFrom": 12,
+      "inStock": true,
+      "collections": [
+        "masques-patch",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000012",
+      "shopifyId": "gid://shopify/Product/900012",
+      "handle": "test-coffret-hydratation",
+      "name": "Coffret Hydratation (test)",
+      "type": "Coffret / kit",
+      "tags": [
+        "visage",
+        "hydratation",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Coffret Hydratation (test).",
+      "description": "Produit inventé, aucune donnée réelle. Coffret Hydratation (test).",
+      "keyIngredients": "Parfum",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800012",
+          "title": null,
+          "price": 89,
+          "sku": "TEST-012",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-012"
+      ],
+      "priceFrom": 89,
+      "inStock": true,
+      "collections": [
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000013",
+      "shopifyId": "gid://shopify/Product/900013",
+      "handle": "test-creme-hydratante-homme",
+      "name": "Crème Hydratante Homme (test)",
+      "type": "Crème",
+      "tags": [
+        "visage",
+        "homme",
+        "hydratation",
+        "tous les types de peaux",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Crème Hydratante Homme (test).",
+      "description": "Produit inventé, aucune donnée réelle. Crème Hydratante Homme (test).",
+      "keyIngredients": "Eau, glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800013",
+          "title": null,
+          "price": 36,
+          "sku": "TEST-013",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-013"
+      ],
+      "priceFrom": 36,
+      "inStock": true,
+      "collections": [
+        "cremes-hydratantes",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-a000-000000000014",
+      "shopifyId": "gid://shopify/Product/900014",
+      "handle": "test-creme-ancienne-formule",
+      "name": "Crème Ancienne Formule (test)",
+      "type": "Crème",
+      "tags": [
+        "visage",
+        "hydratation",
+        "peaux sèches",
+        "test"
+      ],
+      "short": "Produit inventé pour les tests : Crème Ancienne Formule (test).",
+      "description": "Produit inventé, aucune donnée réelle. Crème Ancienne Formule (test).",
+      "keyIngredients": "Parfum",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/800014",
+          "title": null,
+          "price": 30,
+          "sku": "TEST-014",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "TEST-014"
+      ],
+      "priceFrom": 30,
+      "inStock": true,
+      "collections": [
+        "cremes-hydratantes",
+        "soins-hydratants"
+      ]
+    }
+  ],
+  "collections": []
+}

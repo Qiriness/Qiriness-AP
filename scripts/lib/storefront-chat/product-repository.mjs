@@ -55,7 +55,7 @@ const ACTIVE_COLLECTION = { is_active: true, deleted_at: { operator: 'is', value
  * @property {string | null} keyIngredients
  * @property {string | null} usage
  * @property {object[]} faqs        published Shopify question/answer pairs, selected per question
- * @property {{ title: string | null, price: number, sku: string | null, compareAt: number | null }[]} variants  compareAt: the « was » price, only when above price
+ * @property {{ id: string | null, title: string | null, price: number, sku: string | null, compareAt: number | null, inStock: boolean | null }[]} variants  compareAt: the « was » price, only when above price; id: Shopify's variant gid (the card's « Ajouter au panier »); inStock: null when the sync did not say
  * @property {string[]} skus
  * @property {number | null} priceFrom
  * @property {boolean} inStock
@@ -103,7 +103,7 @@ export function buildCatalogue(productRows, collectionRows) {
 /** @returns {ProductRecord} */
 export function mapProduct(row, collections = []) {
   const variants = (Array.isArray(row.variants) ? row.variants : [])
-    .map((v) => ({ title: cleanVariantTitle(v?.title), price: Number(v?.price), sku: typeof v?.sku === 'string' && v.sku.trim() ? v.sku.trim() : null, compareAt: Number(v?.compare_at_price) > Number(v?.price) ? Number(v.compare_at_price) : null }))
+    .map((v) => ({ id: typeof v?.id === 'string' && /^gid:\/\/shopify\/ProductVariant\/\d{1,20}$/.test(v.id) ? v.id : null, title: cleanVariantTitle(v?.title), price: Number(v?.price), sku: typeof v?.sku === 'string' && v.sku.trim() ? v.sku.trim() : null, compareAt: Number(v?.compare_at_price) > Number(v?.price) ? Number(v.compare_at_price) : null, inStock: typeof v?.inventory_quantity === 'number' ? v.inventory_quantity > 0 : null }))
     .filter((v) => Number.isFinite(v.price) && v.price > 0);
   return {
     id: row.id ?? row.handle,

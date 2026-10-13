@@ -23,14 +23,16 @@ export const CHANNEL = 'storefront_chat';
 /** Chip value prefix: `profile:<field>:<value>[+<value>]`. */
 export const PROFILE_CHOICE = /^profile:([a-z_]{1,40}):([a-z0-9_+]{1,80})$/;
 
-export function adviseToolDefinition(advisor) {
+export function adviseToolDefinition(advisor, { builder = false } = {}) {
   const a = advisor.allowed;
   return {
     type: 'function',
     function: {
       name: ADVISE,
       description:
-        'Run the beauty consultation engine: it records what the customer said about their skin, concerns, routine or preferences, then returns either ONE next question (with chip options) or a routine of brand products chosen by the brand\'s playbooks. Use it when the customer asks for advice and the advice in VISIT CONTEXT is missing or outdated. ' +
+        (builder
+          ? 'Run the routine builder: it records what the customer said about their skin, concerns, routine or preferences, then returns either the ONE next question for their routine (with chip options) or the routine itself, built by the brand\'s playbooks. Call it with every new thing they tell you. '
+          : 'Run the beauty consultation engine for a targeted need: it records what the customer said about their skin, concerns or preferences, then returns either ONE next question (with chip options) or the brand\'s top choices for that need. Use it when the customer asks for advice and the advice in VISIT CONTEXT is missing or outdated. ') +
         `Allowed values — body_area: ${a.body_area.join(', ')}; skin_type: ${a.skin_type.join(', ')}; sensitivity: ${a.sensitivity.join(', ')}; ` +
         `primary_concern / secondary_concerns: ${a.secondary_concerns.join(', ')}; current_routine: ${a.current_routine.join(', ')}; desired_care_type: ${a.desired_care_type.join(', ')}; ` +
         `routine_scope: ${a.routine_scope.join(', ')}; sex_target: men only when the customer explicitly asks for men's care; age_band: ${a.age_band.join(', ')}; known_exclusions: an ingredient word.`,
@@ -48,7 +50,10 @@ export function adviseToolDefinition(advisor) {
               additionalProperties: false
             }
           },
-          scope: { type: ['string', 'null'], enum: ['targeted', 'essential', 'complete', 'complete_existing', null], description: 'Routine size the customer asked for, or null.' }
+          // Outside the skill, one product only: a routine is the routine_builder skill's (live run, 2026-10-13).
+          scope: builder
+            ? { type: ['string', 'null'], enum: ['targeted', 'essential', 'complete', 'complete_existing', null], description: 'Routine size the customer asked for, or null.' }
+            : { type: ['string', 'null'], enum: ['targeted', null], description: 'targeted, or null. For a routine, open the routine_builder skill instead.' }
         },
         required: ['profile_updates', 'scope'],
         additionalProperties: false
@@ -66,15 +71,21 @@ export function adviseToolDefinition(advisor) {
  *   productQuestion?: boolean,
  *   turn?: number   the customer's message number in this conversation, recorded on each profile field
  *   consultation?: boolean   an answer that continues the consultation without a profile chip (a purchase chip)
- *   stillUsing?: string[]    product ids the customer said they still use: their steps are marked, not replaced
+ *   stillUsing?: string[]    product ids the customer said they still use: each fills its step, never replaced
+ *   ranges?: string[]        knowledge ranges the customer uses: a ranking nudge among suitable products
+ *   pinned?: string[]        products to build the routine around (their interest), in the builder only
  * }} input
  */
-export function createAdvisorTurn({ advisor, state = null, message, choice = null, action = null, locale = 'fr', catalogue, money, productQuestion = false, turn = 0, consultation = false, stillUsing = [] }) {
+export function createAdvisorTurn({ advisor, state = null, message, choice = null, action = null, locale = 'fr', catalogue, money, productQuestion = false, turn = 0, consultation = false, stillUsing = [], ranges = [], pinned = [] }) {
   const before = state ?? emptyAdvisorState();
   const lang = String(locale || 'fr').slice(0, 2);
   const lex = extractProfile(message, { profile: before.profile, lastAsked: before.last_question });
-  const builderAsked = action === 'build_routine' || lex.routineBuilder;
-  const mode = builderAsked ? 'routine_builder' : before.mode;
+  // A routine asked for: the quick action, the routine words, or a routine size
+  // in their words (« tout organiser du matin au soir » read as complete): the
+  // routine builder skill, never a whole routine outside it (live run, 2026-10-13).
+  const routineSize = lex.updates.some((u) => u.field === 'routine_scope' && u.value !== 'targeted');
+  const builderAsked = action === 'build_routine' || lex.routineBuilder || routineSize;
+  let mode = builderAsked ? 'routine_builder' : before.mode;
 
   const updates = [];
   const picked = typeof choice === 'string' ? choice.match(PROFILE_CHOICE) : null;
@@ -83,7 +94,10 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   }
   // A chip's label arrives as the message too: the chip wins, the words add nothing new.
   if (!picked) updates.push(...lex.updates);
-  let { profile, changed } = mergeProfile(before.profile, updates, { allowed: advisor.allowed, turn });
+  // Asking for a routine supersedes « one product of this type »: the routine
+  // offer after « pour hydrater mon visage » built one cream (live run, 2026-10-13).
+  const base = builderAsked ? withoutSingleProduct(before.profile) : before.profile;
+  let { profile, changed } = mergeProfile(base, updates, { allowed: advisor.allowed, turn });
   let advice = null;
   let asked = [...before.asked];
 
@@ -93,14 +107,14 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   // convient aux peaux sèches ? ») still updates the profile, but is answered
   // from that product's facts, not with a routine.
   let relevant = consultation || builderAsked || Boolean(picked) || mode === 'routine_builder' || (changed.length > 0 && !productQuestion);
-  const owned = new Set(stillUsing);
+  let rangeNudge = [...ranges];
   const compute = () => {
-    advice = advisor.advise({ profile, mode, asked, locale: lang });
+    advice = advisor.advise({ profile, mode, asked, locale: lang, owned: stillUsing, ranges: rangeNudge, pinned: mode === 'routine_builder' ? pinned : [] });
     return advice;
   };
 
   return {
-    mode,
+    get mode() { return mode; },
     get advice() { return advice; },
     get profile() { return profile; },
     /** What the lexicon read, and what it left unexplained (`residue`): the reader's gate. */
@@ -125,10 +139,37 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
       return relevant ? compute() : null;
     },
 
+    /**
+     * The model opened the routine builder skill (use_skill) mid-turn: builder
+     * mode, a routine rather than one product, and the advice computed again.
+     * @returns {boolean} whether the mode changed
+     */
+    enterBuilder() {
+      if (mode === 'routine_builder') return false;
+      mode = 'routine_builder';
+      profile = withoutSingleProduct(profile);
+      relevant = true;
+      compute();
+      return true;
+    },
+
+    /**
+     * The ranges the customer uses, known once their purchases are read (after
+     * the opening). Re-ranks the advice already computed; true when it ran again.
+     */
+    useRanges(list) {
+      const next = [...new Set(list ?? [])].sort();
+      if (!advice || next.join('|') === [...rangeNudge].sort().join('|')) return false;
+      rangeNudge = next;
+      compute();
+      return true;
+    },
+
     /** The `advise` tool. Never throws: a bad update is dropped by `mergeProfile`. */
     run(args) {
       const updates = modelUpdates(args?.profile_updates);
-      if (typeof args?.scope === 'string') updates.push({ field: 'routine_scope', value: args.scope, source: 'model_inferred', confidence: 'medium' });
+      // A routine size is the builder's: outside it, the model may only ask for one product.
+      if (typeof args?.scope === 'string' && (mode === 'routine_builder' || args.scope === 'targeted')) updates.push({ field: 'routine_scope', value: args.scope, source: 'model_inferred', confidence: 'medium' });
       const merged = mergeProfile(profile, updates, { allowed: advisor.allowed, turn });
       profile = merged.profile;
       changed = [...changed, ...merged.changed];
@@ -172,7 +213,7 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
 
     trace() {
       return advice
-        ? { status: advice.status, mode, playbook: advice.playbook?.key ?? null, route: advice.playbook?.route ?? null, scope: advice.scope, question: advice.next_question?.field ?? null, steps: advice.steps.map((s) => ({ slot: s.slot, id: s.product_id, merchandised: s.merchandised })), changed: changed.map((c) => c.field) }
+        ? { status: advice.status, mode, playbook: advice.playbook?.key ?? null, route: advice.playbook?.route ?? null, scope: advice.scope, question: advice.next_question?.field ?? null, steps: advice.steps.map((s) => ({ slot: s.slot, id: s.product_id, merchandised: s.merchandised })), ...(advice.skipped.some((s) => s.reason === 'already_owned') ? { kept: advice.skipped.filter((s) => s.reason === 'already_owned').map((s) => ({ slot: s.slot, id: s.product_id })) } : {}), ...(advice.pinned?.length ? { pinned: advice.pinned.map((p) => ({ id: p.product_id, status: p.status })) } : {}), changed: changed.map((c) => c.field) }
         : { status: 'not_run', mode, changed: changed.map((c) => c.field) };
     }
   };
@@ -191,15 +232,24 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
         step: s.slot,
         optional: s.optional || undefined,
         product: slim(byId.get(s.product_id), money),
-        // The customer said they still use it: keep theirs, never sell it again.
-        ...(owned.has(s.product_id) ? { customer_already_uses_it: true } : {}),
+        ...(s.customer_interest ? { customer_interest: true } : {}),
         reason_codes: s.reason_codes,
         alternatives: s.alternatives.map((x) => ({ handle: x.handle, name: byId.get(x.product_id)?.name ?? null }))
       })),
-      skipped_steps: a.skipped.map((s) => ({ step: s.slot, reason: s.reason })),
+      // already_owned: a product they said they still use fills it; the model says to keep theirs.
+      skipped_steps: a.skipped.map((s) => ({ step: s.slot, reason: s.reason, ...(s.product_id ? { customer_product: byId.get(s.product_id)?.name ?? null } : {}) })),
+      // The product they came for, when it could not go in: say why, briefly.
+      ...((a.pinned ?? []).some((p) => p.status !== 'placed') ? { customer_interest_not_used: a.pinned.filter((p) => p.status !== 'placed').map((p) => ({ name: byId.get(p.product_id)?.name ?? null, why: p.status })) } : {}),
       ...(a.defaulted ? { defaulted_after_question: true } : {})
     };
   }
+}
+
+/** The profile without what limits it to one product: a care type, a targeted scope. */
+function withoutSingleProduct(profile = {}) {
+  const { desired_care_type: _type, ...rest } = profile;
+  if (rest.routine_scope?.value === 'targeted') delete rest.routine_scope;
+  return rest;
 }
 
 /** Profile updates a model wrote → merge-ready, as `model_inferred`. A bad value is dropped later by `mergeProfile`. */
