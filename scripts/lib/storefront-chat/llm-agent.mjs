@@ -39,6 +39,7 @@ import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
 import { displayLanguage, languageContext, validReplyLanguage } from './conversation-language.mjs';
 import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
+import { describePurchases, emptyPurchaseState, mentionsPastPurchase, parsePurchaseChoice, purchaseChoices, purchaseItems, purchaseToAsk, recordAnswer } from './purchase-turn.mjs';
 import { READER_TIMEOUT_MS, mentionsSkin, readProfile, shouldRead } from './profile-reader.mjs';
 
 export const DEFAULT_STOREFRONT_MODEL = 'gpt-6-luna';
@@ -148,10 +149,11 @@ export function createLlmAgent({
      *   action?: string | null,
      *   advisorState?: object | null,
      *   conversationRef?: string | null
+     *   purchases?: (() => Promise<object | null>) | null   the signed-in customer's purchase summary, read only when the turn needs it
      * }} turn
      * @returns {Promise<import('./agent.mjs').AgentReply>}
      */
-    async respond({ message, context = {}, history = [], refs = null, choice = null, cart = null, shopDomain = null, action = null, advisorState = null, conversationRef = null }) {
+    async respond({ message, context = {}, history = [], refs = null, choice = null, cart = null, shopDomain = null, action = null, advisorState = null, conversationRef = null, purchases = null }) {
       const endsAt = Date.now() + deadlineMs;
       const locale = context.locale || 'fr';
       const money = priceFormatter(currency, locale);
@@ -164,8 +166,12 @@ export function createLlmAgent({
       const byId = (id) => catalogue?.products.find((p) => p.id === id) ?? null;
       // A profile chip (« Sèche ») answers the consultation, not a product clarification.
       const profileChoice = typeof choice === 'string' && PROFILE_CHOICE.test(choice);
+      // A purchase chip (« Je l'utilise encore ») answers the consultant's purchase question.
+      const purchaseAnswer = parsePurchaseChoice(choice);
+      let purchaseState = advisorState?.purchases ?? emptyPurchaseState();
+      if (purchaseAnswer) purchaseState = recordAnswer(purchaseState, purchaseAnswer);
       let resolution = resolutionIndex
-        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice ? null : choice })
+        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || purchaseAnswer ? null : choice })
         : null;
       const resolvedIds = new Set(resolution?.products.map((p) => p.id) ?? []);
       const productDataIds = new Set(resolution?.products.slice(0, 3).map((p) => p.id) ?? []);
@@ -187,8 +193,10 @@ export function createLlmAgent({
             locale: displayLanguage(language, locale),
             catalogue,
             money,
-            productQuestion: !profileChoice && (resolution?.products.length ?? 0) > 0,
-            turn: history.filter((m) => m.role === 'user').length + 1
+            productQuestion: !profileChoice && !purchaseAnswer && (resolution?.products.length ?? 0) > 0,
+            turn: history.filter((m) => m.role === 'user').length + 1,
+            consultation: Boolean(purchaseAnswer),
+            stillUsing: purchaseState.using
           })
         : null;
       const opening = knowledge ? retrieveKnowledge({ message, knowledge, resolution, context, history, currency }) : null;
@@ -218,6 +226,31 @@ export function createLlmAgent({
       const advice = advisorTurn ? advisorTurn.opening() : null;
       const adviceMs = Date.now() - advisorStarted;
       for (const h of advisorTurn?.handles() ?? []) offered.add(h);
+
+      // PURCHASES, only when this turn needs them: a consultation, a purchase
+      // chip, or the customer talking about what they bought. Never on a
+      // policy or product question. A slow or failed read is no purchases.
+      const purchaseTrace = { status: 'not_needed' };
+      let purchaseView = null;
+      let purchaseAsk = null;
+      if (purchases && (advice || purchaseAnswer || mentionsPastPurchase(message))) {
+        const summary = await withDeadline(Promise.resolve().then(purchases), Math.min(1500, Math.max(1, endsAt - Date.now() - 1500))).catch(() => undefined);
+        purchaseTrace.status = summary === undefined ? 'failed' : 'read';
+        const items = purchaseItems(summary ?? null, catalogue);
+        purchaseTrace.products = items.length;
+        if (advice && !resolution?.clarification) purchaseAsk = purchaseToAsk(items, purchaseState);
+        if (purchaseAsk) purchaseState = { ...purchaseState, asked: [...purchaseState.asked, purchaseAsk.product_id] };
+        const answered = purchaseAnswer
+          ? items.find((i) => i.product_id === purchaseAnswer.productId) ?? { product_id: purchaseAnswer.productId, name: byId(purchaseAnswer.productId)?.name ?? null }
+          : null;
+        if (items.length || answered?.name) purchaseView = describePurchases(items, purchaseState, { ask: purchaseAsk, answered: answered?.name ? answered : null });
+        purchaseTrace.asked = purchaseAsk?.product_id ?? null;
+        if (purchaseAnswer) purchaseTrace.answered = purchaseAnswer.answer;
+      }
+      const describedAdvice = advice ? advisorTurn.describe() : null;
+      // One question per turn: the purchase question waits for no one, the engine's waits a turn.
+      if (describedAdvice && purchaseAsk) describedAdvice.next_question = null;
+
       const responseSchema = language.neutral_followup && language.previous_language
         ? { ...REPLY_SCHEMA, properties: { ...REPLY_SCHEMA.properties, reply_language: { type: 'string', enum: [language.previous_language] } } }
         : REPLY_SCHEMA;
@@ -230,7 +263,8 @@ export function createLlmAgent({
         hasKnowledge: Boolean(knowledge),
         hasShopping: Boolean(shopping),
         hasAdvisor: Boolean(advisor),
-        advice: advice ? advisorTurn.describe() : null,
+        advice: describedAdvice,
+        purchases: purchaseView,
         shopping: shoppingOpening,
         knowledge: opening,
         pageProduct: pageProduct && !resolvedIds.has(pageProduct.id) ? productDetail(pageProduct, money, message) : null,
@@ -240,6 +274,7 @@ export function createLlmAgent({
       const trace = { calls: [], tools: [] };
       const readerTrace = reader && { reason: reader.reason, ...(reader.status ? { status: reader.status, ms: reader.ms, added: reader.added } : {}) };
       if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace };
+      if (purchases) trace.purchases = purchaseTrace;
       if (shoppingOpening) {
         trace.shopping = { route: shoppingOpening.route, topics: shoppingOpening.topics ?? [], retrievals: shoppingOpening.results.map(({ tool, result }) => ({ tool, status: result.status, offer_preview: result.offer_preview === true, reasons: (result.promotions ?? []).map((p) => ({ id: p.promotion_id, status: p.status, reason: p.reason })) })) };
         // The cart's discounts as the widget sent them, and whether each matched an
@@ -253,6 +288,13 @@ export function createLlmAgent({
       };
       // The reader's tokens count with the reply's: one ledger per assistant row.
       const usage = { inputTokens: reader?.usage?.prompt_tokens ?? 0, outputTokens: reader?.usage?.completion_tokens ?? 0 };
+
+      // The engine's question was not asked this turn when the purchase question took its place.
+      const advisorState_ = (next) => ({
+        ...next,
+        ...(purchaseAsk ? { asked: advisorState?.asked ?? [], last_question: null } : {}),
+        purchases: purchaseState
+      });
 
       for (let round = 0; ; round += 1) {
         const mustAnswer = !tools || round >= maxToolRounds;
@@ -353,7 +395,7 @@ export function createLlmAgent({
         }
         const cardIds = products.map((c) => c.id);
         if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace };
-        const advisorChoices = advisorTurn ? advisorTurn.choices() : [];
+        const advisorChoices = purchaseAsk ? purchaseChoices(purchaseAsk, displayLanguage(language, locale)) : advisorTurn ? advisorTurn.choices() : [];
         return {
           text: shopping ? shopping.sanitizeReply(parsed.text, parsed.replyLanguage ?? language.previous_language ?? 'fr') : parsed.text,
           replyLanguage: parsed.replyLanguage ?? null,
@@ -372,7 +414,7 @@ export function createLlmAgent({
           // The consultation's memory and this turn's analytics events.
           ...(advisorTurn
             ? {
-                advisor: advisorTurn.nextState(),
+                advisor: advisorState_(advisorTurn.nextState()),
                 events: conversationRef ? advisorTurn.events({ conversationRef, firstTurn: !history.length }) : []
               }
             : {})

@@ -7,16 +7,16 @@ import { fileURLToPath } from 'node:url';
 // THE STOREFRONT ADVISOR NEVER READS CUSTOMERS OR ORDERS, except through one
 // narrow function: a signed-in customer's own purchase summary
 // (docs/decisions/storefront-advisor.md § Purchase history: identity from the
-// signature only). That reader does not exist yet (Phase 1); when it does it is
-// the one file allowed below, and its output goes through toPurchaseSummary.
+// signature only). That reader is the one file allowed below, and its output
+// goes through toPurchaseSummary.
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
 
-/** The only file that may name these tables. Not built yet. */
+/** The only file that may name these tables. */
 const PURCHASE_READER = 'purchase-summary-repository.mjs';
 
-const PERSONAL_TABLES = /['"`](customers|orders|order_lines|customer_addresses)['"`]|\b(?:T|TABLES)\.(CUSTOMERS|ORDERS)\b/;
+const PERSONAL_TABLES = /['"`](customers|orders|order_lines|customer_addresses)['"`]|\b(?:T|TABLES)\.(CUSTOMERS|ORDERS|ORDER_LINES)\b/;
 
 const sources = [
   ...fs.readdirSync(here).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs')).map((f) => path.join(here, f)),

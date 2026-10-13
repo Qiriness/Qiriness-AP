@@ -10,6 +10,17 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Storefront advisor: purchase history, Phase 1 — the consultant asks about what you bought (2026-10-13)
+
+A signed-in customer's past purchases now reach the consultation, as questions rather than assumptions. Off unless `STOREFRONT_CHAT_PURCHASE_HISTORY=on`.
+
+- **The reader** (`storefront-chat/purchase-summary-repository.mjs`) is the one storefront file that reads orders. It reads the signed shop's orders for the signed customer: online store only (marketplaces from `sales_channels`), with cancelled and deleted orders left out. Named columns only, no personal or order-total field. Each read writes a `data_access_events` row (hashed id, counts), and a read that cannot be logged is not used.
+- **The summary** (`summarisePurchases`): per product, the first and last day, the orders that held it, `free_gift` (every line €0) and `returned` (nothing kept).
+- **The turn** (`purchase-turn.mjs`): read only on a consultation turn, a purchase chip or a message about past purchases, with a 1.5 s cap and a 10-minute cache per customer. It asks about the latest purchase the customer paid for, kept and can still buy (at most two questions a conversation), with chips « Je l'utilise encore / Je l'ai terminé / C'était un cadeau » (or in English). The answer is kept in `context.advisor.purchases`. A routine step filled by a product they still use is marked `customer_already_uses_it`.
+- **The prompt** gets a PURCHASES block (names, days, counts, flags, what the customer said) and rules: a purchase is never a profile, there are no order numbers or amounts to mention, and order status still goes to customer service.
+- `MERCHANT_DATA_USE_DISCLOSURE.md` states the new use. `T.ORDER_LINES` added to `tables.mjs`.
+- **Proven:** 21 new tests, 7 of them through the agent with a scripted model: one read per consultation, none on « Bonjour », chips in French and English, the answer recorded and not asked again, gifts never asked about, a failed read leaving a normal reply. Root suite 3,591 pass, 0 fail (3,578 with these changes stashed. The Phase 0 run earlier the same day counted 5,617; why the totals differ was not investigated). Web typecheck clean. **Not proven:** no real order has been read. A read of production orders was blocked by the permission check, Supabase's REST API is restricted until 2026-10-15, and the dev store has no orders in the database (VALIDATION_LOG 52).
+
 ## Storefront advisor: purchase history, Phase 0 — who is asking (2026-10-13)
 
 The advisor can now tell a signed-in customer from an anonymous visitor, safely, and the rule for what it may ever read of their purchases is code. It reads nothing yet: Phase 1 adds the reader. Approved by the owner the same day.

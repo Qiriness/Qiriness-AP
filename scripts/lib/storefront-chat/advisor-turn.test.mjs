@@ -197,3 +197,84 @@ test('readProfile times out instead of holding the turn', async () => {
   const r = await readProfile({ client: hanging, model: 'm', message: 'x', allowed: { body_area: [], skin_type: [], sensitivity: [], secondary_concerns: [], current_routine: [], desired_care_type: [], routine_scope: [], age_band: [] }, timeoutMs: 20 });
   assert.equal(r.status, 'failed');
 });
+
+// PURCHASE HISTORY, PHASE 1: the signed-in customer's purchases, read only when
+// the turn needs them, asked about with chips, never taken as a profile.
+const RICH = '00000000-0000-4000-8000-000000000002';
+const bought = (over = {}) => ({ products: [{ product_id: 'gid://shopify/Product/2', title: 'Crème Hydra - Caresse Aqua Riche', first_purchased_on: '2026-06-01', last_purchased_on: '2026-08-20', times_purchased: 2, returned: false, free_gift: false, ...over }] });
+function loader(result = bought()) {
+  const fn = async () => { fn.calls += 1; if (result instanceof Error) throw result; return result; };
+  fn.calls = 0;
+  return fn;
+}
+
+test('a consultation reads the purchases once and asks about the latest one, with chips, before the engine question', async () => {
+  const client = scripted(answer('Je vois que vous avez acheté la Caresse Aqua Riche : l’utilisez-vous encore ?'));
+  const purchases = loader();
+  const reply = await agentWith(client).respond({ message: "J'ai la peau sèche et déshydratée", context: { locale: 'fr' }, purchases });
+  assert.equal(purchases.calls, 1);
+  const system = client.calls[0].system;
+  assert.match(system, /PURCHASES \(this signed-in customer/);
+  assert.match(system, /"ask_about":"Crème Hydra - Caresse Aqua Riche"/);
+  assert.doesNotMatch(system, /gid:\/\/shopify|2026-06-01/);
+  assert.deepEqual(reply.choices.map((c) => c.value), [`purchase:using:${RICH}`, `purchase:finished:${RICH}`, `purchase:gift:${RICH}`]);
+  assert.deepEqual(reply.choices.map((c) => c.label), ["Je l'utilise encore", "Je l'ai terminé", "C'était un cadeau"]);
+  assert.deepEqual(reply.advisor.purchases.asked, [RICH]);
+  assert.deepEqual(reply.trace.purchases, { status: 'read', products: 1, asked: RICH });
+  // A purchase never fills the profile.
+  assert.equal(reply.advisor.profile.skin_type.source, 'natural_language');
+});
+
+test('the answer is recorded, the routine keeps their product, and they are not asked again', async () => {
+  const first = await agentWith(scripted(answer('…'))).respond({ message: "J'ai la peau sèche et déshydratée", context: { locale: 'fr' }, purchases: loader() });
+  const state = advisorStateFromHistory([{ role: 'assistant', content: '…', context: { advisor: first.advisor } }]);
+  // The essential routine has a cream step, the one their purchase covers.
+  state.profile.routine_scope = { value: 'essential', source: 'quick_choice', confidence: 'high', turn: 1 };
+  const client = scripted(answer('Parfait, continuez avec votre Caresse Aqua Riche.'));
+  const reply = await agentWith(client).respond({ message: "Je l'utilise encore", choice: `purchase:using:${RICH}`, context: { locale: 'fr' }, advisorState: state, purchases: loader() });
+  const system = client.calls[0].system;
+  assert.match(system, /"just_answered":\{"name":"Crème Hydra - Caresse Aqua Riche","customer_said":"still_using"\}/);
+  assert.match(system, /"customer_already_uses_it":true/);
+  assert.doesNotMatch(system, /"ask_about"/);
+  assert.deepEqual(reply.advisor.purchases.using, [RICH]);
+  assert.ok(!reply.choices.some((c) => c.value.startsWith('purchase:')));
+  assert.equal(reply.trace.purchases.answered, 'using');
+});
+
+test('a turn that is not a consultation never reads the purchases', async () => {
+  const purchases = loader();
+  await agentWith(scripted(answer('Bonjour ! Comment puis-je vous aider ?'))).respond({ message: 'Bonjour', context: { locale: 'fr' }, purchases });
+  assert.equal(purchases.calls, 0);
+});
+
+test('« what did I buy? » reads them without a consultation, and gifts are never asked about', async () => {
+  const client = scripted(answer('Vous avez acheté la Caresse Aqua Riche.'));
+  const purchases = loader(bought({ free_gift: true }));
+  const reply = await agentWith(client).respond({ message: 'What did I buy last time?', context: { locale: 'en' }, purchases });
+  assert.equal(purchases.calls, 1);
+  assert.match(client.calls[0].system, /"free_gift":true/);
+  assert.doesNotMatch(client.calls[0].system, /"ask_about"/);
+  assert.ok(!reply.choices.some((c) => c.value.startsWith('purchase:')));
+});
+
+test('English chips in an English consultation', async () => {
+  const reply = await agentWith(scripted(answer('I can see you bought it — still using it?'))).respond({ message: 'My skin is dry and dehydrated', context: { locale: 'en' }, purchases: loader() });
+  assert.deepEqual(reply.choices.map((c) => c.label), ['Still using it', "I've finished it", 'It was a gift']);
+});
+
+test('anonymous (no loader) or a failed read: no purchases, a normal reply', async () => {
+  const anon = scripted(answer('…'));
+  const r1 = await agentWith(anon).respond({ message: "J'ai la peau sèche et déshydratée", context: { locale: 'fr' } });
+  assert.doesNotMatch(anon.calls[0].system, /PURCHASES \(/);
+  assert.equal(r1.trace.purchases, undefined);
+  const failing = scripted(answer('…'));
+  const r2 = await agentWith(failing).respond({ message: "J'ai la peau sèche et déshydratée", context: { locale: 'fr' }, purchases: loader(new Error('db down')) });
+  assert.doesNotMatch(failing.calls[0].system, /PURCHASES \(/);
+  assert.equal(r2.trace.purchases.status, 'failed');
+  assert.ok(!r2.choices.some((c) => c.value.startsWith('purchase:')));
+});
+
+test('a purchase chip is a valid request choice', () => {
+  const parsed = parseChatRequest({ sessionId: null, message: "Je l'utilise encore", action: null, choice: `purchase:using:${RICH}`, context: { pageType: 'index', productHandle: null, collectionHandle: null, locale: 'fr', path: '/' } });
+  assert.equal(parsed.choice, `purchase:using:${RICH}`);
+});

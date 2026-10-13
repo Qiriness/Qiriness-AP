@@ -65,9 +65,11 @@ export function adviseToolDefinition(advisor) {
  *   catalogue: { products: object[] }, money: (n: number) => string,
  *   productQuestion?: boolean,
  *   turn?: number   the customer's message number in this conversation, recorded on each profile field
+ *   consultation?: boolean   an answer that continues the consultation without a profile chip (a purchase chip)
+ *   stillUsing?: string[]    product ids the customer said they still use: their steps are marked, not replaced
  * }} input
  */
-export function createAdvisorTurn({ advisor, state = null, message, choice = null, action = null, locale = 'fr', catalogue, money, productQuestion = false, turn = 0 }) {
+export function createAdvisorTurn({ advisor, state = null, message, choice = null, action = null, locale = 'fr', catalogue, money, productQuestion = false, turn = 0, consultation = false, stillUsing = [] }) {
   const before = state ?? emptyAdvisorState();
   const lang = String(locale || 'fr').slice(0, 2);
   const lex = extractProfile(message, { profile: before.profile, lastAsked: before.last_question });
@@ -90,7 +92,8 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   // building a routine. A question about a named product (« la crème X
   // convient aux peaux sèches ? ») still updates the profile, but is answered
   // from that product's facts, not with a routine.
-  let relevant = builderAsked || Boolean(picked) || mode === 'routine_builder' || (changed.length > 0 && !productQuestion);
+  let relevant = consultation || builderAsked || Boolean(picked) || mode === 'routine_builder' || (changed.length > 0 && !productQuestion);
+  const owned = new Set(stillUsing);
   const compute = () => {
     advice = advisor.advise({ profile, mode, asked, locale: lang });
     return advice;
@@ -188,6 +191,8 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
         step: s.slot,
         optional: s.optional || undefined,
         product: slim(byId.get(s.product_id), money),
+        // The customer said they still use it: keep theirs, never sell it again.
+        ...(owned.has(s.product_id) ? { customer_already_uses_it: true } : {}),
         reason_codes: s.reason_codes,
         alternatives: s.alternatives.map((x) => ({ handle: x.handle, name: byId.get(x.product_id)?.name ?? null }))
       })),

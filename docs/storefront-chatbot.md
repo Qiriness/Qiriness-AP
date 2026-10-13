@@ -321,7 +321,7 @@ prints only source counts/timestamps. Dev-store end-to-end checks: validation it
 | --- | --- |
 | Route/service (service role) | read/write `storefront_chat_sessions`, `storefront_chat_messages`; three RPCs (`_user_messages_since`, `_record_turn`, `_purge`) |
 | Agent | **nothing directly**, and never SQL. Product tools read the catalogue. Knowledge tools read approved snapshots/product-scoped guidance. Shopping tools invoke `shopping-repository.mjs`, which reads named columns of `shops`, `products`, public `promotions`, and synced `advice_collections` membership for the signed shop only |
-| Purchase summary (not built, Phase 1) | the signed-in customer's own purchases, through one typed function, its output limited by `toPurchaseSummary` (`purchase-summary.mjs`). Only with `STOREFRONT_CHAT_PURCHASE_HISTORY=on` |
+| Purchase summary reader (`purchase-summary-repository.mjs`) | the signed-in customer's own orders: named columns of `shops`, `sales_channels`, `orders` (id, day, channel) and `order_lines` (product, title, quantities, line total), for the signed shop and the signed customer only. Each read writes `data_access_events`. Output limited by `toPurchaseSummary`. Only with `STOREFRONT_CHAT_PURCHASE_HISTORY=on` |
 | Never | `customers`, `orders` for anyone else or in any other way, tickets, any SQL tool. `data-access.test.mjs` enforces it |
 
 Sessions idle for longer than `STOREFRONT_CHAT_RETENTION_DAYS` (30) are purged, along with their messages.
@@ -330,7 +330,8 @@ Sessions idle for longer than `STOREFRONT_CHAT_RETENTION_DAYS` (30) are purged, 
 
 - **Identity:** `customer-identity.mjs` reads `logged_in_customer_id` from the **signed** proxy query, never from the body, and only when `STOREFRONT_CHAT_PURCHASE_HISTORY=on` (off by default). Otherwise every visitor is anonymous.
 - **Binding:** a signed-in customer's assistant rows carry `context.identity`, an HMAC of shop + id (never the id). The service continues a session only for the same customer, or an anonymous one for a customer who has just signed in; anyone else gets a new session. The widget drops the bubbles it kept in `sessionStorage` when the theme's viewer (`customer.id`, or none) changes.
-- **Not built:** reading anything. Nothing reaches the model yet. Phase 1 adds the summary reader (`docs/storefront-advisor-plan.md` § 5).
+- **Purchases (Phase 1):** the service hands the agent a loader (10-minute cache per customer). `purchase-turn.mjs` reads it only on a consultation turn, a purchase chip or a message about past purchases. The prompt's PURCHASES block lists the products, the day of the last purchase, counts and flags (`free_gift`, `returned`, `no_longer_sold`), what the customer said about each, and at most one `ask_about`. The chips are `purchase:<using|finished|gift>:<product id>`, in French or English. `trace.purchases` records status, count, asked and answered, never names.
+- **Dev store:** `dev-store:sync` copies products only, so a dev-store test customer's orders are not in the database yet. Testing needs those orders synced under the dev shop (not built).
 - **Test from the CLI:** `npm run storefront:chat -- --customer 7001 --message "…"` signs the request as customer 7001; repeat with `--session <uuid>` and another `--customer` to see a new session open.
 
 ## Remaining phases

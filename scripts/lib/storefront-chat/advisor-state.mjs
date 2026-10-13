@@ -4,16 +4,19 @@
  * `context.advisor`, and the next turn reads the latest one. No table.
  *
  *   { profile, mode, asked: [field], last_question: field | null,
- *     last_advice: { status, playbook, scope, product_ids } | null }
+ *     last_advice: { status, playbook, scope, product_ids } | null,
+ *     purchases: { asked, using, finished, gift } }   (purchase-turn.mjs; product ids only)
  *
  * The log is the public internet's input once removed: everything is
  * re-checked here, and the profile is re-validated by `mergeProfile` on use.
  */
 
+import { cleanPurchaseState, emptyPurchaseState } from './purchase-turn.mjs';
+
 export const MODES = ['conversation', 'routine_builder'];
 
 export function emptyAdvisorState() {
-  return { profile: {}, mode: 'conversation', asked: [], last_question: null, last_advice: null };
+  return { profile: {}, mode: 'conversation', asked: [], last_question: null, last_advice: null, purchases: emptyPurchaseState() };
 }
 
 const FIELD = /^[a-z_]{1,40}$/;
@@ -42,6 +45,7 @@ function clean(saved) {
           scope: typeof advice.scope === 'string' ? advice.scope : null,
           product_ids: Array.isArray(advice.product_ids) ? advice.product_ids.filter((id) => typeof id === 'string').slice(0, 12) : []
         }
-      : null
+      : null,
+    purchases: cleanPurchaseState(saved.purchases)
   };
 }

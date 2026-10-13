@@ -42,7 +42,7 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
-## 52. Purchase history, Phase 0 (who is asking): unit-tested, never run with a signed-in customer — 2026-10-13
+## 52. Purchase history, Phases 0–1 (who is asking, what they bought): unit- and agent-tested, never run with a signed-in customer — 2026-10-13
 
 12 unit tests; nothing has gone through the route or the widget. Needs Supabase back (2026-10-15) and `STOREFRONT_CHAT_PURCHASE_HISTORY=on` in `.env.local`.
 
@@ -51,6 +51,9 @@ Closed items (a struck-through heading) are archived verbatim in `docs/archive/V
 3. **Someone else starts afresh.** **Check:** `--session <that uuid> --customer 7002`, then the same without `--customer`. Each returns a different `sessionId`, and the first session's rows are unchanged.
 4. **The widget.** **Check (dev store):** chat while signed in, sign out in the same tab, reopen the advisor. The old bubbles are gone. Sign in again: a new conversation starts (the server holds the old one; the tab does not).
 5. **Theme Check** passes on `advisor-embed.liquid` (the new `viewer` line).
+6. **Phase 1, a real summary.** **Check:** with the setting on, sign the request as a customer who has orders on the synced shop (`--customer <their numeric id>`) and say « J'ai la peau sèche ». `trace.purchases` is `status: read` with a product count, and holds no product name. One `data_access_events` row appears, with `action = purchase_summary_read` and `actor_id = storefront-advisor`. A second turn within 10 minutes adds no row.
+7. **The question.** **Check:** the reply asks about their latest paid purchase, with three chips. « Je l'utilise encore » records `context.advisor.purchases.using`, and the next reply does not suggest replacing it. A Wrap that came free is never asked about.
+8. **Not read when not needed.** **Check:** « Livrez-vous en Belgique ? » as the same customer shows `trace.purchases.status = not_needed` and adds no `data_access_events` row.
 
 ## 51. The lexicon's model backup: measured on stored messages, not yet seen in the widget — 2026-10-12
 

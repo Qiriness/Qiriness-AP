@@ -136,7 +136,12 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # → HMAC ref; off unless PURCHASE_HISTORY=on;
 |       |                                # one conversation, one person) ·
 |       |                                # purchase-summary (what the model may see of
-|       |                                # a customer's purchases; reader not built) ·
+|       |                                # a customer's purchases; summarisePurchases) ·
+|       |                                # purchase-summary-repository (THE reader of
+|       |                                # orders/order_lines: signed shop + customer,
+|       |                                # own store only, logged to data_access_events) ·
+|       |                                # purchase-turn (when to read, which purchase to
+|       |                                # ask about, the FR/EN chips, the prompt view) ·
 |       |                                # knowledge-repository (active policies + parameters,
 |       |                                # approved general FAQs; lazy product-id-scoped guidance) ·
 |       |                                # shopping-repository (signed-shop-scoped public promotions,

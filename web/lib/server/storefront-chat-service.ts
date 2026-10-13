@@ -14,6 +14,11 @@
  * else — another account, or the same browser after signing out — gets a new
  * session, so nothing of one customer's purchases reaches the next.
  *
+ * THEIR PURCHASES are handed to the agent as a loader, not as data: it reads
+ * them only on a turn that needs them (purchase-turn.mjs), at most once per
+ * customer every PURCHASE_TTL_MS, and every read is logged
+ * (purchase-summary-repository.mjs).
+ *
  * THE TOKEN IS MINTED HERE. A token the browser sends is used only if it names
  * a session of the same shop; anything else opens a new session with a token
  * Postgres generated, which the reply hands back.
@@ -37,6 +42,9 @@ import { parseAllowedShops } from "../../../scripts/lib/storefront-chat/app-prox
 import { refsFromHistory } from "../../../scripts/lib/storefront-chat/conversation-refs.mjs";
 import { advisorStateFromHistory } from "../../../scripts/lib/storefront-chat/advisor-state.mjs";
 import { ANONYMOUS, identityOfHistory, mayContinue } from "../../../scripts/lib/storefront-chat/customer-identity.mjs";
+import { createPurchaseSummaryLookup } from "../../../scripts/lib/storefront-chat/purchase-summary.mjs";
+import { createPurchaseSummaryReader } from "../../../scripts/lib/storefront-chat/purchase-summary-repository.mjs";
+import { recordDataAccessEvent } from "../../../scripts/lib/compliance-audit.mjs";
 import { loadAdvisoryConfig } from "../../../scripts/lib/advisory/advisory-repository.mjs";
 import { createAdvisor } from "../../../scripts/lib/advisory/recommend.mjs";
 import {
@@ -375,6 +383,7 @@ export async function handleStorefrontChat(
       shopDomain,
       advisorState,
       conversationRef: session.id,
+      purchases: purchasesLoader(db, identity, shopDomain),
     });
   } catch (error) {
     await logged;
@@ -439,6 +448,32 @@ export async function recordProductClick(shopDomain: string, sessionToken: strin
     { channel: "storefront_chat", conversation_ref: rows[0].id, event_type: "product_clicked", playbook_key: null, product_ids: [productId], payload: {} },
   ]);
   return true;
+}
+
+/** A customer's summary is reused for this long: a consultation is minutes, a new order changes little. */
+const PURCHASE_TTL_MS = 10 * 60 * 1000;
+const PURCHASE_CACHE_MAX = 500;
+const purchaseCache = new Map<string, { at: number; summary: Promise<object | null> }>();
+
+function purchasesLoader(db: ReturnType<typeof client>, identity: StorefrontIdentity, shopDomain: string) {
+  if (identity.kind !== "customer") return null;
+  const lookup = createPurchaseSummaryLookup(
+    createPurchaseSummaryReader({
+      select: (table: string, filters: object, columns: string, options?: object) =>
+        supabaseSelect(db, table, filters, columns, options) as Promise<object[]>,
+      logAccess: (row: object) => recordDataAccessEvent(db, row),
+    })
+  );
+  return () => {
+    const cached = purchaseCache.get(identity.ref);
+    if (cached && Date.now() - cached.at < PURCHASE_TTL_MS) return cached.summary;
+    const summary = lookup(identity, shopDomain) as Promise<object | null>;
+    // A failed read is not remembered: the next turn asks again.
+    summary.catch(() => purchaseCache.delete(identity.ref));
+    if (purchaseCache.size >= PURCHASE_CACHE_MAX) purchaseCache.delete(purchaseCache.keys().next().value as string);
+    purchaseCache.set(identity.ref, { at: Date.now(), summary });
+    return summary;
+  };
 }
 
 async function findOrOpenSession(

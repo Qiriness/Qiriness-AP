@@ -41,6 +41,7 @@ export const T = {
   // 02_shopify
   CUSTOMERS: 'customers',
   ORDERS: 'orders',
+  ORDER_LINES: 'order_lines',
   PRODUCTS: 'products',
   ADVICE_COLLECTIONS: 'advice_collections',
   SHOPIFY_METAOBJECTS: 'shopify_metaobjects',
