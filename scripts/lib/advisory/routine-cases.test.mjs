@@ -53,7 +53,7 @@ test('the cases: unique ids, French and English, expectations that name real typ
   for (const c of ROUTINE_CASES) {
     const e = c.expect;
     for (const t of [...(e.types ?? []), ...(e.no_types ?? []), ...(e.targets ?? []).map((x) => x.type)]) assert.ok(TYPES.has(t), `${c.id}: ${t}`);
-    for (const h of [...(e.no_handles ?? []), ...(c.owned ?? [])]) assert.ok(CATALOGUE.products.some((p) => p.handle === h), `${c.id}: ${h}`);
+    for (const h of [...(e.no_handles ?? []), ...(c.owned ?? []), ...(c.previous ? [c.previous] : [])]) assert.ok(CATALOGUE.products.some((p) => p.handle === h), `${c.id}: ${h}`);
     for (const k of (e.targets ?? []).flatMap((x) => x.any)) assert.ok(SHEET.concerns.some((x) => x.key === k), `${c.id}: concern ${k}`);
   }
 });

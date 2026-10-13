@@ -11,6 +11,7 @@
  *   message      what the customer says (the lexicon reads it, as in a chat)
  *   builder      true: the routine builder is open (« Oui » to the offer)
  *   owned        handles they said they build around (purchase « around »)
+ *   previous     the one product just proposed (the case's message answers it)
  *   expect
  *     foundation       one of these foundations (A–G, or men / eyes)
  *     status           recommended | needs_info
@@ -25,6 +26,7 @@
  *     no_treat         no treat is offered
  *     max_total        the routine's price is at most this (the products' « from » prices)
  *     dropped          at least this many steps left out for the budget
+ *     choices          [min, max] products shown: the step's and, as « top choices », its alternatives
  */
 
 const both = (id, fr, en, rest) => [
@@ -134,6 +136,24 @@ export const ROUTINE_CASES = [
     "C'est trop cher pour moi, j'ai le visage déshydraté",
     'That is too expensive for me, my face is dehydrated',
     { builder: true, expect: { foundation: ['treat'], status: 'recommended', steps: [1, 1], max_total: 25 } }),
+
+  // Owner, 2026-10-13: outside routines, a need gets our top choices (the best fit and two alternatives).
+  ...both('top-choices',
+    'Que me conseillez-vous pour mon visage déshydraté ?',
+    'What do you recommend for my dehydrated face?',
+    { expect: { foundation: ['A'], status: 'recommended', steps: [1, 1], choices: [3, 3] } }),
+
+  // Owner, 2026-10-13: « trop cher » just after one product: a cheaper one of its type for the same need first…
+  ...both('too-expensive-cheaper-first',
+    "C'est trop cher",
+    'That is too expensive',
+    { previous: 't-creme-aqua', expect: { foundation: ['cheaper'], status: 'recommended', steps: [1, 1], types: ['cream'], max_total: 37, targets: [{ type: 'cream', any: ['dehydration', 'dryness'] }] } }),
+
+  // …and the « petit plaisir » only when there is none.
+  ...both('too-expensive-no-cheaper',
+    "C'est trop cher",
+    'That is too expensive',
+    { previous: 't-serum-aqua', expect: { foundation: ['treat'], status: 'recommended', steps: [1, 1], max_total: 25 } }),
 
   // A ceiling: the routine cut to fit, the concern's step kept, what was left out said.
   ...both('budget-ceiling',

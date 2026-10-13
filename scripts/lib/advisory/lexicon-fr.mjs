@@ -21,7 +21,8 @@ export default {
 
   areas: {
     eyes: /\b(yeux|oeil|contour des yeux|contour de l oeil|regard|paupieres?|cernes?|poches?)\b/,
-    body: /\b(corps|jambes?|bras|dos|apres la douche|peau du corps)\b/,
+    // Not « après la douche »: « ma peau tiraille après la douche » is about the face too (customer batch).
+    body: /\b(corps|jambes?|bras|dos|peau du corps)\b/,
     face: /\b(visage|figure|front|joues?|menton)\b/
   },
 
@@ -110,11 +111,13 @@ export default {
   // What they ask for beyond a routine for a need (plan § 3.1, § 3.4).
   requests: {
     basic_routine: /\b(routine (de base|basique|toute simple)|les bases|juste les basiques)\b/,
-    gift: /\b(cadeau|offrir|a offrir|pour offrir|idee cadeau)\b/,
+    gift: /\b(cadeau|offrir|a offrir|pour offrir|idee cadeau|anniversaire|fete des (meres|peres|grands meres)|noel|saint valentin|lui faire plaisir)\b/,
     spa: /\b(soiree spa|moment spa|spa a la maison|rituel spa|soin spa|me chouchouter|cocooning)\b/
   },
   // A small budget, said either way: « pas cher » or « c'est trop cher » (owner, 2026-10-13).
-  budgetSmall: /\b(petit budget|pas trop cher|pas cher|budget (serre|limite|reduit)|petits prix|economique|trop cher(e|s|es)?|(un peu|bien|assez|vraiment) cher(e|s|es)?|c est cher|hors de prix|moins cher(e|s|es)?|plus abordable|pas les moyens|au dessus de mon budget|depasse mon budget|hors budget|trop onereu(x|se)|ruineu(x|se)|pas dans mon budget)\b/,
+  // « Vous avez autre chose ? »: more choices for the same need (customer batch).
+  moreOptions: /\b(autre chose|d autres (options|produits|choix|propositions|suggestions)|une autre (option|proposition|suggestion)|un autre (produit|choix)|quoi d autre|autres? alternatives?)\b/,
+  budgetSmall: /\b((plus|au dessus) (de|que) ce que je (voulais|veux|pensais|comptais) (mettre|depenser|y mettre)|je voulais (mettre|depenser) moins|un peu juste (en ce moment|ce mois ci|ce mois)|petit budget|pas trop cher|pas cher|budget (serre|limite|reduit)|petits prix|economique|trop cher(e|s|es)?|(un peu|bien|assez|vraiment) cher(e|s|es)?|c est cher|hors de prix|moins cher(e|s|es)?|plus abordable|pas les moyens|au dessus de mon budget|depasse mon budget|hors budget|trop onereu(x|se)|ruineu(x|se)|pas dans mon budget)\b/,
   // A ceiling, in the normalised text (« € » is gone): « moins de 60 », « 40 euros max ». Group 1: the amount.
   budgetAmount: [
     /\b(?:moins de|pas plus de|maximum|max|jusqu a|budget (?:de|d environ|d|d un maximum de)|en dessous de|sous les|sous)\s(\d{1,4})\b(?! (?:ans?|ml|jours?|semaines?|mois|minutes?|min|h|heures?|fois|produits?|etapes?|soins?|years?|yo|days?|weeks?|months?|hours?|times|products?|steps?))/,

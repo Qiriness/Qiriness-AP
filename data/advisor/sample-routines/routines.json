@@ -545,9 +545,10 @@
   },
   "preferences": {
     "men": "a preference, not a routine: men's products ranked first in each step, others still possible",
-    "budget": "a small budget (« petit budget », « trop cher »): a « petit plaisir » for their concern instead of a routine, since treats are cheaper (owner, 2026-10-13); a ceiling (« moins de 60 € »): the routine cut to fit, optional steps first, the concern's step last, and a treat under the ceiling when even that step is over",
+    "budget": "a small budget (« petit budget », « trop cher »): just after ONE product, the cheapest product of the same type that still targets their concern; else a « petit plaisir » for their concern instead of a routine, since treats are cheaper (owner, 2026-10-13); a ceiling (« moins de 60 € »): the routine cut to fit, optional steps first, the concern's step last, and a treat under the ceiling when even that step is over",
     "exclusions": "an ingredient the customer avoids is never in any step",
-    "basic_routine": "foundation G only when asked for (« juste une routine de base »); « je ne sais pas ce qu'il me faut » gets one useful question instead"
+    "basic_routine": "foundation G only when asked for (« juste une routine de base »); « je ne sais pas ce qu'il me faut » gets one useful question instead",
+    "top_choices": "outside the routine builder, a need gets our top choices: the best fit and its two alternatives, each with why (owner, 2026-10-13)"
   },
   "questions": {
     "_rule": "the question whose answer changes the routine most first; skin traits before naming a concern; never age first (§ 3.3)",
@@ -658,6 +659,7 @@
     "eyes": "eyes",
     "gift": "gift",
     "spa": "spa",
-    "treat": "treat"
+    "treat": "treat",
+    "cheaper": "cheaper"
   }
 }

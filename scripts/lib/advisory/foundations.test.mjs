@@ -169,3 +169,29 @@ test('the lexicon reads the new requests and « visage sec » / « dry face », 
   assert.ok(read1('I have a very dry face').includes('skin_type:very_dry'));
   assert.ok(read1('My face is oily').includes('skin_type:oily'));
 });
+
+test('outside the builder a need gets our top choices: the best product of each type that targets it, never a cleanser that does not', () => {
+  const a = advisor.advise({ profile: { primary_concern: nl('dehydration') } });
+  const shown = [a.steps[0], ...a.steps[0].alternatives].map((s) => KNOWLEDGE.get(s.handle));
+  assert.equal(a.steps[0].top_choices, true);
+  assert.deepEqual(shown.map((k) => k.functional_type), ['serum', 'cream', 'lotion']);
+  assert.ok(shown.every((k) => [k.primary_concern, ...k.other_concerns].includes('dehydration')));
+  // A type asked for keeps its own kind of alternatives; the builder never shows top choices.
+  assert.ok(!build({ primary_concern: nl('dehydration') }).steps.some((s) => s.top_choices));
+  const blemishes = advisor.advise({ profile: { primary_concern: nl('imperfections') } });
+  assert.equal(KNOWLEDGE.get(blemishes.steps[0].handle).functional_type, 'cleanser');
+});
+
+test('« trop cher » after one product: the cheapest of its type for the same need, else the treat', () => {
+  const previous = (handle) => ({ product_ids: [id(handle)] });
+  const cream = advisor.advise({ profile: { ...said("C'est trop cher"), primary_concern: nl('dehydration') }, previous: previous('t-creme-aqua') });
+  assert.equal(cream.playbook.key, 'cheaper');
+  assert.equal(K(cream.steps[0]).functional_type, 'cream');
+  assert.ok(cream.total_price < CATALOGUE.products.find((p) => p.handle === 't-creme-aqua').priceFrom);
+  assert.ok([K(cream.steps[0]).primary_concern, ...K(cream.steps[0]).other_concerns].includes('dehydration'));
+  // No cheaper hydrating serum: the treat, never a radiance serum that only matches a side concern.
+  const serum = advisor.advise({ profile: { ...said("C'est trop cher"), primary_concern: nl('dehydration') }, previous: previous('t-serum-aqua') });
+  assert.equal(serum.playbook.key, 'treat');
+  // In the builder the budget rules stay: no « cheaper » step-by-step.
+  assert.notEqual(build({ ...said("C'est trop cher"), primary_concern: nl('dehydration') }, { previous: previous('t-creme-aqua') }).playbook.key, 'cheaper');
+});

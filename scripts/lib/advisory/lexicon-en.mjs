@@ -24,7 +24,8 @@ export default {
 
   areas: {
     eyes: /\b(eyes?|eye area|eye contour|under ?eyes?|eyelids?|eye bags|around (my|the) eyes)\b/,
-    body: /\b(body|legs?|arms?|my back|after (the |a |my )?shower)\b/,
+    // Not « after the shower »: « my skin feels tight after showering » is about the face too.
+    body: /\b(body|legs?|arms?|my back)\b/,
     face: /\b(face|facial|forehead|cheeks?|chin)\b/
   },
 
@@ -111,11 +112,13 @@ export default {
   // What they ask for beyond a routine for a need (plan § 3.1, § 3.4).
   requests: {
     basic_routine: /\b(basic (skin ?care )?routine|just the basics|the basics)\b/,
-    gift: /\b(gift|present for|to offer|for (my|a) (mother|mum|mom|wife|friend|sister|girlfriend|daughter) (who|for her))\b/,
+    gift: /\b(gift|present for|to offer|birthday|christmas|mother s day|father s day|valentine s?( day)?|treat her|treat him|for (my|a) (mother|mum|mom|wife|friend|sister|girlfriend|daughter) (who|for her))\b/,
     spa: /\b(spa (evening|night|day|ritual|treatment)|at home spa|home spa|pamper(ing)?( myself)?|self care evening)\b/
   },
   // A small budget, said either way: « affordable » or « too expensive » (owner, 2026-10-13).
-  budgetSmall: /\b(small budget|on a budget|tight budget|limited budget|affordable|inexpensive|cheap|cheaper|not too expensive|too expensive|too pricey|(a bit|quite|very|so) (expensive|pricey)|pricey|costs too much|less expensive|can t afford|cannot afford|out of my budget|over my budget|beyond my budget|outside my budget)\b/,
+  // « Anything else? »: more choices for the same need (customer batch).
+  moreOptions: /\b(anything else|something else|other options?|other products?|other choices?|any alternatives?|what else|another (option|product|one))\b/,
+  budgetSmall: /\b(more than i (wanted|want|meant|planned) to (spend|pay)|a bit (much|steep)|out of my price range|money is tight|small budget|on a budget|tight budget|limited budget|affordable|inexpensive|cheap|cheaper|not too expensive|too expensive|too pricey|(a bit|quite|very|so) (expensive|pricey)|pricey|costs too much|less expensive|can t afford|cannot afford|out of my budget|over my budget|beyond my budget|outside my budget)\b/,
   // A ceiling, in the normalised text: « under 60 », « 40 euros max ». Group 1: the amount.
   budgetAmount: [
     /\b(?:under|less than|below|no more than|up to|max|maximum|at most|budget of|budget is|budget around)\s(\d{1,4})\b(?! (?:ans?|ml|jours?|semaines?|mois|minutes?|min|h|heures?|fois|produits?|etapes?|soins?|years?|yo|days?|weeks?|months?|hours?|times|products?|steps?))/,

@@ -15,16 +15,20 @@
  *                when there is no other concern, ties go to foundation_priority;
  *                eye concerns alone: the eyes module; « routine de base »: G
  *   size         essential (daily required steps) · complete (every daily step
- *                + the relevant modules) · spa (+ occasional) · targeted (one);
+ *                + the relevant modules) · spa (+ occasional) · targeted (one
+ *                step; outside the builder its two alternatives are shown with
+ *                it as « our top choices », owner 2026-10-13);
  *                a small budget is essential
  *   owned        a type they already have is not doubled, unless the step is
  *                the one their concern needs (targets: primary)
  *   product      hard rules (stock, advisable, type, area, men, exclusions,
  *                skin « Non adapté », sensitive « Déconseillé »), then a score
  *   never pad    a step with no eligible product is said, never filled
- *   budget       « petit budget » / « trop cher »: a « petit plaisir » for their
- *                concern INSTEAD of a routine (owner, 2026-10-13: treats are
- *                cheaper); a ceiling (« moins de 60 € »): the routine trimmed to
+ *   budget       « trop cher » just after ONE product: the cheapest product of
+ *                the same type that still targets their concern, else a treat
+ *                (owner, 2026-10-13); otherwise « petit budget » / « trop cher »
+ *                gets a « petit plaisir » for their concern INSTEAD of a routine
+ *                (owner: treats are cheaper); a ceiling (« moins de 60 € »): the routine trimmed to
  *                fit (optional steps first, the concern's step last), and a
  *                treat under it when even that step is over; with a budget, the
  *                cheaper of two products that fit about as well
@@ -100,7 +104,9 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       request: valueOf(profile, 'request'),
       budget: valueOf(profile, 'budget'),
       budgetMax: Number(valueOf(profile, 'budget_max')) || null,
-      area: valueOf(profile, 'body_area'),
+      // Body care only when they said it: the model reader guessed « body » from « after showering »
+      // (customer batch, EN) and the advice had nothing for a face.
+      area: profile.body_area?.source === 'model_inferred' && valueOf(profile, 'body_area') === 'body' ? null : valueOf(profile, 'body_area'),
     };
   }
 
@@ -192,7 +198,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   }
 
   /** One routine: a foundation's steps for a size, filled. */
-  function evaluate(profile, mode, { owned = [], ranges = new Set(), pinned = [] } = {}) {
+  function evaluate(profile, mode, { owned = [], ranges = new Set(), pinned = [], exclude = [] } = {}) {
     const c = read(profile);
     const choice = chooseFoundation(c);
     if (choice.none) return { none: choice.none };
@@ -208,7 +214,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     if (c.budget === 'small' && scope !== 'targeted') scope = 'essential';
     if (choice.key === 'eyes' && scope !== 'targeted' && mode !== 'routine_builder') scope = 'targeted';
 
-    const used = new Set();
+    const used = new Set(exclude);
     const mine = ownedProducts(owned);
     for (const x of mine) used.add(x.id);
     const wanted = pinned.map((id) => byId.get(id)).filter((x) => x && !used.has(x.id));
@@ -245,8 +251,11 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       }
       const pin = wanted.find((x) => x.k.functional_type === step.type && !used.has(x.id));
       const pool = products.filter((x) => eligible(x, step, f, c, used));
+      // A man: his range first among the suitable products (owner: « ranked first, others still
+      // possible »); a sensitive-skin cleanser outscored the men's one in the customer batch.
+      const menFirst = (x) => (c.men && x.k.men ? 1 : 0);
       const ranked = pool.map((x) => ({ x, ...score(x, step, f, c, ranges) }))
-        .sort((a, b) => b.s - a.s || (a.x.product.priceFrom ?? 0) - (b.x.product.priceFrom ?? 0) || a.x.name.localeCompare(b.x.name));
+        .sort((a, b) => menFirst(b.x) - menFirst(a.x) || b.s - a.s || (a.x.product.priceFrom ?? 0) - (b.x.product.priceFrom ?? 0) || a.x.name.localeCompare(b.x.name));
       if (pin) {
         const at = ranked.findIndex((r) => r.x.id === pin.id);
         if (at > 0) ranked.unshift(...ranked.splice(at, 1));
@@ -274,6 +283,20 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     }
     for (const x of wanted) if (!placed.some((p) => p.product_id === x.id)) placed.push({ product_id: x.id, handle: x.handle, status: PINNED.NO_STEP });
     const budget = c.budgetMax ? withinBudget(steps, skipped, plan, c.budgetMax) : null;
+    // OUR TOP CHOICES for one need, outside the builder (owner): the best product
+    // of each type that targets it, not three of one type. A type they asked
+    // for (« juste un sérum ») keeps its own alternatives.
+    if (scope === 'targeted' && mode !== 'routine_builder' && !c.desired && steps.length === 1 && choice.key !== 'eyes') {
+      const others = f.steps
+        // A cleanser is a top choice only where the foundation says it treats the need (Imperfections).
+        .filter((s) => s.frequency === 'daily' && s.type !== steps[0].type && !c.owned.includes(s.type) && (s.type !== 'cleanser' || s.targets === 'primary'))
+        .map((s) => products.filter((x) => eligible(x, { ...s, targets: 'primary' }, f, c, used)).map((x) => ({ x, ...score(x, s, f, c, ranges) })).filter((r) => [r.x.k.primary_concern, ...r.x.k.other_concerns].includes(c.primary))
+          .sort((a, b) => b.s - a.s || a.x.product.priceFrom - b.x.product.priceFrom)[0])
+        .filter(Boolean)
+        .sort((a, b) => b.s - a.s)
+        .slice(0, 2);
+      if (others.length) steps[0] = { ...steps[0], alternatives: others.map((r) => ({ product_id: r.x.id, handle: r.x.handle })) };
+    }
     return { f, scope, steps, skipped, pinned: placed, c, budget };
   }
 
@@ -296,6 +319,33 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       dropped.push(victim.slot);
     }
     return { max, total: totalOf(steps), dropped };
+  }
+
+  /**
+   * « Trop cher » just after one product (owner): the cheapest product of the
+   * same type, cheaper than it, that passes the same hard rules and still
+   * targets their concern (or the concerns that product targeted). Null when
+   * there is none: the treat comes instead.
+   */
+  function cheaperThan(previousId, profile) {
+    const prev = byId.get(previousId);
+    if (!prev || prev.k.functional_type === 'kit') return null;
+    const c = read(profile);
+    const choice = chooseFoundation(c);
+    // The main need: theirs, else what the product they found too expensive was for.
+    const need = c.primary ?? prev.k.primary_concern;
+    const concerns = c.concerns.length ? c.concerns : [need];
+    const f = foundations.get(choice.key) ?? { key: 'cheaper', primary_concerns: [need], steps: [] };
+    c.primary = need;
+    const step = { type: prev.k.functional_type, targets: null };
+    const pool = products
+      .filter((x) => x.id !== prev.id && eligible(x, step, f, c, new Set()) && (x.product.priceFrom ?? Infinity) < (prev.product.priceFrom ?? 0))
+      .filter((x) => [x.k.primary_concern, ...x.k.other_concerns].includes(need))
+      .map((x) => ({ x, ...score(x, step, f, c, new Set()) }))
+      .sort((a, b) => b.s - a.s || a.x.product.priceFrom - b.x.product.priceFrom);
+    if (!pool.length) return null;
+    const [top, ...rest] = pool;
+    return [{ slot: `${step.type}_cheaper`, kind: KIND[step.type] ?? step.type, type: step.type, optional: false, product_id: top.x.id, handle: top.x.handle, alternatives: rest.slice(0, 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })), reason_codes: ['cheaper_alternative', ...top.reasons], merchandised: null, scores: { suitability: top.s, routine_fit: 0, total: top.s } }];
   }
 
   /** A « petit plaisir » for their concern, instead of a routine (owner): within the ceiling when there is one. */
@@ -372,8 +422,14 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   const base = (mode) => ({ mode, playbook: null, scope: null, area: null, steps: [], skipped: [], excluded: {}, considered: 0, next_question: null });
 
   return {
-    advise({ profile = {}, mode = 'conversation', asked = [], locale = 'fr', owned = [], ranges = [], pinned = [] } = {}) {
-      const history = { owned, ranges: new Set(ranges), pinned };
+    /**
+     * @param previous  the advice just given ({ product_ids }), passed only on the turn the customer
+     *                  says the price is a problem: one product → a cheaper one of its type first
+     */
+    advise({ profile = {}, mode = 'conversation', asked = [], locale = 'fr', owned = [], ranges = [], pinned = [], previous = null } = {}) {
+      // « Vous avez autre chose ? »: what was just shown is left out, so the next choices come.
+      const exclude = previous?.more ? previous.shown ?? previous.product_ids ?? [] : [];
+      const history = { owned, ranges: new Set(ranges), pinned, exclude };
       const request = valueOf(profile, 'request');
       if (request === 'gift' || request === 'spa') {
         const r = special(profile, request);
@@ -382,12 +438,17 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       }
       // « Petit budget », « trop cher », no amount: a « petit plaisir » instead of a routine (owner).
       const budgetSaid = valueOf(profile, 'budget') === 'small' && !Number(valueOf(profile, 'budget_max'));
+      if (budgetSaid && mode !== 'routine_builder' && previous?.product_ids?.length === 1) {
+        const cheaper = cheaperThan(previous.product_ids[0], profile);
+        if (cheaper) return { ...base(mode), status: STATUS.RECOMMENDED, playbook: { key: 'cheaper', route: null, scope: 'targeted', preferred_family: null, notes: ['the product was too expensive: the same type, cheaper, for the same need'] }, scope: 'targeted', area: 'face', steps: cheaper, considered: 1, total_price: totalOf(cheaper), cheaper_than: previous.product_ids[0] };
+      }
       if (budgetSaid) {
         const treat = budgetTreat(read(profile), null);
         if (treat) return { ...base(mode), status: STATUS.RECOMMENDED, playbook: { key: 'treat', route: null, scope: 'targeted', preferred_family: null, notes: ['a small budget: a « petit plaisir » rather than a routine'] }, scope: 'targeted', area: 'face', steps: treat, considered: 1, total_price: totalOf(treat) };
       }
       const result = evaluate(profile, mode, history);
       if (result.none) return { ...base(mode), status: STATUS.NO_MATCH, reason: result.none };
+      if (exclude.length && !result.missing && !result.steps?.length) return { ...base(mode), status: STATUS.NO_MATCH, reason: 'no_other_option', playbook: summary(result.f, result.scope) };
       if (result.missing) {
         if (asked.includes('primary_concern')) return { ...base(mode), status: STATUS.NEEDS_INFO, reason: 'open_primary_concern' };
         return { ...base(mode), status: STATUS.NEEDS_INFO, reason: 'missing', next_question: concernQuestion(locale) };
@@ -408,7 +469,8 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         playbook: summary(result.f, result.scope),
         scope: result.scope,
         area: result.f.key === 'eyes' ? 'eyes' : 'face',
-        steps: result.steps,
+        // Outside the builder, one need: the best fit and its two alternatives are « our top choices ».
+        steps: mode !== 'routine_builder' && result.scope === 'targeted' ? result.steps.map((s) => ({ ...s, top_choices: true })) : result.steps,
         skipped: result.skipped,
         considered: result.steps.length,
         total_price: totalOf(result.steps),

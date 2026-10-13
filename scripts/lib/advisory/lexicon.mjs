@@ -90,6 +90,7 @@ const L = {
   scope: keyed('scope', SCOPE_ORDER),
   requests: keyed('requests', REQUEST_ORDER),
   budgetSmall: union((l) => l.budgetSmall),
+  moreOptions: union((l) => l.moreOptions),
   budgetAmount: LANGUAGES.flatMap((l) => l.budgetAmount ?? []),
   age: LANGUAGES.flatMap((l) => l.age),
   ageWords: LANGUAGES.flatMap((l) => l.ageWords),
@@ -104,7 +105,7 @@ const ALL_PATTERNS = [
   L.eyes, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.routineBuilder, L.dontKnow,
   ...L.concerns.map(([re]) => re), ...L.skinTypes.map(([, re]) => re), ...L.sensitivity.map(([, re]) => re),
   ...L.routineSteps.map(([, re]) => re), ...L.desired.map(([, re]) => re), ...L.scope.map(([, re]) => re),
-  ...L.requests.map(([, re]) => re), L.budgetSmall, ...L.budgetAmount,
+  ...L.requests.map(([, re]) => re), L.budgetSmall, L.moreOptions, ...L.budgetAmount,
   ...L.exclusions, ...L.routineClauses, ...L.age, ...L.ageWords.map(([re]) => re)
 ];
 const NEUTRAL = new Set(LANGUAGES.flatMap((l) => [...l.markers, ...l.fillers]));
@@ -232,5 +233,5 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
   const st = updates.find((u) => u.field === 'skin_type');
   if (body && st && ['dry', 'very_dry'].includes(st.value) && !found.length && !hasPrimary) add('primary_concern', 'dryness', 'medium');
 
-  return { updates, routineBuilder: L.routineBuilder.test(` ${norm(message)} `), residue: residueOf(message) };
+  return { updates, routineBuilder: L.routineBuilder.test(` ${norm(message)} `), moreOptions: L.moreOptions.test(` ${norm(message)} `), residue: residueOf(message) };
 }

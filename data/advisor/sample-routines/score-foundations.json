@@ -1,7 +1,7 @@
 {
-  "at": "2026-10-13T17:09:29.485Z",
-  "passed": 44,
-  "total": 44,
+  "at": "2026-10-13T18:00:28.942Z",
+  "passed": 50,
+  "total": 50,
   "results": [
     {
       "id": "combined-concerns.fr",
@@ -525,6 +525,84 @@
       ],
       "handles": [
         "t-masque-aqua"
+      ]
+    },
+    {
+      "id": "top-choices.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "conversation",
+      "types": [
+        "serum"
+      ],
+      "handles": [
+        "t-serum-aqua"
+      ]
+    },
+    {
+      "id": "top-choices.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "conversation",
+      "types": [
+        "serum"
+      ],
+      "handles": [
+        "t-serum-aqua"
+      ]
+    },
+    {
+      "id": "too-expensive-cheaper-first.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "cheaper",
+      "mode": "conversation",
+      "types": [
+        "cream"
+      ],
+      "handles": [
+        "t-creme-essentiel"
+      ]
+    },
+    {
+      "id": "too-expensive-cheaper-first.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "cheaper",
+      "mode": "conversation",
+      "types": [
+        "cream"
+      ],
+      "handles": [
+        "t-creme-essentiel"
+      ]
+    },
+    {
+      "id": "too-expensive-no-cheaper.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "treat",
+      "mode": "conversation",
+      "types": [
+        "mask"
+      ],
+      "handles": [
+        "t-masque-energie"
+      ]
+    },
+    {
+      "id": "too-expensive-no-cheaper.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "treat",
+      "mode": "conversation",
+      "types": [
+        "mask"
+      ],
+      "handles": [
+        "t-masque-energie"
       ]
     },
     {
