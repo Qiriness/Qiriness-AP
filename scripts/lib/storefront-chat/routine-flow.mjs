@@ -20,10 +20,20 @@
  * State, with the consultation (`context.advisor.flow`):
  *   { offer: null | 'offered' | 'accepted' | 'declined',
  *     anchor: { id, source: 'page' | 'request' | 'suggested' } | null,
- *     treat_offered: boolean }
+ *     treat_offered: boolean,
+ *     cart: { pending: [{ id, variant_id | null }], asked: [id] } }   the add-to-cart question
+ *
+ * ADD TO CART (owner, 2026-10-13): after a recommended routine (in place of the
+ * treat, which then follows the answer) or after a single product once the
+ * routine offer has had its turn: « Souhaitez-vous que je l'ajoute à votre
+ * panier ? », « Oui, ajouter » / « Je cherche encore ». The server never holds
+ * the customer's cart: on « Oui » the reply tells the widget what to add, and
+ * the widget adds it, on that click only.
  */
 
 export const FLOW_CHOICE = /^flow:routine:(yes|no)$/;
+export const CART_CHOICE = /^flow:cart:(yes|no)$/;
+const GID_VARIANT = /^gid:\/\/shopify\/ProductVariant\/\d{1,20}$/;
 const OFFERS = ['offered', 'accepted', 'declined'];
 const SOURCES = ['page', 'request', 'suggested'];
 const ID = /^[0-9a-f-]{36}$/;
@@ -37,6 +47,12 @@ const TEXT = {
     runningLow: (name) => `Vous pouvez retrouver ${name} ici, ou l'ajouter directement à votre panier.`,
     treatAfterRoutine: 'Et pour un moment de douceur, ce petit plaisir pourrait vous plaire :',
     treatAfterNo: "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :",
+    cartOne: (name) => `Souhaitez-vous que j'ajoute ${name} à votre panier ?`,
+    cartRoutine: 'Souhaitez-vous que j\'ajoute cette routine à votre panier ?',
+    cartYes: 'Oui, ajouter',
+    cartNo: 'Je cherche encore',
+    cartDone: (names) => `C'est noté, j'ajoute à votre panier : ${names}.`,
+    cartSize: (names) => `Pour ${names}, choisissez la taille sur sa page.`,
   },
   en: {
     offer: 'Would you like me to build you a personalised routine?',
@@ -46,6 +62,12 @@ const TEXT = {
     runningLow: (name) => `You'll find ${name} here, or you can add it straight to your cart.`,
     treatAfterRoutine: 'And for a little moment of pampering, you might like this treat:',
     treatAfterNo: 'Of course. If you fancy a little treat, you might like this one:',
+    cartOne: (name) => `Would you like me to add ${name} to your cart?`,
+    cartRoutine: 'Would you like me to add this routine to your cart?',
+    cartYes: 'Yes, add it',
+    cartNo: "I'm still looking",
+    cartDone: (names) => `Done, adding to your cart: ${names}.`,
+    cartSize: (names) => `For ${names}, please choose the size on its page.`,
   },
 };
 const text = (lang) => TEXT[String(lang).slice(0, 2)] ?? TEXT.fr;
@@ -53,15 +75,50 @@ const text = (lang) => TEXT[String(lang).slice(0, 2)] ?? TEXT.fr;
 // A typed answer to the offer, French and English. Only read while an offer is pending.
 const YES = /^\s*(oui|ouais|volontiers|avec plaisir|d'accord|ok(ay)?|bien s[uû]r|carr[ée]ment|go|yes|yeah|yep|sure|please|of course|let'?s (do it|go))\b(?!.*\b(pas|not|non|no)\b)/iu;
 const NO = /^\s*(non|nan|pas (maintenant|pour l'instant|besoin)|sans fa[cç]on|no|nope|not (now|right now|today)|no thanks?)\b/iu;
+// « Je cherche encore »: not now, still browsing (the cart question's « no »).
+const STILL_LOOKING = /\b(je cherche encore|je regarde encore|pas encore|plus tard|je reflechis|je réfléchis|still looking|just looking|not yet|maybe later|later)\b/iu;
 
 export function emptyFlow() {
-  return { offer: null, anchor: null, treat_offered: false };
+  return { offer: null, anchor: null, treat_offered: false, cart: { pending: [], asked: [] } };
 }
 
 /** From the message log: re-checked like the rest of the state. */
 export function cleanFlow(saved) {
   const anchor = saved?.anchor && ID.test(saved.anchor.id ?? '') && SOURCES.includes(saved.anchor.source) ? { id: saved.anchor.id, source: saved.anchor.source } : null;
-  return { offer: OFFERS.includes(saved?.offer) ? saved.offer : null, anchor, treat_offered: saved?.treat_offered === true };
+  const pending = (Array.isArray(saved?.cart?.pending) ? saved.cart.pending : [])
+    .filter((x) => x && ID.test(x.id ?? '') && (x.variant_id === null || GID_VARIANT.test(x.variant_id ?? '')))
+    .slice(0, 8).map((x) => ({ id: x.id, variant_id: x.variant_id }));
+  const asked = (Array.isArray(saved?.cart?.asked) ? saved.cart.asked : []).filter((id) => ID.test(id ?? '')).slice(-20);
+  return { offer: OFFERS.includes(saved?.offer) ? saved.offer : null, anchor, treat_offered: saved?.treat_offered === true, cart: { pending, asked } };
+}
+
+/** The answer to the cart question: a button, or typed words while it is pending. */
+export function cartAnswer(flow, { choice = null, message = '' } = {}) {
+  const m = typeof choice === 'string' ? choice.match(CART_CHOICE) : null;
+  if (m) return m[1];
+  if (!cleanFlow(flow).cart.pending.length || choice) return null;
+  if (NO.test(message) || STILL_LOOKING.test(message)) return 'no';
+  if (YES.test(message)) return 'yes';
+  return null;
+}
+
+/**
+ * What a « Oui, ajouter » adds: the pending products with one size to buy;
+ * the others are named so the customer picks the size on the product page.
+ * @returns {{ add: { product_id: string, variant_id: string }[], needs_size: string[] }}
+ */
+export function cartToAdd(flow, nameOf = () => null) {
+  const pending = cleanFlow(flow).cart.pending;
+  return {
+    add: pending.filter((x) => x.variant_id).map((x) => ({ product_id: x.id, variant_id: x.variant_id })),
+    needs_size: pending.filter((x) => !x.variant_id).map((x) => nameOf(x.id)).filter(Boolean),
+  };
+}
+
+/** The code's own reply to « Oui, ajouter » (no model call). */
+export function cartDoneText(lang, added, needsSize) {
+  const t = text(lang);
+  return [added.length ? t.cartDone(added.join(', ')) : null, needsSize.length ? t.cartSize(needsSize.join(', ')) : null].filter(Boolean).join(' ');
 }
 
 /** The customer's answer to the offer: a button, or typed words while it is pending. */
@@ -80,10 +137,12 @@ export function offerAnswer(flow, { choice = null, message = '' } = {}) {
  */
 export function beforeAdvice(flow, { choice, message }) {
   const next = cleanFlow(flow);
-  const answer = offerAnswer(next, { choice, message });
+  const cart = cartAnswer(next, { choice, message });
+  // A cart answer answers the cart question only: it never starts the builder.
+  const answer = cart ? null : offerAnswer(next, { choice, message });
   if (answer === 'yes') next.offer = 'accepted';
   if (answer === 'no') next.offer = 'declined';
-  return { flow: next, answer, startBuilder: answer === 'yes' };
+  return { flow: next, answer, cart, startBuilder: answer === 'yes' };
 }
 
 /**
@@ -110,14 +169,22 @@ export function anchorFor({ pageProductId = null, resolvedIds = [], advice = nul
  *   purchaseAsk: { product_id: string, name: string } | null,   purchase-turn's pick, builder only
  *   runningLow: { product_id: string, name: string } | null,    just answered « il m'en reste peu »
  *   treat: { product_id: string } | null,                        the engine's treat, when one is due
- *   purchaseChoices: (item) => { label: string, value: string }[]
+ *   purchaseChoices: (item) => { label: string, value: string }[],
+ *   cartable: { product_id: string, variant_id: string | null, name: string }[],   what « add to cart » would add (one product, or a routine)
+ *   cart: 'yes' | 'no' | null                                    this turn's answer to the cart question
  * }} input
  * @returns {{ flow: object, followUp: { kind: string, text: string, choices: object[], productIds: string[] } | null }}
  */
-export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices }) {
+export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices, cartable = [], cart = null }) {
   const next = cleanFlow(flow);
   const t = text(lang);
   const say = (kind, words, { choices = [], productIds = [] } = {}) => ({ flow: next, followUp: { kind, text: words, choices, productIds } });
+  const askCart = (items) => {
+    next.cart = { pending: items.map((x) => ({ id: x.product_id, variant_id: x.variant_id ?? null })), asked: [...next.cart.asked, ...items.map((x) => x.product_id)] };
+    return say('cart', items.length > 1 ? t.cartRoutine : t.cartOne(items[0].name), { choices: [{ label: t.cartYes, value: 'flow:cart:yes' }, { label: t.cartNo, value: 'flow:cart:no' }] });
+  };
+  // The cart question is answered either way: nothing is pending any more.
+  if (cart) next.cart = { ...next.cart, pending: [] };
 
   if (runningLow) return say('running_low', t.runningLow(runningLow.name), { productIds: [runningLow.product_id] });
   if (answer === 'no' && treat && !next.treat_offered) {
@@ -125,6 +192,12 @@ export function followUpFor({ flow, lang, builder, answer, advice, showsProducts
     return say('treat', t.treatAfterNo, { productIds: [treat.product_id] });
   }
   if (builder && purchaseAsk) return say('purchase', t.purchase(purchaseAsk.name), { choices: purchaseChoices(purchaseAsk) });
+  // A routine is ready: « shall I add it to your cart? » first; the treat follows the answer.
+  if (builder && advice?.status === 'recommended' && cartable.length && !cart) return askCart(cartable);
+  if (cart && treat && !next.treat_offered) {
+    next.treat_offered = true;
+    return say('treat', t.treatAfterRoutine, { productIds: [treat.product_id] });
+  }
   if (builder && advice?.status === 'recommended' && treat && !next.treat_offered) {
     next.treat_offered = true;
     return say('treat', t.treatAfterRoutine, { productIds: [treat.product_id] });
@@ -134,6 +207,8 @@ export function followUpFor({ flow, lang, builder, answer, advice, showsProducts
     if (anchor) next.anchor = anchor;
     return say('offer', t.offer, { choices: [{ label: t.yes, value: 'flow:routine:yes' }, { label: t.no, value: 'flow:routine:no' }] });
   }
+  // One product, once the routine offer has had its turn, never twice for the same product.
+  if (!builder && next.offer !== null && !cart && cartable.length === 1 && !next.cart.asked.includes(cartable[0].product_id)) return askCart(cartable);
   return { flow: next, followUp: null };
 }
 
@@ -147,6 +222,7 @@ const ABOUT = {
   purchase: 'asks what to do about a product they bought before',
   running_low: 'shows the card of the product they are running low on, to view or add to cart',
   treat: 'suggests one small treat, with its card',
+  cart: 'asks whether to add it to their cart',
 };
 export function followUpNote(followUp) {
   if (!followUp) return null;

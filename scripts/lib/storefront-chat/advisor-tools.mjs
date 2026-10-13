@@ -106,10 +106,14 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   // building a routine. A question about a named product (« la crème X
   // convient aux peaux sèches ? ») still updates the profile, but is answered
   // from that product's facts, not with a routine.
-  let relevant = consultation || builderAsked || Boolean(picked) || mode === 'routine_builder' || (changed.length > 0 && !productQuestion);
+  // « Trop cher » said THIS turn: the engine may answer with a cheaper product of the one just proposed.
+  const priceSaidNow = lex.updates.some((u) => u.field === 'budget');
+  // « Autre chose ? » about the advice just given: it counts as a consultation turn.
+  const moreNow = lex.moreOptions && Boolean(before.last_advice?.product_ids?.length);
+  let relevant = consultation || builderAsked || Boolean(picked) || mode === 'routine_builder' || (changed.length > 0 && !productQuestion) || moreNow;
   let rangeNudge = [...ranges];
   const compute = () => {
-    advice = advisor.advise({ profile, mode, asked, locale: lang, owned: stillUsing, ranges: rangeNudge, pinned: mode === 'routine_builder' ? pinned : [] });
+    advice = advisor.advise({ profile, mode, asked, locale: lang, owned: stillUsing, ranges: rangeNudge, pinned: mode === 'routine_builder' ? pinned : [], previous: priceSaidNow ? before.last_advice : moreNow ? { ...before.last_advice, more: true } : null });
     return advice;
   };
 
@@ -203,7 +207,7 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
         asked,
         last_question: q?.field ?? null,
         last_advice: advice
-          ? { status: advice.status, playbook: advice.playbook?.key ?? null, scope: advice.scope, product_ids: advice.steps.map((s) => s.product_id) }
+          ? { status: advice.status, playbook: advice.playbook?.key ?? null, scope: advice.scope, product_ids: advice.steps.map((s) => s.product_id), shown: [...new Set([...(moreNow ? before.last_advice?.shown ?? [] : []), ...advice.steps.flatMap((s) => [s.product_id, ...s.alternatives.map((a) => a.product_id)])])] }
           : before.last_advice
       };
     },
@@ -235,12 +239,15 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
         product: slim(byId.get(s.product_id), money),
         ...(s.customer_interest ? { customer_interest: true } : {}),
         reason_codes: s.reason_codes,
-        alternatives: s.alternatives.map((x) => ({ handle: x.handle, name: byId.get(x.product_id)?.name ?? null }))
+        // Top choices: the alternatives are presented too, so they carry their facts.
+        ...(s.top_choices ? { top_choices: true } : {}),
+        alternatives: s.alternatives.map((x) => (s.top_choices ? { ...slim(byId.get(x.product_id), money) } : { handle: x.handle, name: byId.get(x.product_id)?.name ?? null }))
       })),
       // already_owned: a product they said they still use fills it; the model says to keep theirs.
       skipped_steps: a.skipped.map((s) => ({ step: s.slot, reason: s.reason, ...(s.product_id && s.reason !== 'over_budget' ? { customer_product: byId.get(s.product_id)?.name ?? null } : {}) })),
       // The routine's price, and what a budget left out: quoted from here, never computed by the model.
       ...(typeof a.total_price === 'number' ? { total_price: money(a.total_price) } : {}),
+      ...(a.cheaper_than ? { cheaper_than: byId.get(a.cheaper_than)?.name ?? null } : {}),
       ...(a.budget ? { budget: { max: money(a.budget.max), total: money(a.budget.total), left_out: a.budget.dropped.length } } : {}),
       // The product they came for, when it could not go in: say why, briefly.
       ...((a.pinned ?? []).some((p) => p.status !== 'placed') ? { customer_interest_not_used: a.pinned.filter((p) => p.status !== 'placed').map((p) => ({ name: byId.get(p.product_id)?.name ?? null, why: p.status })) } : {}),

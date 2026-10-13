@@ -37,12 +37,13 @@ import { buildStorefrontSystemPrompt } from './system-prompt.mjs';
 import { knowledgeToolDefinitions, KNOWLEDGE_TOOL_NAMES, runKnowledgeTool, getPolicy } from './knowledge-tools.mjs';
 import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
+import { promotionsForProduct } from './shopping-evaluator.mjs';
 import { displayLanguage, languageContext, validReplyLanguage } from './conversation-language.mjs';
 import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
 import { ORDER_TOOL, orderToolDefinition, runOrderTool } from './order-tools.mjs';
 import { USE_SKILL, activeSkill, skillBlock, skillNamed, useSkillDefinition } from './skills.mjs';
 import { GET_PAST_PURCHASES } from './skills/routine-builder.mjs';
-import { FLOW_CHOICE, anchorFor, beforeAdvice, emptyFlow, followUpFor, followUpNote } from './routine-flow.mjs';
+import { CART_CHOICE, FLOW_CHOICE, anchorFor, beforeAdvice, cartDoneText, cartToAdd, emptyFlow, followUpFor, followUpNote } from './routine-flow.mjs';
 import { cleanPurchaseState, customerRanges, describePurchases, mayBeRunningLow, emptyPurchaseState, mentionsPastPurchase, parsePurchaseChoice, purchaseChoices, purchaseItems, purchaseToAsk, recordAnswer } from './purchase-turn.mjs';
 import { READER_TIMEOUT_MS, mentionsSkin, readProfile, shouldRead } from './profile-reader.mjs';
 
@@ -208,8 +209,10 @@ export function createLlmAgent({
       let purchaseState = cleanPurchaseState(advisorState?.purchases ?? emptyPurchaseState());
       if (purchaseAnswer) purchaseState = recordAnswer(purchaseState, purchaseAnswer);
       // The routine builder flow (routine-flow.mjs): the offer's answer, by button or typed.
-      const flowChoice = typeof choice === 'string' && FLOW_CHOICE.test(choice);
-      const flowStart = advisor ? beforeAdvice(advisorState?.flow ?? emptyFlow(), { choice, message }) : { flow: emptyFlow(), answer: null, startBuilder: false };
+      const flowChoice = typeof choice === 'string' && (FLOW_CHOICE.test(choice) || CART_CHOICE.test(choice));
+      const flowStart = advisor ? beforeAdvice(advisorState?.flow ?? emptyFlow(), { choice, message }) : { flow: emptyFlow(), answer: null, cart: null, startBuilder: false };
+      // What the cart question proposed, before this turn's answer clears it.
+      const cartPending = flowStart.flow.cart?.pending ?? [];
       let flow = flowStart.flow;
       let resolution = resolutionIndex
         ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || purchaseAnswer || flowChoice ? null : choice })
@@ -235,7 +238,7 @@ export function createLlmAgent({
             locale: displayLanguage(language, locale),
             catalogue,
             money,
-            productQuestion: !profileChoice && !purchaseAnswer && !flowStart.answer && (resolution?.products.length ?? 0) > 0,
+            productQuestion: !profileChoice && !purchaseAnswer && !flowStart.answer && !flowStart.cart && (resolution?.products.length ?? 0) > 0,
             turn: history.filter((m) => m.role === 'user').length + 1,
             consultation: Boolean(purchaseAnswer) || flowStart.startBuilder,
             // « Construire autour »: theirs, it fills its step. « Il m'en reste peu »: put in its step.
@@ -304,6 +307,13 @@ export function createLlmAgent({
         purchaseTrace.asked = purchaseAsk?.product_id ?? null;
         if (purchaseAnswer) purchaseTrace.answered = purchaseAnswer.answer;
       }
+      // What « add to cart » would add: the routine's products, or the one product shown; never
+      // a choice between top choices (« this » would be ambiguous).
+      const cartableFor = (a, namedCounts = true) => {
+        const recommended = a?.status === 'recommended' ? a.steps : [];
+        const ids = recommended.some((s) => s.top_choices) ? [] : recommended.length ? recommended.map((s) => s.product_id) : namedCounts && resolvedIds.size === 1 ? [...resolvedIds] : [];
+        return ids.map(byId).filter((p) => p?.inStock).map((p) => ({ product_id: p.id, variant_id: cartVariant(p), name: p.name }));
+      };
       // THE FOLLOW-UP MESSAGE (routine-flow.mjs): the routine offer, the purchase
       // question, the card of what they are running low on, or a treat. Its
       // words and buttons are the code's; the model is only told it comes.
@@ -321,23 +331,30 @@ export function createLlmAgent({
         const runningLow = purchaseAnswer?.answer === 'running_low' ? { product_id: purchaseAnswer.productId, name: byId(purchaseAnswer.productId)?.name ?? '' } : null;
         // A budget treat already is the treat: never another one, never the routine offer after it.
         const budgetTreat = finalAdvice?.playbook?.key === 'treat';
-        const treatDue = !budgetTreat && !flow.treat_offered && (flowStart.answer === 'no' || (builder && finalAdvice?.status === 'recommended'));
+        // The treat follows a routine: right away, or after the answer to « shall I add it to your cart? ».
+        const routineCartAnswered = Boolean(flowStart.cart) && cartPending.length > 1;
+        const treatDue = !budgetTreat && !flow.treat_offered && (flowStart.answer === 'no' || routineCartAnswered || (builder && finalAdvice?.status === 'recommended'));
         const treat = treatDue
-          ? advisor.treat({ profile: advisorTurn.profile, exclude: [...(finalAdvice?.steps ?? []).flatMap((s) => [s.product_id]), ...purchaseState.around] })
+          ? advisor.treat({ profile: advisorTurn.profile, exclude: [...(finalAdvice?.steps ?? []).flatMap((s) => [s.product_id]), ...cartPending.map((x) => x.id), ...purchaseState.around] })
           : null;
         const otherTopic = Boolean(shoppingOpening) || ['general_policy', 'general_faq', 'product_and_policy'].includes(opening?.route);
+        // What « add to cart » would add: the routine's products, or the one product shown; never
+        // a choice between top choices (« this » would be ambiguous).
+        const cartable = cartableFor(finalAdvice, !otherTopic);
         const decided = followUpFor({
           flow,
           lang,
           builder,
           answer: flowStart.answer,
           advice: finalAdvice,
-          showsProducts: !otherTopic && !budgetTreat && (finalAdvice?.status === 'recommended' || resolvedIds.size > 0),
+          showsProducts: !otherTopic && !budgetTreat && (finalAdvice?.status === 'recommended' || resolvedIds.size > 0 || Boolean(pageProduct)),
           anchor: anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds], advice: finalAdvice }),
           purchaseAsk,
           runningLow,
           treat,
-          purchaseChoices: (item) => purchaseChoices(item, lang)
+          purchaseChoices: (item) => purchaseChoices(item, lang),
+          cartable,
+          cart: flowStart.cart
         });
         flow = decided.flow;
         followUp = decided.followUp;
@@ -368,7 +385,27 @@ export function createLlmAgent({
         return { status: 'found', ...describePurchases(items, purchaseState, { knowledge: productKnowledge, measured: repurchaseIntervals }) };
       };
       const openAtStart = advisorTurn ? activeSkill({ mode: advisorTurn.mode }) : null;
+      // A routine of several products: what its « Ajouter la routine au panier » adds, and what needs a size.
+      const routineCartFor = (a) => {
+        if (a?.status !== 'recommended' || a.steps.length < 2 || a.steps.some((s) => s.top_choices)) return null;
+        const items = a.steps.map((s) => byId(s.product_id)).filter((p) => p?.inStock);
+        const add = items.filter((p) => cartVariant(p)).map((p) => ({ product_id: p.id, variant_id: cartVariant(p) }));
+        return add.length ? { add, needs_size: items.filter((p) => !cartVariant(p)).map((p) => p.name) } : null;
+      };
       let describedAdvice = advice ? advisorTurn.describe() : null;
+      // ONE PRODUCT PROPOSED, WITH ITS OFFER (owner, 2026-10-13; the foundation
+      // engine): the public offers running on it now, from the same synced
+      // promotions the shopping tools read (30 s cache), never a guess.
+      const single = advisor?.engine === 'foundations' && advisorTurn?.advice?.status === 'recommended' && advisorTurn.advice.steps.length === 1 ? byId(advisorTurn.advice.steps[0].product_id) : null;
+      // …and one product the customer asked about by name or on its page (customer batch).
+      const named = advisor?.engine === 'foundations' && !single && resolvedIds.size === 1 ? byId([...resolvedIds][0]) : null;
+      let namedOffers = [];
+      if ((single?.shopifyId || named?.shopifyId) && readShopping && shopDomain) {
+        const source = await withDeadline(readShopping(shopDomain), 2500).catch(() => null);
+        const offers = promotionsForProduct(source, (single ?? named).shopifyId);
+        if (offers.length && single && describedAdvice?.steps?.[0]) describedAdvice.steps[0].promotions = offers;
+        else if (offers.length && named) namedOffers = offers;
+      }
       // One question per turn: a follow-up that asks (the offer, the purchase
       // question) goes first, and the engine's question waits a turn.
       const followUpAsks = Boolean(followUp?.choices.length);
@@ -394,14 +431,14 @@ export function createLlmAgent({
         shopping: shoppingOpening,
         knowledge: opening,
         pageProduct: pageProduct && !resolvedIds.has(pageProduct.id) ? productDetail(pageProduct, money, message) : null,
-        resolution: resolution ? describeResolution(resolution, byId, money, message) : null,
+        resolution: resolution ? withOffers(describeResolution(resolution, byId, money, message), namedOffers) : null,
         followUp: followUpNote(followUp),
         skill: openAtStart ? skillBlock(openAtStart, {}) : null
       });
       const messages = [...historyMessages(history), { role: 'user', content: message }];
       const trace = { calls: [], tools: [] };
       const readerTrace = reader && { reason: reader.reason, ...(reader.status ? { status: reader.status, ms: reader.ms, added: reader.added } : {}) };
-      if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace };
+      if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace, ...(describedAdvice?.steps?.[0]?.promotions ? { promotions: describedAdvice.steps[0].promotions.map((p) => p.promotion_id) } : {}) };
       if (purchases) trace.purchases = purchaseTrace;
       if (shoppingOpening) {
         trace.shopping = { route: shoppingOpening.route, topics: shoppingOpening.topics ?? [], retrievals: shoppingOpening.results.map(({ tool, result }) => ({ tool, status: result.status, offer_preview: result.offer_preview === true, reasons: (result.promotions ?? []).map((p) => ({ id: p.promotion_id, status: p.status, reason: p.reason })) })) };
@@ -428,6 +465,30 @@ export function createLlmAgent({
       // THE PURCHASE QUESTION IS THE WHOLE TURN, from the code, with no model
       // call: told to ask nothing, the model still added its own question
       // beside it in two live runs (2026-10-13). The engine's question waits a turn.
+      // « OUI, AJOUTER »: the code's own turn (no model call). The reply tells the
+      // widget what to add; the widget adds it to the shop's cart on that click.
+      if (flowStart.cart === 'yes' && cartPending.length) {
+        const toAdd = cartToAdd(flowStart.flow, (id) => byId(id)?.name ?? null);
+        trace.model_skipped = 'cart_add';
+        trace.cart = { add: toAdd.add.length, needs_size: toAdd.needs_size.length };
+        if (followUp) trace.follow_up = followUp.kind;
+        const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
+        return {
+          text: cartDoneText(displayLanguage(language, locale), toAdd.add.map((x) => byId(x.product_id)?.name).filter(Boolean), toAdd.needs_size),
+          replyLanguage: displayLanguage(language, locale),
+          products: [],
+          choices: [],
+          model,
+          usage: usage.inputTokens || usage.outputTokens ? usage : null,
+          trace,
+          resolution: null,
+          refs: { recommended: [], mentioned: [] },
+          cart: toAdd,
+          ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUp.choices } } : {}),
+          ...(advisorTurn ? { advisor: advisorState_(advisorTurn.nextState()), events: [] } : {})
+        };
+      }
+
       if (followUp?.kind === 'purchase') {
         trace.follow_up = 'purchase';
         trace.model_skipped = 'purchase_question';
@@ -555,8 +616,13 @@ export function createLlmAgent({
         // A recommended routine always shows its products, even when the model
         // forgot to list them: the cards ARE the recommendation.
         const finalAdvice = advisorTurn?.advice ?? null;
-        if (!products.length && finalAdvice?.status === 'recommended') {
-          products = toCards(finalAdvice.steps.map((s) => ({ handle: s.handle, rationale: '' })), offered, catalogue, money, linkBase);
+        if (finalAdvice?.status === 'recommended' && finalAdvice.steps.some((s) => s.top_choices)) {
+          // Our top choices are the cards, whatever the model listed (it showed one of three in the batch).
+          const top = finalAdvice.steps.flatMap((s) => [s.handle, ...s.alternatives.map((x) => x.handle)]);
+          products = toCards([...products.map((p) => ({ handle: top.find((h) => p.url.endsWith(`/${encodeURIComponent(h)}`)) ?? '', rationale: p.rationale })).filter((x) => x.handle), ...top.map((handle) => ({ handle, rationale: '' }))], offered, catalogue, money, linkBase);
+        } else if (!products.length && finalAdvice?.status === 'recommended') {
+          // Top choices show as cards too (best first), not only the step's product.
+          products = toCards(finalAdvice.steps.flatMap((s) => [{ handle: s.handle, rationale: '' }, ...(s.top_choices ? s.alternatives.map((x) => ({ handle: x.handle, rationale: '' })) : [])]), offered, catalogue, money, linkBase);
         }
         // The offer follows products: shown as cards, or the product the conversation is about
         // (its page, or the one they named). A reply about none is not followed by it, and
@@ -568,11 +634,17 @@ export function createLlmAgent({
           if (!skillOpenedByModel) flow = flowBefore;
         }
         if (skillOpenedByModel) trace.skill_opened = 'routine_builder';
+        // A routine the model built itself through `advise` this turn (customer batch, EN): the
+        // follow-up was decided before it existed, so the cart question is added now.
+        if (!followUp && advisorTurn?.mode === 'routine_builder' && advisorTurn.advice?.status === 'recommended' && advice?.status !== 'recommended') {
+          const late = followUpFor({ flow, lang: displayLanguage(language, locale), builder: true, answer: null, advice: advisorTurn.advice, showsProducts: false, anchor: null, purchaseAsk: null, runningLow: null, treat: null, purchaseChoices: () => [], cartable: cartableFor(advisorTurn.advice, false), cart: null });
+          if (late.followUp?.kind === 'cart') { followUp = late.followUp; flow = late.flow; }
+        }
         const cardIds = products.map((c) => c.id);
         // The contact form: on every order answer and every « contact us ».
         const contactPath = company.contactFormPath ?? null;
         const contact = contactPath && (parsed.contactLink || orderAnswered || CONTACT_WORDS.test(parsed.text)) ? { url: contactPath } : null;
-        if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace };
+        if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace, ...(describedAdvice?.steps?.[0]?.promotions ? { promotions: describedAdvice.steps[0].promotions.map((p) => p.promotion_id) } : {}) };
         if (followUp) trace.follow_up = followUp.kind;
         const engineChoices = advisorTurn && !purchaseAsk ? advisorTurn.choices() : [];
         // Only the last bubble's buttons are live: a follow-up without its own carries the engine's.
@@ -595,6 +667,8 @@ export function createLlmAgent({
             : null,
           refs: { recommended: cardIds, mentioned: [...new Set([...resolvedIds, ...cardIds])] },
           ...(contact ? { contact } : {}),
+          // « Ajouter la routine au panier »: a routine of several products, one button under it.
+          ...(routineCartFor(finalAdvice) ? { routineCart: routineCartFor(finalAdvice) } : {}),
           ...(orderLookups ? { orderLookups } : {}),
           // The app's own second message (routine-flow.mjs): its text, cards and buttons.
           ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUpChoices } } : {}),
@@ -733,4 +807,10 @@ export function storefrontFetch(timeoutMs = DEFAULT_TIMEOUT_MS, fetchImpl = fetc
 /** The client's retry wait, refused: a shopper does not wait out a rate limit. */
 export function noRetryWait() {
   return Promise.reject(new Error('not retried on the storefront'));
+}
+
+/** The offers running on the one product the customer asked about, on its resolved entry. */
+function withOffers(described, offers) {
+  if (!offers.length || !described || !Array.isArray(described.products) || !described.products[0]) return described;
+  return { ...described, products: [{ ...described.products[0], promotions: offers }, ...described.products.slice(1)] };
 }

@@ -45,7 +45,9 @@ function clean(saved) {
           status: typeof advice.status === 'string' ? advice.status : null,
           playbook: typeof advice.playbook === 'string' ? advice.playbook : null,
           scope: typeof advice.scope === 'string' ? advice.scope : null,
-          product_ids: Array.isArray(advice.product_ids) ? advice.product_ids.filter((id) => typeof id === 'string').slice(0, 12) : []
+          product_ids: Array.isArray(advice.product_ids) ? advice.product_ids.filter((id) => typeof id === 'string').slice(0, 12) : [],
+          // Every product shown with it (top choices, alternatives): « autre chose ? » leaves them out.
+          shown: Array.isArray(advice.shown) ? advice.shown.filter((id) => typeof id === 'string').slice(0, 30) : []
         }
       : null,
     purchases: cleanPurchaseState(saved.purchases),

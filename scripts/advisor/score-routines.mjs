@@ -42,7 +42,7 @@ const knowledgeOf = (id) => KNOWLEDGE.get(byId.get(id)?.handle) ?? null;
 const concernsOf = (k) => (k ? [k.primary_concern, ...k.other_concerns].filter(Boolean) : []);
 
 function run(c) {
-  const state = c.builder ? { ...emptyAdvisorState(), asked: BUILDER_ASKED } : null;
+  const state = c.builder ? { ...emptyAdvisorState(), asked: BUILDER_ASKED } : c.previous ? { ...emptyAdvisorState(), last_advice: { status: 'recommended', playbook: null, scope: 'targeted', product_ids: [byHandle.get(c.previous).id] } } : null;
   const turn = createAdvisorTurn({
     advisor, state, message: c.message, action: c.builder ? 'build_routine' : null, locale: c.lang, catalogue: CATALOGUE, money,
     consultation: true, stillUsing: (c.owned ?? []).map((h) => byHandle.get(h)?.id).filter(Boolean),
@@ -85,6 +85,8 @@ function judge(c, r) {
   const total = r.steps.reduce((n, s) => n + (byId.get(s.product_id)?.priceFrom ?? 0), 0);
   if (e.max_total !== undefined && total > e.max_total) fails.push(`costs ${total}, expected at most ${e.max_total}`);
   if (e.dropped && !(r.advice?.skipped ?? []).filter((s) => s.reason === 'over_budget').length) fails.push('nothing left out for the budget');
+  const shownCount = r.steps.reduce((n, s) => n + 1 + (s.top_choices ? s.alternatives.length : 0), 0);
+  if (e.choices && (shownCount < e.choices[0] || shownCount > e.choices[1])) fails.push(`${shownCount} products shown, expected ${e.choices[0]}–${e.choices[1]}`);
   return { fails, foundation, types };
 }
 

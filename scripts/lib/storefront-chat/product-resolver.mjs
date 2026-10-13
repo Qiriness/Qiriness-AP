@@ -187,9 +187,15 @@ export function buildResolutionIndex(catalogue, { aliases = new Map() } = {}) {
  *   choice?: string | null
  * }} context
  */
+// « cette crème », « ce soin », "this cream" on a product page: that product, not
+// another cream found by its name (customer batch, 2026-10-13: « cette crème »
+// on the Light cream's page resolved to another cream).
+const DEMONSTRATIVE = /\b(?:cette|cet|ce) (?:creme|serum|soin|produit|masque|lotion|baume|gel|lait|huile|contour|fluide|nettoyant|elixir|coffret)\b|\bthis (?:cream|serum|product|one|mask|lotion|balm|gel|cleanser|fluid|oil|kit|set)\b/;
+
 export function resolveProducts(message, { index, pageProductId = null, refs = null, choice = null }) {
   const out = { products: [], candidates: [], unresolved: [], range: null, clarificationFor: null };
   const text = String(message ?? '');
+  const demonstrative = Boolean(pageProductId && index.byId.has(pageProductId) && DEMONSTRATIVE.test(` ${normalise(text)} `));
 
   // 0. A chip the customer clicked: an id from the pending options, or a care type.
   if (choice && refs?.pending) {
@@ -228,7 +234,10 @@ export function resolveProducts(message, { index, pageProductId = null, refs = n
     }
     if (c.identity.length > 0) resolveIdentityChunk(c, index, out);
     else if (c.unknownProduct) out.unresolved.push(c.text.trim());
-    else if (!discovery) resolveDescriptiveChunk(c, index, out);
+    else if (!discovery && !demonstrative) resolveDescriptiveChunk(c, index, out);
+  }
+  if (demonstrative && !out.products.length && !out.candidates.length) {
+    out.products.push(resolved(index, pageProductId, 'strong', 'page: this product', 'this'));
   }
 
   // A follow-up to a clarification: « la crème » after « Crème, Sérum ou Coffret ? ».
@@ -540,6 +549,8 @@ function closest(token, index) {
     // shorter than what was typed is accepted only when the extra letter is a
     // doubled one (« zenn »): otherwise « matin » would become « main ».
     if (word.length < token.length && !isDoubledLetter(token, word)) continue;
+    // A short word keeps its first letter: « tight » is not a typo of « light ».
+    if (token.length < 8 && word[0] !== token[0]) continue;
     const d = editDistance(token, word, limit);
     if (d < bestDistance) {
       bestDistance = d;

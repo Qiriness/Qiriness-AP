@@ -70,9 +70,10 @@ export async function runOrderTool(args, { readOrder, shopDomain, knowledge, loo
 // What each status means for the reply. Always one or two sentences, then the contact form (shown by the app).
 const STATUS_INSTRUCTIONS = {
   preparing: 'Not shipped yet and still within the usual dispatch time: say it is being prepared.',
-  dispatch_delayed: 'Not shipped and past the usual dispatch time: apologise for the delay.',
+  // « Je suis désolé(e) » is a gendered form the prompt forbids: the shop apologises as « nous ».
+  dispatch_delayed: 'Not shipped and past the usual dispatch time: apologise for the delay, as the shop (« Toutes nos excuses pour ce retard », "We are sorry for the delay").',
   on_the_way: 'Shipped and still within the usual delivery time: say it is on its way.',
-  delivery_late: 'Shipped and past the usual delivery time: apologise that it is late.',
+  delivery_late: 'Shipped and past the usual delivery time: apologise that it is late, as the shop (« Toutes nos excuses pour ce retard », "We are sorry it is late").',
   delivered: 'Recorded as delivered on delivered_on: say so.',
   cancelled: 'This order was cancelled: say so plainly.',
   timing_unknown: 'Give the status only; do not estimate any timing.',

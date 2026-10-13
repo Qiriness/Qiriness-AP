@@ -130,6 +130,27 @@ export function getActivePromotions(source, { limit = 8, topic = 'all' } = {}, n
   }), stacking_rules: stackingRules(source), has_more: candidates.length > cap, scope: topic === 'free_shipping' ? 'public_shipping_offer_terms' : topic === 'non_shipping' ? 'public_non_shipping_offers' : 'public_offers', loaded_at: new Date(source.loadedAt).toISOString() };
 }
 
+/**
+ * The public offers running now that reward or require ONE product (owner,
+ * 2026-10-13: a single product proposed is told with its offer). Its own
+ * products, a collection it is in (synced members), or every product; never a
+ * free-shipping offer, never a private code. At most two, as the offer lists
+ * show them (publicOffer): name, code when public, reward, dates, minimum.
+ */
+export function promotionsForProduct(source, shopifyProductId, now = Date.now()) {
+  if (source?.status !== 'ok' || !shopifyProductId) return [];
+  const covers = (items) => {
+    if (!items) return false;
+    const ids = qualifyingIds(items, source.members);
+    return ids === true || (ids instanceof Set && ids.has(shopifyProductId));
+  };
+  return publicRows(source)
+    .filter((p) => !running(p, now) && promotionMechanic(p) !== 'free_shipping')
+    .filter((p) => covers(p.rule_snapshot?.customer_gets?.items) || covers(p.rule_snapshot?.customer_buys?.items))
+    .slice(0, 2)
+    .map((p) => publicOffer(p));
+}
+
 function destinationOf(r) {
   const destination = r?.destination;
   return destination ? { scope: destination.scope, countries: (destination.countries ?? []).filter((c) => typeof c === 'string' && /^[A-Z]{2}$/.test(c)).slice(0, 250), include_rest_of_world: destination.include_rest_of_world === true } : null;

@@ -25,7 +25,7 @@ test('a typed yes or no answers the offer only while it is pending, in French an
   assert.equal(offerAnswer(pending, { message: 'Quel sérum pour les rides ?' }), null);
   assert.equal(offerAnswer(emptyFlow(), { message: 'Oui' }), null);
   assert.equal(offerAnswer(emptyFlow(), { choice: 'flow:routine:yes' }), 'yes');
-  assert.deepEqual(beforeAdvice(pending, { message: 'Oui' }), { flow: { ...pending, offer: 'accepted' }, answer: 'yes', startBuilder: true });
+  assert.deepEqual(beforeAdvice(pending, { message: 'Oui' }), { flow: { ...pending, offer: 'accepted' }, answer: 'yes', cart: null, startBuilder: true });
 });
 
 test('the offer follows products, once, never in the builder; its anchor is the page, then the named product, then our top pick', () => {
@@ -37,7 +37,7 @@ test('the offer follows products, once, never in the builder; its anchor is the 
   const offered = followUpFor({ ...base, flow: emptyFlow(), anchor: { id: ID(4), source: 'suggested' } });
   assert.equal(offered.followUp.kind, 'offer');
   assert.deepEqual(offered.followUp.choices, [{ label: 'Oui, avec plaisir', value: 'flow:routine:yes' }, { label: 'Non merci', value: 'flow:routine:no' }]);
-  assert.deepEqual(offered.flow, { offer: 'offered', anchor: { id: ID(4), source: 'suggested' }, treat_offered: false });
+  assert.deepEqual(offered.flow, { offer: 'offered', anchor: { id: ID(4), source: 'suggested' }, treat_offered: false, cart: { pending: [], asked: [] } });
   assert.equal(followUpFor({ ...base, flow: offered.flow }).followUp, null);
   assert.equal(followUpFor({ ...base, flow: emptyFlow(), builder: true }).followUp, null);
   assert.equal(followUpFor({ ...base, flow: emptyFlow(), showsProducts: false }).followUp, null);
@@ -66,7 +66,9 @@ test('in the builder the purchase question wins over the treat; « il m\'en rest
 
 test('flow state from the log is re-checked', () => {
   assert.deepEqual(cleanFlow({ offer: 'maybe', anchor: { id: 'x', source: 'page' }, treat_offered: 'yes' }), emptyFlow());
-  assert.deepEqual(cleanFlow({ offer: 'declined', anchor: { id: ID(1), source: 'page' } }), { offer: 'declined', anchor: { id: ID(1), source: 'page' }, treat_offered: false });
+  assert.deepEqual(cleanFlow({ offer: 'declined', anchor: { id: ID(1), source: 'page' } }), { offer: 'declined', anchor: { id: ID(1), source: 'page' }, treat_offered: false, cart: { pending: [], asked: [] } });
+  // A pending cart keeps only real ids and variant gids.
+  assert.deepEqual(cleanFlow({ cart: { pending: [{ id: ID(1), variant_id: 'gid://shopify/ProductVariant/5' }, { id: 'x', variant_id: null }, { id: ID(2), variant_id: 'evil' }], asked: [ID(1), 'x'] } }).cart, { pending: [{ id: ID(1), variant_id: 'gid://shopify/ProductVariant/5' }], asked: [ID(1)] });
 });
 
 // THROUGH THE AGENT.
@@ -110,8 +112,13 @@ test('on a product page: the answer, the offer; « oui » typed starts the build
   assert.equal(cream.id, page.id);
   assert.match(client.calls.at(-1).system, /"customer_interest":true/);
   // The routine is done: the treat follows, never a routine product.
-  assert.equal(r3.trace.follow_up, 'treat');
-  assert.ok(!r3.trace.advice.steps.some((s) => s.id === r3.followUp.products[0].id));
+  // The routine is done: « shall I add it to your cart? » first, the treat after the answer.
+  assert.equal(r3.trace.follow_up, 'cart');
+  assert.deepEqual(r3.followUp.choices.map((c) => c.label), ['Oui, ajouter', 'Je cherche encore']);
+  history = next(history, 'Déshydratation', r3);
+  const r4 = await agent.respond({ message: 'Je cherche encore', context, history, advisorState: advisorStateFromHistory(history) });
+  assert.equal(r4.trace.follow_up, 'treat');
+  assert.ok(!r3.trace.advice.steps.some((s) => s.id === r4.followUp.products[0].id));
 });
 
 test('« Non merci » to the offer: a treat, and no second offer', async () => {
@@ -126,7 +133,8 @@ test('« Non merci » to the offer: a treat, and no second offer', async () => {
   assert.match(r2.followUp.text, /^Très bien\./);
   history = next(history, 'Non merci', r2);
   const r3 = await agent.respond({ message: 'Et pour les rides ?', context: { locale: 'fr' }, history, advisorState: advisorStateFromHistory(history) });
-  assert.equal(r3.followUp, undefined);
+  // No second routine offer (a single product may now get the cart question).
+  assert.notEqual(r3.followUp?.text, 'Souhaitez-vous que je vous construise une routine personnalisée ?');
 });
 
 test('a reply that shows no product is not followed by the offer', async () => {
@@ -195,4 +203,61 @@ test('« trop cher »: a « petit plaisir » with its price, and neither the rou
   assert.equal(reply.followUp, undefined);
   assert.match(client.calls.at(-1).system, /"total_price":"\d+[,.]\d{2}/);
   assert.match(client.calls.at(-1).system, /playbook treat is a small affordable treat/);
+});
+
+test('a need shows our top choices as cards; « trop cher » just after a product gives a cheaper one of its type', async () => {
+  const client = scripted(answer('Voici nos meilleurs choix.'), answer('Une crème moins chère.'));
+  const agent = benchAgent(client);
+  const r1 = await agent.respond({ message: 'Je cherche une crème pour mon visage déshydraté', context: { locale: 'fr' } });
+  assert.ok(r1.products.length >= 1);
+  const history = [{ role: 'user', content: 'x' }, { role: 'assistant', content: 'x', context: { advisor: r1.advisor } }];
+  const r2 = await agent.respond({ message: "C'est trop cher", context: { locale: 'fr' }, history, advisorState: advisorStateFromHistory(history) });
+  const before = BENCH.products.find((p) => p.id === r1.trace.advice.steps[0].id);
+  const after = BENCH.products.find((p) => p.id === r2.trace.advice.steps[0].id);
+  assert.ok(['cheaper', 'treat'].includes(r2.trace.advice.playbook));
+  if (r2.trace.advice.playbook === 'cheaper') assert.ok(after.priceFrom < before.priceFrom && after.type === before.type);
+  const top = await benchAgent(scripted(answer('Voici.'))).respond({ message: 'Que me conseillez-vous pour mon visage déshydraté ?', context: { locale: 'fr' } });
+  assert.equal(top.products.length, 3);
+});
+
+
+test('« Oui, ajouter » after a routine: the code writes the turn and tells the widget what to add; no model call', async () => {
+  const client = scripted();
+  const agent = benchAgent(client);
+  const routine = await agent.respond({ message: 'Pouvez-vous me construire une routine pour mon visage déshydraté ?', action: 'build_routine', context: { locale: 'fr' } });
+  const state = advisorStateFromHistory([{ role: 'assistant', content: '…', context: { advisor: routine.advisor } }]);
+  state.asked = [...new Set([...state.asked, 'skin_type', 'sensitivity', 'current_routine', 'routine_scope', 'age_band'])];
+  const built = await agent.respond({ message: 'Visage', choice: 'profile:body_area:face', context: { locale: 'fr' }, advisorState: state });
+  assert.equal(built.trace.follow_up, 'cart');
+  assert.ok(built.routineCart.add.length >= 2);
+  const history = [{ role: 'user', content: 'x' }, { role: 'assistant', content: 'x', context: { advisor: built.advisor } }];
+  const calls = client.calls.length;
+  const yes = await agent.respond({ message: 'Oui, ajouter', choice: 'flow:cart:yes', context: { locale: 'fr' }, history, advisorState: advisorStateFromHistory(history) });
+  assert.equal(client.calls.length, calls);
+  assert.deepEqual(yes.cart.add.map((x) => x.product_id), built.trace.advice.steps.map((s) => s.id).filter((id) => built.routineCart.add.some((x) => x.product_id === id)));
+  assert.match(yes.text, /^C'est noté, j'ajoute à votre panier : /);
+  assert.equal(yes.trace.follow_up, 'treat');
+});
+
+test('a typed « oui » or « je cherche encore » answers the cart question only while it is pending', () => {
+  const pending = { ...emptyFlow(), offer: 'declined', cart: { pending: [{ id: ID(1), variant_id: 'gid://shopify/ProductVariant/9' }], asked: [ID(1)] } };
+  assert.equal(beforeAdvice(pending, { message: 'Oui' }).cart, 'yes');
+  assert.equal(beforeAdvice(pending, { message: 'Je cherche encore' }).cart, 'no');
+  assert.equal(beforeAdvice(pending, { message: "I'm still looking" }).cart, 'no');
+  assert.equal(beforeAdvice(pending, { message: 'Oui' }).answer, null);
+  assert.equal(beforeAdvice({ ...pending, cart: { pending: [], asked: [] } }, { message: 'Oui' }).cart, null);
+});
+
+test('a routine the AI builds through advise during its turn still gets the cart question after it', async () => {
+  const toolCall = (name, args) => ({ content: null, message: { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name, arguments: JSON.stringify(args) } }] }, toolCalls: [{ id: 'c1', name, args, argsError: null }], usage: {} });
+  const calls = [];
+  const client = { calls, async completeWithTools(args) {
+    calls.push(structuredClone(args));
+    if (!args.tools) return { content: JSON.stringify({ updates: [] }), toolCalls: [], usage: {} };
+    return calls.filter((c) => c.tools).length === 1 ? toolCall('advise', { profile_updates: [{ field: 'current_routine', value: 'none' }], scope: 'essential' }) : answer('Voici votre routine.');
+  } };
+  const reply = await benchAgent(client).respond({ message: 'Aidez-moi à construire une routine, mon visage manque d\'éclat', context: { locale: 'fr' } });
+  assert.equal(reply.trace.advice.status, 'recommended');
+  assert.equal(reply.trace.follow_up, 'cart');
+  assert.ok(reply.routineCart.add.length >= 2);
 });

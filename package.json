@@ -50,6 +50,7 @@
     "advisor:repurchase": "node scripts/advisor/measure-repurchase.mjs",
     "advisor:try-flow": "node scripts/advisor/try-routine-flow.mjs",
     "advisor:score": "node scripts/advisor/score-routines.mjs",
+    "advisor:try-batch": "node scripts/advisor/try-customer-batch.mjs",
     "eval:storefront-knowledge": "node scripts/eval-storefront-knowledge.mjs",
     "inspect:storefront-knowledge": "node scripts/inspect-storefront-knowledge.mjs",
     "inspect:storefront-shopping": "node scripts/inspect-storefront-shopping.mjs",
