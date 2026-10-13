@@ -2,6 +2,18 @@
 
 ## Storefront advisor
 
+### Purchase history: identity from the signature only (2026-10-13)
+
+Purchase history (plan § 5) needs to know who is asking. Phase 0 settles who, and what may be read; nothing is read yet. Approved by the owner on 2026-10-13 when Phase 0 was started.
+
+- **Identity is Shopify's signed `logged_in_customer_id`, and nothing else.** The app proxy adds it to the query it signs, and the route already verifies that signature. An email, an order number or the widget's `loggedIn` flag proves nothing: anyone can type someone else's. Not signed in means the anonymous advisor.
+- **Off by default.** Unless `STOREFRONT_CHAT_PURCHASE_HISTORY=on`, every request is anonymous and the id goes no further than `customer-identity.mjs`. The same reason as `STOREFRONT_CHAT_AGENT`: the production dashboard carries this route, and a deploy must never start reading purchases on its own.
+- **The id is never stored.** A conversation is bound to its customer by an HMAC of shop + id keyed with the app secret (`context.identity` on the assistant row, where the profile already lives, so no migration). A plain hash would not do: Shopify ids are sequential, so trying every id reverses it.
+- **One conversation, one person.** A customer's session is continued only by that customer. Another account, or the same tab after signing out, gets a new session, so one person's purchases never reach the next person on a shared device. An anonymous conversation may be continued after signing in, because it holds nobody's purchases. The widget applies the same rule to the bubbles it keeps in `sessionStorage` (the theme's `customer.id`, on that customer's own page).
+- **The rule « the agent never reads customers or orders » becomes « it reads only the signed-in customer's own purchase summary, through one narrow typed function ».** Still no SQL, and no other customer. `data-access.test.mjs` fails if any storefront file but the future `purchase-summary-repository.mjs` names the customer or order tables.
+- **What the model may see is a shape, not a query.** `toPurchaseSummary` keeps product id, title, first and last purchase day, how many orders held it, returned and free-gift flags, and drops everything else. Addresses, emails, names, order numbers and amounts paid can never leave, even if a reader returns them. A €0 line is a promotional gift (about half of Wrap lines), never a preference.
+- **Still to do before Phase 1 reads anything:** log each read in `data_access_events` (checklist item 15), state the new use in `MERCHANT_DATA_USE_DISCLOSURE.md` and consider the shop's privacy notice (items 2–3), and exclude marketplace orders (their customers are synthetic).
+
 ### The lexicon has a model backup, not a model replacement (2026-10-12)
 
 The lexicon stays first because it is instant, free and testable. It reads a customer's words into the profile before the one reply call, so the engine (not the model) decides the advice. Its weakness is coverage, and a partial reading is worse than none: « tight and dull » read as « dull » produced a firming serum, and the reply model, handed finished advice, did not correct it.
@@ -104,7 +116,7 @@ The browser posts to `/apps/storefront-advisor/chat` on its own storefront domai
 
 ### No SQL tool, ever, for the customer-facing agent
 
-The management chat lets its model write SQL, as a read-only role over curated views (§ Management chat). That works because its users are signed-in staff. The storefront agent talks to the public internet, so it gets **narrow, typed, read-only functions** (Phase 3: `search_products`, `get_product` through a product repository returning whitelisted fields) and never a query language or a database handle. It never reads customers or orders. « Where is my order? » is answered by pointing to customer service until a handoff tool exists.
+The management chat lets its model write SQL, as a read-only role over curated views (§ Management chat). That works because its users are signed-in staff. The storefront agent talks to the public internet, so it gets **narrow, typed, read-only functions** (Phase 3: `search_products`, `get_product` through a product repository returning whitelisted fields) and never a query language or a database handle. It never reads customers or orders, with one exception since 2026-10-13: the signed-in customer's own purchase summary, through one typed function (§ Purchase history: identity from the signature only). « Where is my order? » is answered by pointing to customer service until a handoff tool exists.
 
 ### Caps before the model
 

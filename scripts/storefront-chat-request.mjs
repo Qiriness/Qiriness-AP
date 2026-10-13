@@ -10,6 +10,8 @@ import { signAppProxyQuery } from './lib/storefront-chat/app-proxy-signature.mjs
 //   npm run storefront:chat -- --session <uuid> --message Sérum --choice Sérum   (a clicked chip)
 //   npm run storefront:chat -- --unsigned          (expect 401)
 //   npm run storefront:chat -- --shop other.myshopify.com   (expect 403)
+//   npm run storefront:chat -- --customer 7001 --session <uuid>   (signed in as a test customer;
+//     read only with STOREFRONT_CHAT_PURCHASE_HISTORY=on — another id gets a new session)
 //
 // --url defaults to http://localhost:3000/api/storefront/chat (`npm --prefix web run dev`).
 // --shop defaults to the first STOREFRONT_CHAT_ALLOWED_SHOPS entry.
@@ -24,7 +26,7 @@ if (!shop) fail('No shop: pass --shop or set STOREFRONT_CHAT_ALLOWED_SHOPS.');
 if (!secret && !process.argv.includes('--unsigned')) fail('STOREFRONT_APP_CLIENT_SECRET is not set.');
 
 url.searchParams.set('shop', shop);
-url.searchParams.set('logged_in_customer_id', '');
+url.searchParams.set('logged_in_customer_id', valueOf('--customer') ?? '');
 url.searchParams.set('path_prefix', '/apps/storefront-advisor');
 url.searchParams.set('timestamp', String(Math.floor(Date.now() / 1000)));
 if (!process.argv.includes('--unsigned')) url.searchParams.set('signature', signAppProxyQuery(url.searchParams, secret));

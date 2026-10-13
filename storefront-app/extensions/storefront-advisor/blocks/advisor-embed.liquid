@@ -31,6 +31,7 @@
       "variantId": {{ product.selected_or_first_available_variant.id | prepend: 'gid://shopify/ProductVariant/' | json }},
       "loggedIn": {% if customer %}true{% else %}false{% endif %}
     },
+    "viewer": {% if customer %}{{ customer.id | append: '' | json }}{% else %}""{% endif %},
     "quickActions": [
       {%- assign first = true -%}
       {%- if block.settings.action_find_product -%}{"id": "find_product", "label": {{ 'actions.find_product' | t | json }}}{%- assign first = false -%}{%- endif -%}

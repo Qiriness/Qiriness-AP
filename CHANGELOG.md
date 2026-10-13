@@ -10,6 +10,17 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Storefront advisor: purchase history, Phase 0 — who is asking (2026-10-13)
+
+The advisor can now tell a signed-in customer from an anonymous visitor, safely, and the rule for what it may ever read of their purchases is code. It reads nothing yet: Phase 1 adds the reader. Approved by the owner the same day.
+
+- **Identity from the signature only.** `storefront-chat/customer-identity.mjs` takes `logged_in_customer_id` from the app-proxy query the route has already verified. Never from the body. Off unless `STOREFRONT_CHAT_PURCHASE_HISTORY=on`.
+- **One conversation, one person.** A signed-in customer's replies carry `context.identity`, an HMAC of shop + id (no migration, no stored id). Another customer, or the same tab after signing out, gets a new session. The widget drops its stored bubbles when the theme's viewer changes (`viewer` in the embed config).
+- **The model's view of purchases is a fixed shape.** `purchase-summary.mjs` (`toPurchaseSummary`) keeps product, title, first/last day, count, returned and free-gift flags, and drops everything else.
+- **The data rule is a test.** `data-access.test.mjs` fails if any storefront file but the future purchase reader names `customers` or `orders`.
+- `npm run storefront:chat -- --customer <id>` signs a request as a test customer.
+- **Proven:** 12 new unit tests; root suite 5,617 pass, 0 fail; web typecheck clean. **Not proven:** nothing ran on the dev store. Supabase's REST API is restricted until 2026-10-15, and Theme Check was not run on the embed change.
+
 ## Storefront advisor: a model reader backs up the lexicon (2026-10-12)
 
 The lexicon reads only the phrasings written into it. When it reads part of a message, the engine decides from a partial profile, and the reply model never corrects it. « My skin feels really tight and dull lately » was read as « dull » alone, and the engine recommended a firming serum.

@@ -75,12 +75,16 @@
     return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
   }
 
-  /* Session storage can throw (private mode, blocked storage): the widget works without it. */
-  function loadState() {
+  /*
+   * Session storage can throw (private mode, blocked storage): the widget works without it.
+   * A conversation is kept only for the viewer who had it (the signed-in customer, or
+   * nobody): after signing out, or another account signing in on this tab, it starts afresh.
+   */
+  function loadState(viewer) {
     try {
       var raw = window.sessionStorage.getItem(STORAGE_KEY);
       var parsed = raw ? JSON.parse(raw) : null;
-      if (parsed && typeof parsed.sessionId === 'string' && Array.isArray(parsed.messages)) return parsed;
+      if (parsed && typeof parsed.sessionId === 'string' && Array.isArray(parsed.messages) && (parsed.viewer || '') === viewer) return parsed;
     } catch (error) { /* fall through */ }
     return null;
   }
@@ -88,6 +92,7 @@
   function saveState(state) {
     try {
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        viewer: state.viewer,
         sessionId: state.sessionId,
         open: state.open,
         messages: state.messages.filter(function (m) { return !m.failed; }).slice(-MAX_STORED_MESSAGES)
@@ -294,8 +299,10 @@
     if (config.transport === 'proxy' && config.endpoint) onCardClick = function (productId) { reportClick(config.endpoint, state.sessionId, productId); };
     var mobile = window.matchMedia ? window.matchMedia(MOBILE_QUERY) : { matches: false };
 
-    var stored = loadState();
+    var viewer = typeof config.viewer === 'string' ? config.viewer : '';
+    var stored = loadState(viewer);
     var state = {
+      viewer: viewer,
       sessionId: stored ? stored.sessionId : newSessionId(),
       open: stored ? Boolean(stored.open) : false,
       messages: stored ? stored.messages : [],

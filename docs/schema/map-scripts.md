@@ -132,6 +132,11 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # conversation-language (neutral replies retain session
 |       |                                # context.replyLanguage; explicit language switches win) ·
 |       |                                # resolution-cases (the French test set) ·
+|       |                                # customer-identity (signed logged_in_customer_id
+|       |                                # → HMAC ref; off unless PURCHASE_HISTORY=on;
+|       |                                # one conversation, one person) ·
+|       |                                # purchase-summary (what the model may see of
+|       |                                # a customer's purchases; reader not built) ·
 |       |                                # knowledge-repository (active policies + parameters,
 |       |                                # approved general FAQs; lazy product-id-scoped guidance) ·
 |       |                                # shopping-repository (signed-shop-scoped public promotions,

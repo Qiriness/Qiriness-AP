@@ -12,8 +12,8 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  * every parameter is signed over, not a known list.
  *
  * A signature only proves the query was not tampered with; the caller still
- * checks the shop against its allow-list. `logged_in_customer_id` is signed but
- * deliberately unused: the advisor is anonymous.
+ * checks the shop against its allow-list. `logged_in_customer_id` is signed
+ * too; customer-identity.mjs reads it, and only when purchase history is on.
  */
 
 /** A replay older than this is refused. Shopify signs at forwarding time. */

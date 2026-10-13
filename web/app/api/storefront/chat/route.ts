@@ -2,6 +2,7 @@ import {
   parseAllowedShops,
   verifyAppProxySignature,
 } from "../../../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
+import { customerIdentity } from "../../../../../scripts/lib/storefront-chat/customer-identity.mjs";
 import {
   ChatRequestError,
   MAX_BODY_BYTES,
@@ -25,13 +26,18 @@ export const runtime = "nodejs";
  *   - a shop not in STOREFRONT_CHAT_ALLOWED_SHOPS (empty = none) -> 403.
  * The allow-list is the second guard that keeps the advisor off production.
  *
+ * WHO IS ASKING comes from the same signed query (`logged_in_customer_id`),
+ * only when STOREFRONT_CHAT_PURCHASE_HISTORY=on; otherwise every visitor is
+ * anonymous. Never from the body.
+ *
  * Errors are codes, never internals: the browser is the public internet.
  */
 export async function POST(request: Request) {
   const secret = process.env.STOREFRONT_APP_CLIENT_SECRET ?? "";
   if (!secret) return new Response("Not found.", { status: 404 });
 
-  const proof = verifyAppProxySignature(new URL(request.url).searchParams, secret);
+  const query = new URL(request.url).searchParams;
+  const proof = verifyAppProxySignature(query, secret);
   if (!proof.ok) return fail(401, "unauthorised");
   if (!parseAllowedShops(process.env.STOREFRONT_CHAT_ALLOWED_SHOPS).has(proof.shop)) return fail(403, "shop_not_allowed");
 
@@ -47,7 +53,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await handleStorefrontChat(proof.shop, parsed);
+    const identity = customerIdentity(query, { shop: proof.shop, secret, env: process.env });
+    const result = await handleStorefrontChat(proof.shop, parsed, identity);
     if (!result.ok) return fail(result.status, result.code);
     return Response.json({ sessionId: result.sessionId, reply: result.reply }, { headers: NO_STORE });
   } catch (error) {

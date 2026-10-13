@@ -8,6 +8,12 @@
  * /agent.mjs) — the mock today — and it is handed the message, the page context
  * and this session's own history. Nothing else: no customer, no order, no SQL.
  *
+ * ONE CONVERSATION, ONE PERSON. With purchase history on, a signed-in
+ * customer's replies carry `context.identity` (an HMAC ref, never the id), and
+ * a session is continued only by that customer (customer-identity.mjs). Anyone
+ * else — another account, or the same browser after signing out — gets a new
+ * session, so nothing of one customer's purchases reaches the next.
+ *
  * THE TOKEN IS MINTED HERE. A token the browser sends is used only if it names
  * a session of the same shop; anything else opens a new session with a token
  * Postgres generated, which the reply hands back.
@@ -30,6 +36,7 @@ import { createShoppingReader, createPublicPromotionReader } from "../../../scri
 import { parseAllowedShops } from "../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
 import { refsFromHistory } from "../../../scripts/lib/storefront-chat/conversation-refs.mjs";
 import { advisorStateFromHistory } from "../../../scripts/lib/storefront-chat/advisor-state.mjs";
+import { ANONYMOUS, identityOfHistory, mayContinue } from "../../../scripts/lib/storefront-chat/customer-identity.mjs";
 import { loadAdvisoryConfig } from "../../../scripts/lib/advisory/advisory-repository.mjs";
 import { createAdvisor } from "../../../scripts/lib/advisory/recommend.mjs";
 import {
@@ -92,6 +99,9 @@ export type StorefrontChatResult =
   | { ok: true; sessionId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[] } }
   | { ok: false; status: 429; code: "session_limit" | "daily_limit" }
   | { ok: false; status: 503; code: "unavailable" };
+
+/** From the signed app proxy query only (customer-identity.mjs). */
+export type StorefrontIdentity = { kind: "anonymous" } | { kind: "customer"; shopifyCustomerId: string; ref: string };
 
 interface SessionRow {
   id: string;
@@ -304,7 +314,11 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
   return agent;
 }
 
-export async function handleStorefrontChat(shopDomain: string, request: StorefrontChatRequest): Promise<StorefrontChatResult> {
+export async function handleStorefrontChat(
+  shopDomain: string,
+  request: StorefrontChatRequest,
+  identity: StorefrontIdentity = ANONYMOUS
+): Promise<StorefrontChatResult> {
   const db = client();
   const cap = limits();
 
@@ -315,7 +329,7 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
   const agentReady = currentAgent(db);
   agentReady.catch(() => {}); // awaited below; never an unhandled rejection meanwhile
 
-  const session = await findOrOpenSession(db, shopDomain, request, cap.retentionDays);
+  let session = await findOrOpenSession(db, shopDomain, request, cap.retentionDays);
   if (session.turn_count >= cap.sessionTurns) return { ok: false, status: 429, code: "session_limit" };
 
   const since = new Date(Date.now() - DAY_MS).toISOString();
@@ -327,7 +341,12 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
     }) as Promise<{ role: "user" | "assistant"; content: string; context: Record<string, unknown> | null }[]>,
   ]);
   if (Number(today) >= cap.shopDaily) return { ok: false, status: 429, code: "daily_limit" };
-  const history = recent.reverse();
+  let history = recent.reverse();
+  if (!mayContinue(identityOfHistory(history), identity)) {
+    // Someone else's conversation: theirs stays untouched, this one starts afresh.
+    session = await openSession(db, shopDomain, request, cap.retentionDays);
+    history = [];
+  }
   // « les deux », « l'autre », a clarification just asked: folded from the log.
   const refs = refsFromHistory(history);
   // The consultation so far: profile, mode, questions already asked.
@@ -385,6 +404,8 @@ export async function handleStorefrontChat(shopDomain: string, request: Storefro
         ...("advisor" in reply && reply.advisor ? { advisor: reply.advisor } : {}),
         ...("trace" in reply && reply.trace ? { trace: reply.trace } : {}),
         ...("replyLanguage" in reply && reply.replyLanguage ? { replyLanguage: reply.replyLanguage } : {}),
+        // Whose conversation this is (an HMAC ref): the next turn checks it.
+        ...(identity.kind === "customer" ? { identity: identity.ref } : {}),
       },
       model: reply.model,
       input_tokens: reply.usage?.inputTokens ?? null,
@@ -436,7 +457,15 @@ async function findOrOpenSession(
     )) as SessionRow[];
     if (rows[0]) return rows[0];
   }
+  return openSession(db, shopDomain, request, retentionDays);
+}
 
+async function openSession(
+  db: ReturnType<typeof client>,
+  shopDomain: string,
+  request: StorefrontChatRequest,
+  retentionDays: number
+): Promise<SessionRow> {
   // A new session is the cheap moment to apply retention: once per conversation, not per message.
   await supabaseRpc(db, STOREFRONT_CHAT_RPC.PURGE, {
     p_before: new Date(Date.now() - retentionDays * DAY_MS).toISOString(),

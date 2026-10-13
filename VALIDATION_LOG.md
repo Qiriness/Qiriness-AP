@@ -42,6 +42,16 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 52. Purchase history, Phase 0 (who is asking): unit-tested, never run with a signed-in customer — 2026-10-13
+
+12 unit tests; nothing has gone through the route or the widget. Needs Supabase back (2026-10-15) and `STOREFRONT_CHAT_PURCHASE_HISTORY=on` in `.env.local`.
+
+1. **Off means anonymous.** **Check:** with the setting unset, `npm run storefront:chat -- --customer 7001 --message "Bonjour"`. The assistant row's `context` has no `identity`.
+2. **On binds the session.** **Check:** with it on, the same call; the assistant row carries a 32-hex `context.identity`, and nowhere does the row hold `7001`. Repeat with `--session <uuid>` and `--customer 7001`: the same session continues.
+3. **Someone else starts afresh.** **Check:** `--session <that uuid> --customer 7002`, then the same without `--customer`. Each returns a different `sessionId`, and the first session's rows are unchanged.
+4. **The widget.** **Check (dev store):** chat while signed in, sign out in the same tab, reopen the advisor. The old bubbles are gone. Sign in again: a new conversation starts (the server holds the old one; the tab does not).
+5. **Theme Check** passes on `advisor-embed.liquid` (the new `viewer` line).
+
 ## 51. The lexicon's model backup: measured on stored messages, not yet seen in the widget — 2026-10-12
 
 Offline and live readings, 2026-10-12: 7 of 172 stored messages pass the gate; 8 of 8 live readings correct in 0.9–1.8 s.
