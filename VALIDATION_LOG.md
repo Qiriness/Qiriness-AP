@@ -42,6 +42,33 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 55. Order status by number, the contact form link, the routine builder skill: live model on invented orders only — 2026-10-13
+
+Needs Supabase back, `STOREFRONT_CHAT_ORDER_STATUS=on` and `shopify app dev` restarted.
+
+1. **A real order.** **Check:** `npm run storefront:chat -- --message "Où en est ma commande #<a recent online-store order>"`. The reply gives its status; `trace.tools` shows `get_order_status` with a status and no number; one `data_access_events` row with `action = order_status_read` and no number in it. A marketplace order's number answers « introuvable ».
+2. **The timings match reality.** **Check:** for an order shipped within the delivery time and one past it, the reply says on its way / late, against the shop's `france_delivery_days`.
+3. **The link.** **Check (dev store):** the « Formulaire de contact » link under the order answer opens the shop's contact page, in English on the English storefront.
+4. **The skill.** **Check:** « aidez-moi à construire toute ma routine » opens the builder (trace `skill_opened` or builder mode from the first turn); outside it a concern gets one product and the offer.
+
+## 54. The routine builder flow and « Ajouter au panier »: live-model runs on invented data only — 2026-10-13
+
+`npm run advisor:try-flow` (the real agent and model on `data/advisor/sample/`, FR and EN) as intended after three runs; 345 tests. Needs Supabase back and `shopify app dev` restarted (the widget changed).
+
+1. **The second bubble.** **Check (dev store):** ask about a product. The reply is followed by its own bubble « Souhaitez-vous que je vous construise une routine personnalisée ? » with two buttons; only that bubble's buttons are live. Reload the page: both bubbles are still there.
+2. **Typed answers.** **Check:** answer « oui » by typing: the builder asks the concern with its buttons. In a new conversation, « non merci »: one treat card, and no second offer later.
+3. **« Ajouter au panier ».** **Check:** on a card with one size, click it. The cart count updates (or the cart shows the item on the next page), the button reads « Ajouté au panier », and `advisory_events` has an `added_to_cart` row for that product. A product with several sizes shows no button.
+4. **Signed in.** **Check:** with purchase history on and a test customer with orders, in the builder after the concern: one code-written question with three buttons, and « Il m'en reste peu » shows the card, then the routine includes the product.
+
+## 53. Purchase history, Phases 2–3 (their products fill the routine; running low): proven on invented data only — 2026-10-13
+
+19 tests on `data/advisor/sample/` under the real playbooks, and the live model on the sample set (FR and EN, now `npm run advisor:try-flow`) as intended on 2026-10-13. Check 1 done the same day (42 sizes, identical to the spreadsheet). Needs Qiriness's filled knowledge rows, the importer, and the service passing `productKnowledge` / `repurchaseIntervals`.
+
+1. **The real file.** **Check:** `npm run advisor:repurchase` writes `data/advisor/repurchase/qiriness.myshopify.com.json` with about 42 product sizes, matching the figures in the spreadsheet's grey columns.
+2. **Step filling on the real catalogue.** **Check:** as a signed-in customer, « Construire ma routine autour » on a cream, then « J'ai la peau sèche » with a complete routine: the reply keeps their cream and recommends the other steps; `trace.advice.steps` has no cream.
+3. **A real kit.** **Check:** once « Contenu du coffret » is filled for a coffret, « Construire ma routine autour » on it skips the steps of its contents.
+4. **Running low.** **Check:** with knowledge loaded, a customer whose daily cream was bought past its interval sees one « il vous en reste ? » and never « vous n'en avez plus ».
+
 ## 52. Purchase history, Phases 0–1 (who is asking, what they bought): unit- and agent-tested, never run with a signed-in customer — 2026-10-13
 
 12 unit tests; nothing has gone through the route or the widget. Needs Supabase back (2026-10-15) and `STOREFRONT_CHAT_PURCHASE_HISTORY=on` in `.env.local`.
@@ -50,9 +77,9 @@ Closed items (a struck-through heading) are archived verbatim in `docs/archive/V
 2. **On binds the session.** **Check:** with it on, the same call; the assistant row carries a 32-hex `context.identity`, and nowhere does the row hold `7001`. Repeat with `--session <uuid>` and `--customer 7001`: the same session continues.
 3. **Someone else starts afresh.** **Check:** `--session <that uuid> --customer 7002`, then the same without `--customer`. Each returns a different `sessionId`, and the first session's rows are unchanged.
 4. **The widget.** **Check (dev store):** chat while signed in, sign out in the same tab, reopen the advisor. The old bubbles are gone. Sign in again: a new conversation starts (the server holds the old one; the tab does not).
-5. **Theme Check** passes on `advisor-embed.liquid` (the new `viewer` line).
+5. ~~**Theme Check** passes on `advisor-embed.liquid` (the new `viewer` line).~~ Done 2026-10-13: `shopify theme check` on the extension, 3 files, no offences.
 6. **Phase 1, a real summary.** **Check:** with the setting on, sign the request as a customer who has orders on the synced shop (`--customer <their numeric id>`) and say « J'ai la peau sèche ». `trace.purchases` is `status: read` with a product count, and holds no product name. One `data_access_events` row appears, with `action = purchase_summary_read` and `actor_id = storefront-advisor`. A second turn within 10 minutes adds no row.
-7. **The question.** **Check:** the reply asks about their latest paid purchase, with three chips. « Je l'utilise encore » records `context.advisor.purchases.using`, and the next reply does not suggest replacing it. A Wrap that came free is never asked about.
+7. **The question** (now inside the builder, VALIDATION_LOG 54 check 4). **Check:** after the concern, one question about their latest paid purchase, with three buttons. « Construire ma routine autour » records `context.advisor.purchases.around`, and the next reply does not suggest replacing it. A Wrap that came free is never asked about.
 8. **Not read when not needed.** **Check:** « Livrez-vous en Belgique ? » as the same customer shows `trace.purchases.status = not_needed` and adds no `data_access_events` row.
 
 ## 51. The lexicon's model backup: measured on stored messages, not yet seen in the widget — 2026-10-12

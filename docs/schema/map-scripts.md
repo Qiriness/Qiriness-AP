@@ -140,6 +140,14 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # purchase-summary-repository (THE reader of
 |       |                                # orders/order_lines: signed shop + customer,
 |       |                                # own store only, logged to data_access_events) ·
+|       |                                # skills + skills/routine-builder (the routine builder
+|       |                                # as a skill: its rules and tools only while open;
+|       |                                # use_skill) · order-tools + order-status +
+|       |                                # order-status-repository (get_order_status: one
+|       |                                # order by number, status and days only, logged) ·
+|       |                                # routine-flow (the routine offer, the builder's
+|       |                                # purchase question, the anchor, the treat: the
+|       |                                # follow-up message, words and buttons from code) ·
 |       |                                # purchase-turn (when to read, which purchase to
 |       |                                # ask about, the FR/EN chips, the prompt view) ·
 |       |                                # knowledge-repository (active policies + parameters,
@@ -176,7 +184,14 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # recommend (createAdvisor: advise + next question) ·
 |       |                                # reason-codes · events (advisory_events schema) ·
 |       |                                # advisory-repository (config <-> advisor_* tables) ·
-|       |                                # advisory-cases (eval:advisory)
+|       |                                # advisory-cases (eval:advisory) · product-knowledge
+|       |                                # (the knowledge spreadsheet's rows → checked records:
+|       |                                # dropdowns, standard concerns, kits) · replenishment
+|       |                                # (measured/stated interval, daily care only) ·
+|       |                                # foundations (the § 3.1–3.4 engine: foundations,
+|       |                                # sizes, modules, owned types, gift, spa; used when a
+|       |                                # shop has routines + product knowledge) ·
+|       |                                # routine-cases (npm run advisor:score)
 |       |-- company.mjs                  # who the company is: shops.shop_name + the
 |       |                                # company_description / logistics_provider_name
 |       |                                # parameters; loadCompany, serviceClientOf. Every
@@ -321,4 +336,18 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |                                # merchandising, as authored; npm run advisor:load
 |                                # (scripts/advisor/load-advisor-config.mjs) loads it;
 |                                # npm run eval:advisory checks it on the live catalogue
+|-- data/advisor/qiriness-knowledge-template.xlsx  # product knowledge, Qiriness fills
+|-- data/advisor/repurchase/<shop>.json  # measured repurchase per product and size;
+|                                # npm run advisor:repurchase
+|                                # (scripts/advisor/measure-repurchase.mjs, read-only)
+|                                # npm run advisor:try-flow (scripts/advisor/
+|                                # try-routine-flow.mjs): the routine builder flow with
+|                                # the real agent and model on the sample set, FR + EN,
+|                                # no database
+|-- data/advisor/sample-routines/  # INVENTED routines (plan § 3.1–3.4), 51 invented
+|                                # products filling them, score-baseline.json;
+|                                # npm run advisor:score (scripts/advisor/score-routines.mjs)
+|                                # judges the engine on scripts/lib/advisory/routine-cases.mjs
+|-- data/advisor/sample/         # INVENTED catalogue + complete knowledge rows +
+|                                # measured repurchase, for tests (purchase-phases*.test)
 ```

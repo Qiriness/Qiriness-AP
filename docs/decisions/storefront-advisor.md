@@ -14,13 +14,78 @@ Purchase history (plan § 5) needs to know who is asking. Phase 0 settles who, a
 - **What the model may see is a shape, not a query.** `toPurchaseSummary` keeps product id, title, first and last purchase day, how many orders held it, returned and free-gift flags, and drops everything else. Addresses, emails, names, order numbers and amounts paid can never leave, even if a reader returns them. A €0 line is a promotional gift (about half of Wrap lines), never a preference.
 - **Before anything was read** (done with Phase 1): each read is logged in `data_access_events`, the use is stated in `MERCHANT_DATA_USE_DISCLOSURE.md`, and marketplace orders are excluded. The shop's own privacy notice is the owner's to review.
 
+### The routine engine follows the foundations (2026-10-13)
+
+The owner's model (plan § 3.1–3.4): a routine is a foundation's ordered list of product TYPES, each step filled by the product of that type that best targets the customer's concern or combination of concerns. `scripts/lib/advisory/foundations.mjs`.
+
+- **Everything is data**: the brand's routines (foundations, sizes, modules, the concern map, the question order, treats) and its product knowledge (type, concerns, skin types, texture, sensitivity, men, premium, treat, gift, kit). No Shopify tag decides a product's fit.
+- **Side by side** (owner): `createAdvisor` uses the foundations when a shop has routines and product knowledge, the playbooks otherwise. The live shop keeps the playbooks until the spreadsheet is imported; the bench gets the foundations.
+- **The foundation:** a concern chosen with a button decides. Otherwise each concern votes for its foundation and a tie goes to `foundation_priority` (proposed C, F, E, B, A, D; Qiriness to confirm). A dry skin is Hydration only when no other concern is there. Eye concerns alone are the eyes module; G only on « routine de base ».
+- **Sizes are rules over the list:** essential = the daily required steps; complete = every daily step plus the relevant modules (eyes for an eye concern; SPF in Taches); spa adds the occasional steps; targeted is one (the type asked for, else the step that targets the concern). A small budget is essential, with no treat.
+- **An owned type is not doubled** (owner): « j'utilise déjà un nettoyant » skips the cleanser step, unless that step is the one their concern needs (`targets: primary`): « j'ai un sérum hydratant mais des taches » still gets the anti-spot serum, with `concern_needs_specific_product` so the reply says why.
+- **Hard rules before the score:** stock, « Ne pas conseiller », type and area, men's products only for a man, skin « Non adapté », « Déconseillé » for sensitive skin, the customer's exclusions, and a concern step needs a product that targets the concern (never pad). **The score:** the primary concern, the secondary ones, skin « Idéal », texture by skin type, the preferred range, premium only when a concern justifies it, men's first for a man, the customer's range.
+- **§ 3.4:** « cadeau » gives gift sets first, « soirée spa » the spa treat routine, both new profile `request` values read by the lexicon (FR/EN) with `budget: small`.
+- **Measured:** `npm run advisor:score` 38/38 on the bench (the playbooks: 14/38). The bench is invented: the real score waits for Qiriness's spreadsheet.
+
+### The routine builder is a skill: its rules and tools only while it is open (2026-10-13)
+
+The owner's rule. Building a routine is one bundle, `skills/routine-builder.mjs`, with its instructions, tools and guardrails; the base prompt keeps only targeted advice (the top choices for a need, a product's facts).
+
+- **Open while `mode === 'routine_builder'`,** so the code and the model can both open it and it stays open across turns. The code opens it on « Oui » to the offer (button or typed), the `build_routine` action, the routine words, or a routine size in the customer's words (« tout organiser du matin au soir »). The model opens it with `use_skill`, offered only while no skill is open, when the customer asks for a routine in their own words.
+- **Inside:** the skill's rules (one question per turn, steps only from ADVICE, owned products kept, purchases and treats the app's) and its tools: `advise` in routine mode (any routine size), and `get_past_purchases` for a signed-in customer.
+- **Outside, `advise` gives one product.** Its scope is `targeted` only, and the runner ignores a routine size the model sends: in a live run the model built a whole routine through the targeted tool instead of opening the skill. A reply that already shows a routine is never followed by the routine offer.
+- **The flow decisions stay in code** (`routine-flow.mjs`): the offer, the purchase turn, the product built around, the treat. The skill gives the model what it needs to converse while building.
+
+### The storefront agent reads one order's status by its number (2026-10-13)
+
+The owner's rule. « Où est ma commande #1234 ? » gets the status, not a referral.
+
+- **By number, for anyone who has it** (owner): guest checkouts are most orders, so « signed-in only » would answer almost no one. The risk is that order numbers are sequential, so someone trying numbers learns other orders' status and day. Against it: only the status and the days come back (no name, email, phone, address, amount, product or tracking), 3 lookups a conversation, marketplace orders are « not found », and every lookup is logged in `data_access_events` (hashed shop and number). A lookup that cannot be logged is not used.
+- **One reader** (`order-status-repository.mjs`), named columns; the destination country is read only to choose the home or abroad delivery time and never leaves it. `data-access.test.mjs` allows it and the purchase reader, nothing else.
+- **The status is the shop's own timings** (`order-status.mjs`, working days): not shipped within `dispatch_days`, being prepared; past it, sorry for the delay; shipped within `france_delivery_days` / `abroad_delivery_days`, on its way; past them, late, sorry. Also delivered, cancelled, partly shipped (judged on what is left). An unset timing is never guessed (`timing_unknown`; JavaScript reads `null >= 0` as true, caught by a test).
+- **The tool returns the dispatch and delivery passages** of the policy with the status, so the reply explains the timing in the shop's words.
+- **The model may ask for the order number, and only that.** This replaces « never ask for an order number ». Never an email, a name or an address.
+- **Off unless `STOREFRONT_CHAT_ORDER_STATUS=on`.**
+
+### Every « contact us » carries the contact form (2026-10-13)
+
+The owner's rule. Whenever the advisor sends someone to customer service, and after every order answer, the contact form's link is under the reply.
+
+- **The model sets `contact_link`; the code makes it certain.** It is forced on whenever the order tool ran, or the reply names customer service or contacting us (FR/EN words).
+- **The link is the shop's**: the parameter `contact_form_path`, default Shopify's `/pages/contact`, a path on the shop's own site only (anything else falls back). The widget builds it from `Shopify.routes.root`, so it opens in the visitor's language. The model never writes a link, an email or a phone number.
+
+### The routine builder flow: offered after products, built around what they came for (2026-10-13)
+
+The owner's design. A conversation leads to a personalised routine naturally: entered from a product question (its facts), a concern (our top choices) or « construisez-moi une routine » (straight in).
+
+- **The flow is code, not prompt** (`routine-flow.mjs`). The app writes its own follow-up message, words and buttons together, so they always agree. The model is told only that a message follows and what it does, never its words: quoted, the model copied it (live run). This replaces Phase 1's model-asked purchase question, which had the text ask one thing and the buttons answer another.
+- **The offer** follows a reply about products: cards shown, or the product the conversation is about (its page, or one they named). It is a second message, « Souhaitez-vous que je vous construise une routine personnalisée ? », with Oui / Non; typed words count while it is pending (FR and EN). Once per conversation; after « Non », only their own request starts the builder.
+- **« Oui » is a routine, not one more product:** a care type or targeted scope from the first question is dropped, or « une crème pour mon visage déshydraté » then « oui » built one cream again. The engine's concern question still gets its buttons the turn after (the offer had taken its turn).
+- **The anchor** is the one product they focused on (owner): the page product, else the one they named, else our top pick. In the builder it is put into its step (`pinned`), even when the chosen size lacks that step (the step is added from the full routine). It must still pass the hard checks and the suitability floor, else it is left out and the reason given. For « un soin ciblé » it is the product.
+- **The purchase question:** builder only, signed in, once, once the concern is known. It is the whole turn, written by the code with no model call: told to ask nothing, the model still added its own question beside it in two live runs. The three answers: « Construire ma routine autour » (theirs: it fills its step, its range nudges), « Il m'en reste peu » (the always-offered option, owner; its card follows with « Voir le produit » and « Ajouter au panier », and it goes into its step), « Me concentrer sur ma préoccupation » (left aside). A consultant offers, never pushes a reorder.
+- **One question per turn.** A follow-up that asks takes the engine's question's place; the engine asks it next turn, and the model sees `waiting_for_follow_up` with nothing to ask. A follow-up without buttons (a card) carries the engine's buttons, since only the last bubble's are live.
+- **One treat at most** (« petit plaisir »): after the routine is recommended, or right after « Non ». The brand's « Petit plaisir » products once the knowledge is imported; until then the config's `treats` (masks and patches, `max_price` €25, owner). Never a product in the routine or one they own.
+- **« Ajouter au panier » on cards** (owner): only when the product has one purchasable size in stock; with several sizes the choice is the customer's, on the product page. The widget adds one unit to the shop's own cart on the customer's click and records `added_to_cart`.
+
+### Purchase history, Phases 2–3: what they use fills the routine; what runs out is asked about (2026-10-13)
+
+- **A product they build around fills its step and counts toward the routine size.** Only what the customer confirmed (« Construire ma routine autour »; « Je l'utilise encore » before the flow), never a purchase alone. The step is skipped as `already_owned` with their product's name; the model says to keep it and recommends the other steps. It is never offered again, not even as an alternative. A step they asked for by type (« une crème ») is still filled: they asked.
+- **Which step a product fills is the brand's knowledge**: the spreadsheet's « Type fonctionnel » and « Zone », mapped to step kinds by the brand config's `functional_types` (data, validated against the slots). Without knowledge, the step's own catalogue rules decide. One product fills one step at most: one cream is not a day and a night cream.
+- **A kit stands for what it contains** (« Contenu du coffret »); the kit itself fills nothing. Kits and sets are in 52.8 % of orders.
+- **« Ne pas conseiller » is never recommended**, whatever its signals. The importer keeps those rows for that reason; « À valider » rows are not imported.
+- **Running low is a question, never a claim.** For daily care only (knowledge `frequency: daily`; never a mask, kit, tool, treat or gift), when the expected interval has passed and less than three intervals have (past that they have most likely stopped or buy elsewhere). The interval is the shop's measured median when 10+ repurchases were seen, else the brand's « Durée d'utilisation ». Measured on own-store orders, 2026-10-13: repeat rates 4–36 %, daily creams and serums 10–20 weeks with a narrow spread, masks and patches all over the place (Wrap d'Or 3–23 weeks), hence never scheduled. The consultant may ask once (« il vous en reste ? »); no pushed reminder, no reorder pressure.
+- **Measured is when they rebuy, not how long it lasts**, so it never replaces the brand's figure in the spreadsheet. Measured under half or over twice the stated duration is flagged for the brand (`durationsDisagree`).
+- **A range they use is a nudge, not a reason**: ranges of products they still use or paid for more than once add 0.15 to routine fit (below the playbook's family, 0.5, and the slot name, 0.2), after suitability. It reorders suitable products; it never lifts an unsuitable one. Never from a gift or a free line.
+- **Not built:** commercial adjustments (the treat policy, § 3.4 of the plan) and measuring the effect on cart additions and later purchases.
+
 ### Purchase history, Phase 1: asked about, never assumed (2026-10-13)
 
 - **A purchase is a question, not a fact about the customer.** It does not prove they use it, still have it, liked it or bought it for themselves. So the consultant asks about one (« I can see you bought X — still using it? »), with chips from the code, never the model. Only the answer is recorded (`context.advisor.purchases`: product ids under using / finished / gift).
 - **Read only when the turn needs it:** a consultation turn, a purchase chip, or a message about past purchases (« ma dernière commande », « reorder »). A policy, product or cart question never reads orders. The agent is handed a loader instead of data, so a turn that does not need purchases costs no query. A customer's summary is reused for 10 minutes: a consultation lasts a few minutes, and egress is what restricted the project in October 2026.
-- **What is worth asking about:** the latest purchase they paid for and kept, still sold. Never a €0 line (a promotional gift or sample: about half of Wrap lines), never a return, never a product no longer sold. At most two such questions in a conversation, one per turn. The engine's own question waits a turn rather than both being asked.
+- **When and how to ask:** superseded the same day by « The routine builder flow » above (builder only, once, the code's own turn).
+- **What is worth asking about:** a product probably running low first (Phase 3); then the latest purchase they paid for and kept, still sold. On the same day, the one bought most often, then the more expensive (the shop’s current price, cheapest variant; owner’s rule, 2026-10-13). The price ranks only and never reaches the prompt. Never a €0 line (a promotional gift or sample: about half of Wrap lines), never a return, never a product no longer sold.
 - **An unlogged read is not used.** If the `data_access_events` write fails, the read fails and the turn carries no purchases. A slow or failed read (1.5 s cap) does the same: the advisor answers as if anonymous.
-- **« Still using it » keeps their product.** A routine step their product fills is marked `customer_already_uses_it`, and the model says to continue with theirs. The engine still chooses steps as before. Making an owned product cover its step (and so change the routine's size) is Phase 2: it needs the spreadsheet's functional type.
+- **« Still using it » keeps their product.** Since Phase 2 their product fills its step (below); before, the step was only marked.
 - **Marketplaces come from `sales_channels`, not a list in code**, as for every per-person metric (their customers are synthetic, one per order).
 
 ### The lexicon has a model backup, not a model replacement (2026-10-12)
@@ -125,7 +190,7 @@ The browser posts to `/apps/storefront-advisor/chat` on its own storefront domai
 
 ### No SQL tool, ever, for the customer-facing agent
 
-The management chat lets its model write SQL, as a read-only role over curated views (§ Management chat). That works because its users are signed-in staff. The storefront agent talks to the public internet, so it gets **narrow, typed, read-only functions** (Phase 3: `search_products`, `get_product` through a product repository returning whitelisted fields) and never a query language or a database handle. It never reads customers or orders, with one exception since 2026-10-13: the signed-in customer's own purchase summary, through one typed function (§ Purchase history: identity from the signature only). « Where is my order? » is answered by pointing to customer service until a handoff tool exists.
+The management chat lets its model write SQL, as a read-only role over curated views (§ Management chat). That works because its users are signed-in staff. The storefront agent talks to the public internet, so it gets **narrow, typed, read-only functions** (Phase 3: `search_products`, `get_product` through a product repository returning whitelisted fields) and never a query language or a database handle. It never reads customers or orders, with two exceptions since 2026-10-13, each one typed function: the signed-in customer's own purchase summary (§ Purchase history: identity from the signature only) and one order's status by its number (§ The storefront agent reads one order's status by its number).
 
 ### Caps before the model
 

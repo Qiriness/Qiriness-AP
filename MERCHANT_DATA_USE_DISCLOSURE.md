@@ -27,6 +27,7 @@ Personal data is processed only for:
 - operational sync, reconciliation, and troubleshooting;
 - privacy request and deletion handling;
 - personalising the storefront beauty advisor for a signed-in customer, from their own past purchases (off unless the merchant switches it on; see below).
+- telling a storefront visitor where an order stands when they give its order number (off unless the merchant switches it on; see below).
 
 Marketing consent data is informational for support unless a future marketing workflow explicitly implements consent enforcement. The app does not sell customer data.
 
@@ -65,6 +66,8 @@ Customer data request webhooks are recorded for merchant response handling. Reda
 AI workflows must retrieve context progressively. Customer personal data must not be included in AI prompts unless strictly required for a specific support task.
 
 Product, policy, and knowledge content can be used as AI support context. Customer-specific data requires explicit task justification.
+
+**Storefront advisor and order status.** When the merchant turns it on (`STOREFRONT_CHAT_ORDER_STATUS=on`; off by default), a visitor who gives an order number gets that order's status: being prepared, delayed, on its way, late, delivered or cancelled, with the day it was placed and shipped. The advisor's AI model sees only that, and the shop's dispatch and delivery policy; never a name, email address, phone number, address, amount, product or tracking number. The delivery country is read only to choose the shop's home or abroad delivery time. Order numbers are sequential, so a visitor could try numbers; this is why nothing about the person is returned, a conversation is limited to three lookups, marketplace orders are not answered, and every lookup is logged in `data_access_events` with a hashed reference.
 
 **Storefront advisor and purchase history.** When the merchant turns it on (`STOREFRONT_CHAT_PURCHASE_HISTORY=on`; off by default), the storefront advisor may read the purchase history of the customer who is signed in to the store, and only theirs. Shopify's signed app proxy request identifies them; an email or order number typed in the chat is never used. The advisor's AI model then sees the products bought on the online store, the day of the last purchase, how many orders held each, and whether a product was returned or came free. It never sees names, email addresses, phone numbers, addresses, order numbers or amounts paid, and marketplace orders are excluded. A purchase is used to ask the customer about it (« are you still using it? »), never to decide their skin type or needs. Each read is logged in `data_access_events` with a hashed customer id. What the customer answers stays in the advisor's conversation log, which is purged after 30 days of inactivity.
 

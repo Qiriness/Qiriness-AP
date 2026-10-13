@@ -45,10 +45,11 @@ Tick items as they land; move each one's rationale into `docs/decisions/` when i
 - [x] **Two columns for purchase history** (2026-10-13), inserted into the filled copy in place (backup taken first, every other cell verified unchanged). Orange, for Qiriness to fill:
   - « Durée d'utilisation (semaines) » (`usage_weeks`, a whole number 1–104) after « Fréquence »: how long the size sold lasts in normal use. Phase 3 replenishment.
   - « Contenu du coffret (handles) » (`kit_contents`) after « Cadeau »: for kits only, the handles of the products inside. Phase 2: a bought kit covers the steps of what it contains, not one « Coffret / kit » step. Kits and sets are in 52.8 % of orders (§ 8).
+- [x] **Measured repurchase, two grey columns** (2026-10-13) after « Durée d'utilisation »: « Rachat mesuré (semaines) » (`measured_repurchase_weeks`, the median gap before the same customer buys the same product and size again) and « Détail de la mesure » (middle half of the gaps, repurchases seen, share of buyers who rebuy; one line per size). From own-store orders 2024-05-17 → 2026-10-11, paid and kept lines only, gaps under 7 days dropped, filled only with 10+ repurchases: 40 of 94 rows. Matched by handle. Read-only, recomputed by a read-only aggregate (scratchpad `repurchase-intervals.mjs`, to move into `scripts/` with Phase 3); never typed by Qiriness. It measures when customers buy again, not how long a bottle lasts, so `usage_weeks` stays. Findings: repeat rates 4–36 %; daily creams, cleansers and serums 10–20 weeks with a narrow spread; masks, patches and kits spread widely and are not for replenishment.
 - [x] **Skin-type suitability has three levels** (owner, 2026-10-13): « Idéal / Adapté / Non adapté » on the four skin columns. The 235 « Oui » proposed from tags became « Adapté », never « Idéal »: tags cannot say what is ideal. Blanks stay blank; the importer must treat a blank as « not stated », not as « Non adapté ».
 - [ ] **Qiriness fills and validates** every product row (status « Validé » / « Corrigé » / « Ne pas conseiller »).
 - [ ] **43 of 94 products have no INCI in Shopify**: their exclusions (« sans parfum ») cannot be verified until it is added in Shopify.
-- [ ] **Importer.** Decision pending: convert the approved spreadsheet to a JSON file in git (proposed: every correction is a reviewable diff; no new dependency), or add an Excel library to the project. The importer refuses unknown concern labels, enum values outside the dropdowns, and rows not « Validé »/« Corrigé ».
+- [ ] **Importer.** The row rules are built (`scripts/lib/advisory/product-knowledge.mjs`, 2026-10-13): dropdown values only, the 20 standard concerns, whole weeks 1–104, kit contents must be handles in the sheet, a blank is « not stated », « À valider » rows skipped. Decision still pending on the file step: convert the approved spreadsheet to a JSON file in git (proposed: every correction is a reviewable diff; no new dependency), or add an Excel library to the project. The importer refuses unknown concern labels, enum values outside the dropdowns, and rows not « Validé »/« Corrigé ».
 - [ ] **Supabase tables** for foundations, steps, rules and product knowledge, with a version per import. Written as a migration, **applied only on the owner's go-ahead**.
 
 **Standard concerns (20, in 7 families):**
@@ -78,13 +79,13 @@ Tick items as they land; move each one's rationale into `docs/decisions/` when i
 | **Modules** | Eyes, SPF, occasional care. Added when relevant, or asked for alone (« just an eye cream »). |
 | **Preferences** | Men's range (a preference, not a routine: ranked first, others still possible), budget, exclusions, scope, products already owned. |
 
-- [ ] Replace the 11 playbooks with the 7 foundations (stand-in data from the current playbooks until the spreadsheet is imported).
-- [ ] Secondary objectives fill steps (the new piece). Today « dry, dull, wrinkles » gives one Active Énergie Lift serum; dryness is only a skin type and drops hydration.
-- [ ] Skin type chooses the cream (texture, hydrating) but **never forces** a hydration foundation when another concern is the main one.
-- [ ] Men as a preference; « I'm a man with dry skin » → Hydratation with men's products first.
-- [ ] Modules work standalone (eye-only, hands) and inside any foundation.
-- [ ] Routine de base **only** on an explicit request (« just a basic routine »); « I don't know what I need » → one useful question. Today the first gets an 8-option concern question and the second starts no consultation.
-- [ ] Lexicon and model reader emit the 20 standard concerns; the 41 current keys map onto them in code (tightness → dehydration, shine → excess_sebum, deep wrinkles → wrinkles + premium, …). Customers can still say anything.
+- [x] Replace the 11 playbooks with the 7 foundations (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported). Side by side (owner): a shop with routines and product knowledge gets the foundations; the live shop keeps the playbooks until then.
+- [x] Secondary objectives fill steps (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported): a secondary concern raises the products that target it in every step, it never switches the foundation. Was: Today « dry, dull, wrinkles » gives one Active Énergie Lift serum; dryness is only a skin type and drops hydration.
+- [x] Skin type chooses the cream (texture, hydrating) but **never forces** a hydration foundation when another concern is the main one (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported).
+- [x] Men as a preference; « I'm a man with dry skin » → Hydratation with men's products first (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported).
+- [x] Modules work standalone (eye-only) and inside any foundation (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported). Hands: no module in the bench yet.
+- [x] Routine de base **only** on an explicit request (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported); (« just a basic routine »); « I don't know what I need » → one useful question. Today the first gets an 8-option concern question and the second starts no consultation.
+- [x] The 41 current keys map onto the 20 standard concerns (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported), as data (`routines.concern_map`), not code; the lexicon keeps its keys. Was planned as « in code » (tightness → dehydration, shine → excess_sebum, deep wrinkles → wrinkles + premium, …). Customers can still say anything.
 
 ### 3.2 Routine sizes
 
@@ -95,16 +96,16 @@ Tick items as they land; move each one's rationale into `docs/decisions/` when i
 | Spa ritual | Complete + occasional steps (exfoliant, Wrap, patches); chosen by the customer, never added automatically |
 | One product | the first useful uncovered step, only on request |
 
-- [ ] One ordered step list per foundation; sizes are rules over it.
-- [ ] **Never pad**: a step is filled only when a suitable product exists.
-- [ ] **Owned products count** toward the size and are never replaced unless asked.
-- [ ] Today's « essential » is always 2 products with no cleanser, and « complete » mixes weekly masks and eye care: both change.
+- [x] One ordered step list per foundation; sizes are rules over it (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported).
+- [x] **Never pad**: a step is filled only when a suitable product exists (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported).
+- [x] **Owned products count** toward the size and are never replaced unless asked (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported). Owner's rule added: an owned TYPE is not doubled unless the step is the one their concern needs (`concern_needs_specific_product`).
+- [x] « essential » is the daily required steps (a cleanser among them); « complete » is the daily steps plus the relevant modules; occasional steps only in « spa » (2026-10-13, `foundations.mjs`; proven on the bench, live once the spreadsheet is imported).
 
 ### 3.3 Questions and chips
 
-- [ ] **The most useful question first**: score each unanswered field by how much its answer changes the result; prefer skin traits (« Usually dry or oily in the T-zone? », « Does your skin react easily? ») over asking the customer to name a concern (today: « Déshydratation / Sensibilité / Sécheresse / Rougeurs ? »). Never age first.
+- [ ] **The most useful question first** (partly, 2026-10-13: the foundation engine asks only a field that changes the routine, in the brand's order, never age; the concern is still asked first when none is known): score each unanswered field by how much its answer changes the result; prefer skin traits (« Usually dry or oily in the T-zone? », « Does your skin react easily? ») over asking the customer to name a concern (today: « Déshydratation / Sensibilité / Sécheresse / Rougeurs ? »). Never age first.
 - [ ] Allow **one** such question outside the builder when the engine is not confident, instead of recommending blind.
-- [ ] Conversational chips in FR and EN: sizes « Essentielle (2–3 produits) / Complète (4–5) / Rituel spa / J'ai déjà des produits »; skin type « Plutôt sèche / Grasse sur la zone T / … ».
+- [ ] Conversational chips in FR and EN (partly, 2026-10-13: the size chips come from `routines.questions.chips`; the skin type chips still use the config's labels): sizes « Essentielle (2–3 produits) / Complète (4–5) / Rituel spa / J'ai déjà des produits »; skin type « Plutôt sèche / Grasse sur la zone T / … ».
 - [ ] Optional: the total price of each size on its chip, computed from the catalogue.
 
 ### 3.4 Treats (commercial offers, separate from advice)
@@ -121,11 +122,20 @@ Wraps, patches and kits are the entry door (Wraps in 48 % of first orders), but 
 | End of consultation | Optional, never automatic |
 
 - [ ] Treat policy as rules, at most one offer per conversation, paired with live promotions on kits and masks (`get_active_promotions`).
-- [ ] Treat routines (2–3): « Soirée spa » (Wrap + sauna + patches), « À partager », optionally hands & feet.
+- [ ] Treat routines (2–3): « Soirée spa » (Wrap + sauna + patches), « À partager », optionally hands & feet. (Partly, 2026-10-13: « Soirée spa » is a routine of the foundation engine; « À partager » is data only; a small budget gets no treat.)
 
 ---
 
 ## 4. Evaluation (must pass before deployment)
+
+**The bench** (2026-10-13): `data/advisor/sample-routines/` holds INVENTED routines for § 3.1–3.4 (`routines.json`: the 7 foundations as ordered product types, sizes, modules, secondary effects, preferences, questions, treats) and 51 invented products that fill them, each with a type and the concerns it targets. `scripts/lib/advisory/routine-cases.mjs` holds the cases below plus the owner's « no doubling » rule, in FR and EN, judged on product types and target concerns, never on product names. `npm run advisor:score` runs today's engine on them. **Baseline: 14/38 (37 %)** (`score-baseline.json`); **the foundation engine: 38/38** (`score-foundations.json`, 2026-10-13). The failures below were the baseline's: - « dry skin » is a skin type only, so « je suis un homme, peau sèche » and « visage très sec » get a concern question (§ 3.1);
+- « rides » is shared by three of the old playbooks, so « un sérum pour les rides » gets a question (§ 3.1, the 7 foundations);
+- essential has no cleanser (§ 3.2);
+- dry + dull + wrinkles picks Éclat, not Hydration or Anti-âge: a secondary concern switches the foundation instead of filling a step (§ 3.1);
+- no SPF step (§ 3.1, modules);
+- an owned serum blocks the anti-spot serum the concern calls for (owner's rule);
+- no basic routine, no gift sets, no spa routine (§ 3.1, § 3.4);
+- a treat on a small budget (§ 3.4).
 
 Every case in **French and English**, offline on the live catalogue (`eval:advisory`), no model needed:
 
@@ -153,8 +163,13 @@ Purchase history feeds the profile, the advisor's policy and the engine. It **ne
 - [x] **Before Phase 1 reads anything:** each read logged in `data_access_events` (checklist item 15); the use stated in `MERCHANT_DATA_USE_DISCLOSURE.md` (items 2–3).
 - [ ] **The shop's privacy notice:** the owner to review whether it should mention the advisor's use of purchase history.
 - [x] **Phase 1 — purchase awareness.** Built 2026-10-13 (`purchase-summary-repository.mjs`, `purchase-turn.mjs`; decision « Purchase history, Phase 1: asked about, never assumed »). Read on demand with a 10-minute cache rather than a stored summary table: no duplicate order data, no migration. « Still using it » marks the step's product; it does not yet change the routine (Phase 2). Unit- and agent-tested only (VALIDATION_LOG 52). Original scope: A small derived summary from the existing `orders` table (online store only; Amazon/Mirakl orders mint synthetic customers), refreshed when orders change; no duplicate catalogue or order records. €0 lines flagged as promotional gifts and never read as preference. The consultant **asks**: « I can see you bought the Source d'Eau serum — still using it? » with chips « Je l'utilise encore / Je l'ai terminé / C'était un cadeau »; a confirmed product enters « products already owned ».
-- [ ] **Phase 2 — routine gaps.** A purchased product's functional type (spreadsheet) says which step it covers.
-- [ ] **Phase 3 — purchase intelligence.** Range affinity, repeat purchases, replenishment windows (the usage-duration column), commercial adjustments; measured on cart additions, conversion and later purchases.
+- [x] **Phase 2 — routine gaps.** Built 2026-10-13 (`recommend.mjs` owned steps, `product-knowledge.mjs`, config `functional_types`; decision « Purchase history, Phases 2–3 »). A product they still use fills its step and counts toward the size; a kit, its contents; « Ne pas conseiller » never recommended. Proven on the invented sample set under the real playbooks.
+- [ ] **Phase 3 — purchase intelligence.** Built 2026-10-13: replenishment (`replenishment.mjs`: measured median with 10+ repurchases, else `usage_weeks`; daily care only), repeat purchases (`bought_repeatedly`), range affinity (+0.15 routine fit). **Not built:** commercial adjustments (the treat policy, § 3.4) and measurement on cart additions, conversion and later purchases.
+- [x] **The routine builder flow** (owner's design, 2026-10-13): the offer after products, the builder's purchase question (around / « il m'en reste peu » / focus), the anchor built in, one treat after the routine or a « Non », « Ajouter au panier » on cards (decision « The routine builder flow »). Live-model runs on the sample set, FR and EN (`npm run advisor:try-flow`). Not yet in the widget on the dev store (VALIDATION_LOG 54).
+- [x] **The routine builder as a skill** (owner, 2026-10-13): `skills/routine-builder.mjs`, opened by the code or the model's `use_skill`; targeted `advise` outside it (decision « The routine builder is a skill »).
+- [x] **Order status by number** and **the contact form link** (owner, 2026-10-13): `get_order_status`, off unless `STOREFRONT_CHAT_ORDER_STATUS=on`; the `contact_form_path` parameter (decisions « reads one order's status », « Every contact us carries the contact form »). Live-model runs on invented orders; never on a real order (VALIDATION_LOG 55).
+- [ ] **Knowledge at runtime.** The service passes no `productKnowledge` / `repurchaseIntervals` yet: they wait for the importer decision (§ 2) and Qiriness's filled rows. Until then, step filling uses the catalogue rules and nothing is flagged as running low.
+- [x] **Sample set for tests** (2026-10-13): `data/advisor/sample/`, 14 invented products with every knowledge column filled (cleansers, serums, creams day/night/men, eyes, mask, a kit, a « Ne pas conseiller »), invented measured repurchase.
 - [ ] Test setup: a test customer with test orders on the dev store (it has no real customers or orders), and `dev-store:sync` extended to copy that customer's orders under the dev shop (today it copies products only).
 
 ---
