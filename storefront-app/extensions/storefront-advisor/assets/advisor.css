@@ -290,6 +290,18 @@
   font-size: 13px;
   letter-spacing: 0.04em;
 }
+.sa-routine-cart {
+  margin-top: 8px;
+}
+
+.sa-routine-cart__note,
+.sa-cart-status {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--sa-ink);
+  opacity: 0.8;
+}
+
 .sa-contact {
   display: inline-block;
   margin-top: 8px;

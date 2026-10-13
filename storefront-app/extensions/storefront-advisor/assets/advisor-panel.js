@@ -223,14 +223,19 @@
    * on the next page.
    */
   function addToCart(variantGid) {
-    var id = String(variantGid || '').replace(/^gid:\/\/shopify\/ProductVariant\//, '');
-    if (!/^[1-9][0-9]{0,19}$/.test(id)) return Promise.reject(new Error('variant'));
+    return addAllToCart([variantGid]);
+  }
+
+  /* Several at once (a routine, or « Oui, ajouter »): one request, one unit each. */
+  function addAllToCart(variantGids) {
+    var ids = (variantGids || []).map(function (g) { return String(g || '').replace(/^gid:\/\/shopify\/ProductVariant\//, ''); });
+    if (!ids.length || ids.some(function (id) { return !/^[1-9][0-9]{0,19}$/.test(id); })) return Promise.reject(new Error('variant'));
     var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
     return fetch(root + 'cart/add.js', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ items: [{ id: Number(id), quantity: 1 }] })
+      body: JSON.stringify({ items: ids.map(function (id) { return { id: Number(id), quantity: 1 }; }) })
     }).then(function (res) {
       if (!res.ok) throw new Error('cart ' + res.status);
       try {
@@ -263,6 +268,30 @@
         }) : null,
         typeof product.variantId === 'string' ? AddButton(product, strings) : null
       ])
+    ]);
+  }
+
+  /* « Ajouter la routine au panier »: every product of the routine with one size; the others named. */
+  function RoutineCartButton(routineCart, strings) {
+    var items = Array.isArray(routineCart && routineCart.add) ? routineCart.add.filter(function (x) { return x && typeof x.variant_id === 'string'; }) : [];
+    if (items.length < 2) return null;
+    var button = el('button', { type: 'button', className: 'sa-card__add sa-routine-add', text: strings.addRoutine || 'Ajouter la routine au panier' });
+    button.addEventListener('click', function () {
+      if (button.disabled) return;
+      button.disabled = true;
+      addAllToCart(items.map(function (x) { return x.variant_id; })).then(function () {
+        button.textContent = strings.added || 'Ajouté';
+        button.className = 'sa-card__add sa-routine-add sa-card__add--done';
+        if (onCardAdd) items.forEach(function (x) { if (typeof x.product_id === 'string') onCardAdd(x.product_id); });
+      }).catch(function () {
+        button.textContent = strings.addFailed || 'Réessayer';
+        button.disabled = false;
+      });
+    });
+    var sizes = Array.isArray(routineCart.needs_size) ? routineCart.needs_size.filter(function (n) { return typeof n === 'string'; }) : [];
+    return el('div', { className: 'sa-routine-cart' }, [
+      button,
+      sizes.length ? el('p', { className: 'sa-routine-cart__note', text: (strings.chooseSize || 'Choisissez la taille sur sa page :') + ' ' + sizes.join(', ') }) : null
     ]);
   }
 
@@ -311,6 +340,13 @@
     ]);
     if (!isUser && Array.isArray(message.products) && message.products.length) {
       node.appendChild(ProductList(message.products, strings));
+    }
+    if (!isUser && typeof message.cartStatus === 'string') {
+      node.appendChild(el('p', { className: 'sa-cart-status', role: 'status', text: message.cartStatus }));
+    }
+    if (!isUser && message.routineCart) {
+      var routineButton = RoutineCartButton(message.routineCart, strings);
+      if (routineButton) node.appendChild(routineButton);
     }
     var contact = !isUser ? contactHref(message.contact) : null;
     if (contact) {
@@ -502,8 +538,20 @@
           text: String(body.reply.text || ''),
           products: Array.isArray(body.reply.products) ? body.reply.products : [],
           choices: Array.isArray(body.reply.choices) ? body.reply.choices : [],
-          contact: body.reply.contact && typeof body.reply.contact.url === 'string' ? { url: body.reply.contact.url } : null
+          contact: body.reply.contact && typeof body.reply.contact.url === 'string' ? { url: body.reply.contact.url } : null,
+          routineCart: body.reply.routineCart && Array.isArray(body.reply.routineCart.add) ? body.reply.routineCart : null
         });
+        // « Oui, ajouter »: the customer just clicked it; the widget adds, once, here (never on a re-render).
+        var cart = body.reply.cart;
+        if (cart && Array.isArray(cart.add) && cart.add.length) {
+          var answered = state.messages[state.messages.length - 1];
+          addAllToCart(cart.add.map(function (x) { return x.variant_id; })).then(function () {
+            if (onCardAdd) cart.add.forEach(function (x) { if (typeof x.product_id === 'string') onCardAdd(x.product_id); });
+            answered.cartStatus = strings.cartAdded || 'C\'est dans votre panier.';
+          }).catch(function () {
+            answered.cartStatus = strings.cartFailed || 'L\'ajout au panier n\'a pas fonctionné : ajoutez-le depuis sa fiche produit.';
+          }).then(function () { saveState(state); render(); });
+        }
         // The advisor's own second message (the routine offer, a question, a
         // card, a treat): its own bubble, with its own cards and buttons.
         var followUp = body.reply.followUp;

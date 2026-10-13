@@ -113,13 +113,19 @@ export interface StorefrontFollowUp {
   choices: StorefrontChoice[];
 }
 
+/** What the widget adds on the customer's click: one routine button, or « Oui, ajouter ». */
+export interface StorefrontCartItems {
+  add: { product_id: string; variant_id: string }[];
+  needs_size: string[];
+}
+
 /** The contact form link under the reply: a path on the shop's site (the `contact_form_path` parameter). */
 export interface StorefrontContact {
   url: string;
 }
 
 export type StorefrontChatResult =
-  | { ok: true; sessionId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[]; followUp?: StorefrontFollowUp; contact?: StorefrontContact } }
+  | { ok: true; sessionId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[]; followUp?: StorefrontFollowUp; contact?: StorefrontContact; routineCart?: StorefrontCartItems; cart?: StorefrontCartItems } }
   | { ok: false; status: 429; code: "session_limit" | "daily_limit" }
   | { ok: false; status: 503; code: "unavailable" };
 
@@ -439,6 +445,8 @@ export async function handleStorefrontChat(
         ...("trace" in reply && reply.trace ? { trace: reply.trace } : {}),
         ...("replyLanguage" in reply && reply.replyLanguage ? { replyLanguage: reply.replyLanguage } : {}),
         ...(followUp ? { follow_up: { text: followUp.text, products: followUp.products.map((p) => p.url), choices: followUp.choices.map((c) => c.value) } } : {}),
+        // What « Oui, ajouter » asked the widget to add (counts only: the products are the advice's).
+        ...("cart" in reply && reply.cart ? { cart_add: (reply.cart as StorefrontCartItems).add.length } : {}),
         // Order lookups this turn: the next turn counts them against the conversation's limit.
         ...("orderLookups" in reply && reply.orderLookups ? { order_lookups: reply.orderLookups } : {}),
         // Whose conversation this is (an HMAC ref): the next turn checks it.
@@ -454,7 +462,9 @@ export async function handleStorefrontChat(
 
   const choices = ("choices" in reply && Array.isArray(reply.choices) ? reply.choices : []) as StorefrontChoice[];
   const contact = ("contact" in reply && reply.contact ? reply.contact : null) as StorefrontContact | null;
-  return { ok: true, sessionId: session.session_token, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}) } };
+  const routineCart = ("routineCart" in reply && reply.routineCart ? reply.routineCart : null) as StorefrontCartItems | null;
+  const cart = ("cart" in reply && reply.cart ? reply.cart : null) as StorefrontCartItems | null;
+  return { ok: true, sessionId: session.session_token, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}), ...(routineCart ? { routineCart } : {}), ...(cart ? { cart } : {}) } };
 }
 
 /**
