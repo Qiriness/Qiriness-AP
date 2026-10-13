@@ -12,10 +12,11 @@ const MAX_BODY_BYTES = 1024;
 
 /**
  * POST /api/storefront/event — a product card click in the storefront advisor
- * (`/apps/storefront-advisor/event`), recorded as an advisory event.
+ * (`/apps/storefront-advisor/event`), recorded as an advisory event: its link
+ * (`product_clicked`) or its « Ajouter au panier » (`added_to_cart`).
  *
  * The same guards as /api/storefront/chat: app proxy signature, shop
- * allow-list, both failing closed. The body is `{ sessionId, productId }`,
+ * allow-list, both failing closed. The body is `{ sessionId, productId, type? }`,
  * both uuids; the session must belong to the signed shop. Always 204 for a
  * well-formed request: a click beacon has nobody to show an error to.
  */
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
 
   const raw = await request.text();
   if (Buffer.byteLength(raw, "utf8") > MAX_BODY_BYTES) return new Response(null, { status: 413 });
-  let body: { sessionId?: unknown; productId?: unknown };
+  let body: { sessionId?: unknown; productId?: unknown; type?: unknown };
   try {
     body = JSON.parse(raw);
   } catch {
@@ -39,7 +40,9 @@ export async function POST(request: Request) {
     return new Response(null, { status: 400 });
   }
   try {
-    await recordProductClick(proof.shop, body.sessionId.toLowerCase(), body.productId.toLowerCase());
+    // A card's link, or its « Ajouter au panier »; anything else is a click.
+    const type = body.type === "added_to_cart" ? "added_to_cart" : "product_clicked";
+    await recordProductClick(proof.shop, body.sessionId.toLowerCase(), body.productId.toLowerCase(), type);
   } catch (error) {
     console.warn("[storefront event] not recorded", error instanceof Error ? error.message : error);
   }

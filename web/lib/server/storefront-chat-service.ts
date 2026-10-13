@@ -44,6 +44,7 @@ import { advisorStateFromHistory } from "../../../scripts/lib/storefront-chat/ad
 import { ANONYMOUS, identityOfHistory, mayContinue } from "../../../scripts/lib/storefront-chat/customer-identity.mjs";
 import { createPurchaseSummaryLookup } from "../../../scripts/lib/storefront-chat/purchase-summary.mjs";
 import { createPurchaseSummaryReader } from "../../../scripts/lib/storefront-chat/purchase-summary-repository.mjs";
+import { createOrderStatusReader } from "../../../scripts/lib/storefront-chat/order-status-repository.mjs";
 import { recordDataAccessEvent } from "../../../scripts/lib/compliance-audit.mjs";
 import { loadAdvisoryConfig } from "../../../scripts/lib/advisory/advisory-repository.mjs";
 import { createAdvisor } from "../../../scripts/lib/advisory/recommend.mjs";
@@ -101,10 +102,24 @@ export interface StorefrontProductCard {
   image: string | null;
   price: string | null;
   rationale: string;
+  /** Shopify variant gid: the card's « Ajouter au panier », when the product has one size to buy. */
+  variantId?: string;
+}
+
+/** The app's own second message after the reply (routine-flow.mjs): the routine offer, a purchase question, a card, a treat. */
+export interface StorefrontFollowUp {
+  text: string;
+  products: StorefrontProductCard[];
+  choices: StorefrontChoice[];
+}
+
+/** The contact form link under the reply: a path on the shop's site (the `contact_form_path` parameter). */
+export interface StorefrontContact {
+  url: string;
 }
 
 export type StorefrontChatResult =
-  | { ok: true; sessionId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[] } }
+  | { ok: true; sessionId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[]; followUp?: StorefrontFollowUp; contact?: StorefrontContact } }
   | { ok: false; status: 429; code: "session_limit" | "daily_limit" }
   | { ok: false; status: 503; code: "unavailable" };
 
@@ -317,6 +332,10 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
     // that has it. Unset in production, where links stay on the widget's store.
     productBaseUrl: process.env.STOREFRONT_CHAT_PRODUCT_BASE_URL || null,
     advisor: toolsOn && shop ? await buildAdvisor(reader, shop.id, catalogue as never, devCatalogue) : null,
+    // One order's status by its number (order-status-repository.mjs), on the
+    // shop whose orders are synced. Off unless STOREFRONT_CHAT_ORDER_STATUS=on.
+    readOrder: toolsOn && process.env.STOREFRONT_CHAT_ORDER_STATUS === "on" ? orderReader(db) : null,
+    orderShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain,
   });
   remembered = { at: Date.now(), key, agent };
   return agent;
@@ -349,7 +368,12 @@ export async function handleStorefrontChat(
     }) as Promise<{ role: "user" | "assistant"; content: string; context: Record<string, unknown> | null }[]>,
   ]);
   if (Number(today) >= cap.shopDaily) return { ok: false, status: 429, code: "daily_limit" };
-  let history = recent.reverse();
+  // A follow-up message (routine-flow.mjs) is stored with its reply: the model
+  // sees both, so it knows what the app asked.
+  let history = recent.reverse().map((row) => {
+    const followUp = (row.context?.follow_up as { text?: unknown } | undefined)?.text;
+    return typeof followUp === "string" && followUp ? { ...row, content: `${row.content}\n\n${followUp}` } : row;
+  });
   if (!mayContinue(identityOfHistory(history), identity)) {
     // Someone else's conversation: theirs stays untouched, this one starts afresh.
     session = await openSession(db, shopDomain, request, cap.retentionDays);
@@ -394,6 +418,7 @@ export async function handleStorefrontChat(
   }
   await logged;
 
+  const followUp = ("followUp" in reply && reply.followUp ? reply.followUp : null) as StorefrontFollowUp | null;
   await supabaseInsert(db, STOREFRONT_CHAT_T.MESSAGES, [
     {
       session_id: session.id,
@@ -413,6 +438,9 @@ export async function handleStorefrontChat(
         ...("advisor" in reply && reply.advisor ? { advisor: reply.advisor } : {}),
         ...("trace" in reply && reply.trace ? { trace: reply.trace } : {}),
         ...("replyLanguage" in reply && reply.replyLanguage ? { replyLanguage: reply.replyLanguage } : {}),
+        ...(followUp ? { follow_up: { text: followUp.text, products: followUp.products.map((p) => p.url), choices: followUp.choices.map((c) => c.value) } } : {}),
+        // Order lookups this turn: the next turn counts them against the conversation's limit.
+        ...("orderLookups" in reply && reply.orderLookups ? { order_lookups: reply.orderLookups } : {}),
         // Whose conversation this is (an HMAC ref): the next turn checks it.
         ...(identity.kind === "customer" ? { identity: identity.ref } : {}),
       },
@@ -425,7 +453,8 @@ export async function handleStorefrontChat(
   recordAdvisoryEvents(db, shopDomain, "events" in reply && Array.isArray(reply.events) ? reply.events : []);
 
   const choices = ("choices" in reply && Array.isArray(reply.choices) ? reply.choices : []) as StorefrontChoice[];
-  return { ok: true, sessionId: session.session_token, reply: { text: reply.text, products: reply.products, choices } };
+  const contact = ("contact" in reply && reply.contact ? reply.contact : null) as StorefrontContact | null;
+  return { ok: true, sessionId: session.session_token, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}) } };
 }
 
 /**
@@ -440,14 +469,23 @@ export function recordAdvisoryEvents(db: ReturnType<typeof client>, shopDomain: 
 }
 
 /** A card click from the widget, through the signed event route. */
-export async function recordProductClick(shopDomain: string, sessionToken: string, productId: string) {
+export async function recordProductClick(shopDomain: string, sessionToken: string, productId: string, eventType: "product_clicked" | "added_to_cart" = "product_clicked") {
   const db = client();
   const rows = (await supabaseSelect(db, STOREFRONT_CHAT_T.SESSIONS, { session_token: sessionToken, shop_domain: shopDomain }, "id", { limit: 1 })) as { id: string }[];
   if (!rows[0]) return false;
   recordAdvisoryEvents(db, shopDomain, [
-    { channel: "storefront_chat", conversation_ref: rows[0].id, event_type: "product_clicked", playbook_key: null, product_ids: [productId], payload: {} },
+    { channel: "storefront_chat", conversation_ref: rows[0].id, event_type: eventType, playbook_key: null, product_ids: [productId], payload: {} },
   ]);
   return true;
+}
+
+/** Every lookup is logged in data_access_events; a lookup that cannot be logged is not used. */
+function orderReader(db: ReturnType<typeof client>) {
+  return createOrderStatusReader({
+    select: (table: string, filters: object, columns: string, options?: object) =>
+      supabaseSelect(db, table, filters, columns, options) as Promise<object[]>,
+    logAccess: (row: object) => recordDataAccessEvent(db, row),
+  });
 }
 
 /** A customer's summary is reused for this long: a consultation is minutes, a new order changes little. */

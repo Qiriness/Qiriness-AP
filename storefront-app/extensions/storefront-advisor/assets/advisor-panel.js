@@ -112,6 +112,17 @@
     return /^https:\/\/[^\s/]+\//i.test(url) ? { href: url, external: true } : null;
   }
 
+  /*
+   * The contact form: a path on this shop's own site, in the visitor's market
+   * and language (Shopify.routes.root, e.g. /en/). Anything else is dropped.
+   */
+  function contactHref(contact) {
+    var path = contact && typeof contact.url === 'string' ? contact.url : '';
+    if (!/^\/[A-Za-z0-9/_\-.%]{1,200}$/.test(path) || path.charAt(1) === '/') return null;
+    var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    return root.replace(/\/$/, '') + path;
+  }
+
   function safeImage(url) {
     return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null;
   }
@@ -122,10 +133,10 @@
    * A card click as a beacon to the proxy's /event route, next to /chat. It
    * never delays the navigation and never reports an error to the shopper.
    */
-  function reportClick(endpoint, sessionId, productId) {
+  function reportClick(endpoint, sessionId, productId, type) {
     try {
       var url = String(endpoint).replace(/\/chat$/, '/event');
-      var body = JSON.stringify({ sessionId: sessionId, productId: productId });
+      var body = JSON.stringify({ sessionId: sessionId, productId: productId, type: type || 'product_clicked' });
       if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return;
       fetch(url, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: body }).catch(function () {});
     } catch (e) { /* a lost click is a lost data point, nothing more */ }
@@ -203,6 +214,31 @@
 
   /* A card click, reported to the advisor (advisory_events): set by the proxy transport only. */
   var onCardClick = null;
+  var onCardAdd = null;
+
+  /*
+   * « Ajouter au panier »: the shop's own cart (Shopify's /cart/add.js, same
+   * origin), on the customer's click only, one unit of the card's only size.
+   * The theme is told the cart changed; a theme that does not listen shows it
+   * on the next page.
+   */
+  function addToCart(variantGid) {
+    var id = String(variantGid || '').replace(/^gid:\/\/shopify\/ProductVariant\//, '');
+    if (!/^[1-9][0-9]{0,19}$/.test(id)) return Promise.reject(new Error('variant'));
+    var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    return fetch(root + 'cart/add.js', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ items: [{ id: Number(id), quantity: 1 }] })
+    }).then(function (res) {
+      if (!res.ok) throw new Error('cart ' + res.status);
+      try {
+        document.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
+        document.dispatchEvent(new CustomEvent('cart:updated', { bubbles: true }));
+      } catch (e) { /* an old browser: the cart still has it */ }
+    });
+  }
 
   function ProductCard(product, strings) {
     var link = safeLink(product.url);
@@ -224,9 +260,27 @@
           text: strings.discover,
           'aria-label': strings.discover + ' — ' + title,
           onClick: function () { if (onCardClick && typeof product.id === 'string') onCardClick(product.id); }
-        }) : null
+        }) : null,
+        typeof product.variantId === 'string' ? AddButton(product, strings) : null
       ])
     ]);
+  }
+
+  function AddButton(product, strings) {
+    var button = el('button', { type: 'button', className: 'sa-card__add', text: strings.addToCart || 'Ajouter au panier' });
+    button.addEventListener('click', function () {
+      if (button.disabled) return;
+      button.disabled = true;
+      addToCart(product.variantId).then(function () {
+        button.textContent = strings.added || 'Ajouté';
+        button.className = 'sa-card__add sa-card__add--done';
+        if (onCardAdd && typeof product.id === 'string') onCardAdd(product.id);
+      }).catch(function () {
+        button.textContent = strings.addFailed || 'Réessayer';
+        button.disabled = false;
+      });
+    });
+    return button;
   }
 
   function ProductList(products, strings) {
@@ -257,6 +311,10 @@
     ]);
     if (!isUser && Array.isArray(message.products) && message.products.length) {
       node.appendChild(ProductList(message.products, strings));
+    }
+    var contact = !isUser ? contactHref(message.contact) : null;
+    if (contact) {
+      node.appendChild(el('a', { className: 'sa-contact', href: contact, text: strings.contactForm || 'Formulaire de contact' }));
     }
     if (!isUser && onChoice) {
       var chips = Choices(message.choices, onChoice);
@@ -296,7 +354,10 @@
     var strings = config.strings || {};
     var actions = Array.isArray(config.quickActions) ? config.quickActions.filter(function (a) { return a && a.id && a.label; }) : [];
     var send = config.transport === 'proxy' && config.endpoint ? createProxyTransport(config) : createMockTransport(config);
-    if (config.transport === 'proxy' && config.endpoint) onCardClick = function (productId) { reportClick(config.endpoint, state.sessionId, productId); };
+    if (config.transport === 'proxy' && config.endpoint) {
+      onCardClick = function (productId) { reportClick(config.endpoint, state.sessionId, productId); };
+      onCardAdd = function (productId) { reportClick(config.endpoint, state.sessionId, productId, 'added_to_cart'); };
+    }
     var mobile = window.matchMedia ? window.matchMedia(MOBILE_QUERY) : { matches: false };
 
     var viewer = typeof config.viewer === 'string' ? config.viewer : '';
@@ -440,8 +501,20 @@
           role: 'assistant',
           text: String(body.reply.text || ''),
           products: Array.isArray(body.reply.products) ? body.reply.products : [],
-          choices: Array.isArray(body.reply.choices) ? body.reply.choices : []
+          choices: Array.isArray(body.reply.choices) ? body.reply.choices : [],
+          contact: body.reply.contact && typeof body.reply.contact.url === 'string' ? { url: body.reply.contact.url } : null
         });
+        // The advisor's own second message (the routine offer, a question, a
+        // card, a treat): its own bubble, with its own cards and buttons.
+        var followUp = body.reply.followUp;
+        if (followUp && typeof followUp.text === 'string' && followUp.text) {
+          state.messages.push({
+            role: 'assistant',
+            text: followUp.text,
+            products: Array.isArray(followUp.products) ? followUp.products : [],
+            choices: Array.isArray(followUp.choices) ? followUp.choices : []
+          });
+        }
       }).catch(function () {
         userMessage.failed = true;
       }).then(function () {
