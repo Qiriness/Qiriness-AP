@@ -1,0 +1,611 @@
+{
+  "at": "2026-10-13T16:33:29.944Z",
+  "passed": 38,
+  "total": 38,
+  "results": [
+    {
+      "id": "combined-concerns.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "E",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-mousse-energie",
+        "t-serum-energie",
+        "t-creme-temps-riche"
+      ]
+    },
+    {
+      "id": "combined-concerns.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "E",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-mousse-energie",
+        "t-serum-energie",
+        "t-creme-temps-riche"
+      ]
+    },
+    {
+      "id": "essential-default.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-aqua",
+        "t-serum-aqua",
+        "t-creme-aqua"
+      ]
+    },
+    {
+      "id": "essential-default.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-aqua",
+        "t-serum-aqua",
+        "t-creme-aqua"
+      ]
+    },
+    {
+      "id": "complete-sensitive.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "C",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "cream",
+        "serum"
+      ],
+      "handles": [
+        "t-lait-calme",
+        "t-creme-calme",
+        "t-serum-calme"
+      ]
+    },
+    {
+      "id": "complete-sensitive.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "C",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "cream",
+        "serum"
+      ],
+      "handles": [
+        "t-lait-calme",
+        "t-creme-calme",
+        "t-serum-calme"
+      ]
+    },
+    {
+      "id": "texture-oily.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "B",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "lotion",
+        "cream"
+      ],
+      "handles": [
+        "t-gel-pure",
+        "t-lotion-pure",
+        "t-creme-pure-light"
+      ]
+    },
+    {
+      "id": "texture-oily.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "B",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "lotion",
+        "cream"
+      ],
+      "handles": [
+        "t-gel-pure",
+        "t-lotion-pure",
+        "t-creme-pure-light"
+      ]
+    },
+    {
+      "id": "dark-spots-spf.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "F",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream",
+        "spf",
+        "lotion"
+      ],
+      "handles": [
+        "t-lait-essentiel",
+        "t-serum-lumiere",
+        "t-creme-lumiere",
+        "t-spf-lumiere",
+        "t-lotion-lumiere"
+      ]
+    },
+    {
+      "id": "dark-spots-spf.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "F",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream",
+        "spf",
+        "lotion"
+      ],
+      "handles": [
+        "t-lait-essentiel",
+        "t-serum-lumiere",
+        "t-creme-lumiere",
+        "t-spf-lumiere",
+        "t-lotion-lumiere"
+      ]
+    },
+    {
+      "id": "owned-types.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "serum"
+      ],
+      "handles": [
+        "t-serum-aqua"
+      ]
+    },
+    {
+      "id": "owned-types.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "serum"
+      ],
+      "handles": [
+        "t-serum-aqua"
+      ]
+    },
+    {
+      "id": "owned-but-concern-points.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "F",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum"
+      ],
+      "handles": [
+        "t-lait-essentiel",
+        "t-serum-lumiere"
+      ]
+    },
+    {
+      "id": "owned-but-concern-points.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "F",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-essentiel",
+        "t-serum-lumiere",
+        "t-creme-lumiere"
+      ]
+    },
+    {
+      "id": "built-around.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-aqua",
+        "t-creme-aqua"
+      ]
+    },
+    {
+      "id": "built-around.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-aqua",
+        "t-creme-aqua"
+      ]
+    },
+    {
+      "id": "one-product.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "E",
+      "mode": "conversation",
+      "types": [
+        "serum"
+      ],
+      "handles": [
+        "t-serum-temps"
+      ]
+    },
+    {
+      "id": "one-product.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "E",
+      "mode": "conversation",
+      "types": [
+        "serum"
+      ],
+      "handles": [
+        "t-serum-temps"
+      ]
+    },
+    {
+      "id": "basic-explicit.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "G",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-essentiel",
+        "t-creme-essentiel"
+      ]
+    },
+    {
+      "id": "basic-explicit.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "G",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-essentiel",
+        "t-creme-essentiel"
+      ]
+    },
+    {
+      "id": "dont-know.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "none",
+      "mode": "conversation",
+      "types": [],
+      "handles": []
+    },
+    {
+      "id": "dont-know.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "none",
+      "mode": "conversation",
+      "types": [],
+      "handles": []
+    },
+    {
+      "id": "men-dry.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-gel-homme",
+        "t-serum-aqua",
+        "t-baume-homme-riche"
+      ]
+    },
+    {
+      "id": "men-dry.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-gel-homme",
+        "t-serum-aqua",
+        "t-baume-homme-riche"
+      ]
+    },
+    {
+      "id": "eyes-only.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "eyes",
+      "mode": "conversation",
+      "types": [
+        "eye"
+      ],
+      "handles": [
+        "t-contour-defatigant"
+      ]
+    },
+    {
+      "id": "eyes-only.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "eyes",
+      "mode": "conversation",
+      "types": [
+        "eye"
+      ],
+      "handles": [
+        "t-contour-defatigant"
+      ]
+    },
+    {
+      "id": "eyes-module-in-complete.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "D",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream",
+        "eye"
+      ],
+      "handles": [
+        "t-mousse-energie",
+        "t-serum-energie",
+        "t-creme-energie",
+        "t-contour-defatigant"
+      ]
+    },
+    {
+      "id": "eyes-module-in-complete.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "D",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream",
+        "eye"
+      ],
+      "handles": [
+        "t-mousse-energie",
+        "t-serum-energie",
+        "t-creme-energie",
+        "t-contour-defatigant"
+      ]
+    },
+    {
+      "id": "premium-not-by-default.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "E",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-temps",
+        "t-serum-temps",
+        "t-creme-temps"
+      ]
+    },
+    {
+      "id": "premium-not-by-default.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "E",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-temps",
+        "t-serum-temps",
+        "t-creme-temps"
+      ]
+    },
+    {
+      "id": "small-budget.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-aqua",
+        "t-serum-aqua",
+        "t-creme-aqua"
+      ]
+    },
+    {
+      "id": "small-budget.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream"
+      ],
+      "handles": [
+        "t-lait-aqua",
+        "t-serum-aqua",
+        "t-creme-aqua"
+      ]
+    },
+    {
+      "id": "gift.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "gift",
+      "mode": "conversation",
+      "types": [
+        "kit"
+      ],
+      "handles": [
+        "t-kit-masques"
+      ]
+    },
+    {
+      "id": "gift.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "gift",
+      "mode": "conversation",
+      "types": [
+        "kit"
+      ],
+      "handles": [
+        "t-kit-masques"
+      ]
+    },
+    {
+      "id": "spa.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "spa",
+      "mode": "routine_builder",
+      "types": [
+        "exfoliant",
+        "mask",
+        "mask"
+      ],
+      "handles": [
+        "t-gommage-pure",
+        "t-masque-aqua",
+        "t-patchs-yeux"
+      ]
+    },
+    {
+      "id": "spa.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "spa",
+      "mode": "routine_builder",
+      "types": [
+        "exfoliant",
+        "mask",
+        "mask"
+      ],
+      "handles": [
+        "t-gommage-pure",
+        "t-masque-aqua",
+        "t-patchs-yeux"
+      ]
+    },
+    {
+      "id": "never-pad-or-unavailable.fr",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream",
+        "lotion"
+      ],
+      "handles": [
+        "t-lait-aqua",
+        "t-serum-aqua",
+        "t-creme-aqua-riche",
+        "t-lotion-aqua"
+      ]
+    },
+    {
+      "id": "never-pad-or-unavailable.en",
+      "pass": true,
+      "fails": [],
+      "foundation": "A",
+      "mode": "routine_builder",
+      "types": [
+        "cleanser",
+        "serum",
+        "cream",
+        "lotion"
+      ],
+      "handles": [
+        "t-lait-aqua",
+        "t-serum-aqua",
+        "t-creme-aqua-riche",
+        "t-lotion-aqua"
+      ]
+    }
+  ]
+}

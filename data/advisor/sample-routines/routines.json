@@ -1,0 +1,662 @@
+{
+  "_about": "INVENTED routines for the routine builder, from docs/storefront-advisor-plan.md § 3.1–3.4, with the Routines and Rules tabs' shape. A routine is built from products: each step is a product TYPE (the spreadsheet's « Type fonctionnel »), filled by a product that targets the customer's concern or a combination of concerns. Ranges are the invented ones of catalogue.json. What a routine SHOULD be; npm run advisor:score measures what the engine does.",
+  "functional_types": [
+    "cleanser",
+    "lotion",
+    "exfoliant",
+    "serum",
+    "cream",
+    "spf",
+    "eye",
+    "mask",
+    "kit"
+  ],
+  "concern_map": {
+    "_about": "The customer's words (the lexicon's concern keys) → the brand's 20 standard concerns (plan § 3.1: « the 41 current keys map onto them »). Customers can still say anything.",
+    "dehydration": "dehydration",
+    "tightness": "dehydration",
+    "lack_of_comfort": "discomfort",
+    "discomfort": "discomfort",
+    "dryness": "dryness",
+    "early_signs_of_ageing": "fine_lines",
+    "wrinkles": "wrinkles",
+    "deep_wrinkles": "wrinkles",
+    "firmness": "loss_of_firmness",
+    "loss_of_firmness": "loss_of_firmness",
+    "loss_of_tone": "loss_of_firmness",
+    "facial_contours": "loss_of_firmness",
+    "loss_of_density": "loss_of_elasticity",
+    "significant_loss_of_density": "loss_of_elasticity",
+    "advanced_loss_of_firmness": "loss_of_firmness",
+    "global_signs_of_ageing": "wrinkles",
+    "mature_skin": "wrinkles",
+    "demanding_mature_skin": "wrinkles",
+    "regeneration": "wrinkles",
+    "dullness": "dullness",
+    "lack_of_radiance": "dullness",
+    "tired_skin": "signs_of_fatigue",
+    "dark_spots": "dark_spots",
+    "pigmentation": "dark_spots",
+    "uneven_tone": "uneven_tone",
+    "lack_of_uniformity": "uneven_tone",
+    "sensitivity": "reactivity",
+    "reactive_skin": "reactivity",
+    "redness": "redness",
+    "imperfections": "blemishes",
+    "clogged_pores": "enlarged_pores",
+    "excess_sebum": "excess_sebum",
+    "shine": "excess_sebum",
+    "dark_circles": "dark_circles",
+    "puffiness": "puffiness",
+    "tired_eyes": "dark_circles",
+    "fatigue": "dark_circles",
+    "early_signs": "eye_wrinkles",
+    "eye_wrinkles": "eye_wrinkles",
+    "mature_eye_area": "eye_wrinkles",
+    "advanced_eye_wrinkles": "eye_wrinkles",
+    "flaking": "dryness",
+    "reactive": "reactivity"
+  },
+  "premium_concerns": [
+    "deep_wrinkles",
+    "significant_loss_of_density",
+    "advanced_loss_of_firmness",
+    "demanding_mature_skin",
+    "regeneration"
+  ],
+  "_premium_concerns_note": "Customer concerns (their words) that justify the premium variant (plan § 3.1: « Exception = premium variant »; never because of age alone).",
+  "foundation_priority": [
+    "C",
+    "F",
+    "E",
+    "B",
+    "A",
+    "D"
+  ],
+  "_foundation_priority_note": "Several concerns, none chosen with a button: each votes for its foundation and the tie goes to the first in this list. Sensitive skin first (tolerance), then spots, ageing, blemishes, hydration, radiance (radiance most often a secondary effect). PROPOSED: Qiriness to confirm.",
+  "eye_concerns": [
+    "dark_circles",
+    "puffiness",
+    "eye_wrinkles"
+  ],
+  "foundations": [
+    {
+      "key": "A",
+      "name_fr": "Hydratation",
+      "name_en": "Hydration",
+      "primary_concerns": [
+        "dehydration",
+        "dryness"
+      ],
+      "preferred_range": "Aqua (test)",
+      "steps": [
+        {
+          "order": 1,
+          "type": "cleanser",
+          "frequency": "daily",
+          "required": true
+        },
+        {
+          "order": 2,
+          "type": "serum",
+          "frequency": "daily",
+          "required": true,
+          "targets": "primary"
+        },
+        {
+          "order": 3,
+          "type": "cream",
+          "frequency": "daily",
+          "required": true,
+          "texture_by_skin_type": true
+        },
+        {
+          "order": 4,
+          "type": "lotion",
+          "frequency": "daily",
+          "required": false
+        },
+        {
+          "order": 5,
+          "type": "exfoliant",
+          "frequency": "occasional",
+          "required": false
+        },
+        {
+          "order": 6,
+          "type": "mask",
+          "frequency": "occasional",
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "B",
+      "name_fr": "Imperfections",
+      "name_en": "Blemishes",
+      "primary_concerns": [
+        "blemishes",
+        "enlarged_pores",
+        "excess_sebum",
+        "uneven_texture"
+      ],
+      "preferred_range": "Pure (test)",
+      "texture": "light",
+      "steps": [
+        {
+          "order": 1,
+          "type": "cleanser",
+          "frequency": "daily",
+          "required": true,
+          "targets": "primary"
+        },
+        {
+          "order": 2,
+          "type": "lotion",
+          "frequency": "daily",
+          "required": true,
+          "targets": "primary"
+        },
+        {
+          "order": 3,
+          "type": "cream",
+          "frequency": "daily",
+          "required": true,
+          "note": "oily skin still needs hydration: a light, mattifying cream"
+        },
+        {
+          "order": 4,
+          "type": "serum",
+          "frequency": "daily",
+          "required": false,
+          "targets": "primary"
+        },
+        {
+          "order": 5,
+          "type": "exfoliant",
+          "frequency": "occasional",
+          "required": false
+        },
+        {
+          "order": 6,
+          "type": "mask",
+          "frequency": "occasional",
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "C",
+      "name_fr": "Peaux sensibles",
+      "name_en": "Sensitive skin",
+      "primary_concerns": [
+        "redness",
+        "discomfort",
+        "reactivity"
+      ],
+      "preferred_range": "Calme (test)",
+      "tolerance_first": true,
+      "steps": [
+        {
+          "order": 1,
+          "type": "cleanser",
+          "frequency": "daily",
+          "required": true
+        },
+        {
+          "order": 2,
+          "type": "cream",
+          "frequency": "daily",
+          "required": true,
+          "targets": "primary"
+        },
+        {
+          "order": 3,
+          "type": "serum",
+          "frequency": "daily",
+          "required": false,
+          "targets": "primary"
+        },
+        {
+          "order": 4,
+          "type": "mask",
+          "frequency": "occasional",
+          "required": false
+        }
+      ],
+      "rule": "every product suits sensitive skin (« Adapté » or « Avec précaution »), never « Déconseillé »"
+    },
+    {
+      "key": "D",
+      "name_fr": "Éclat",
+      "name_en": "Radiance",
+      "primary_concerns": [
+        "dullness",
+        "signs_of_fatigue"
+      ],
+      "preferred_range": "Énergie (test)",
+      "steps": [
+        {
+          "order": 1,
+          "type": "cleanser",
+          "frequency": "daily",
+          "required": true
+        },
+        {
+          "order": 2,
+          "type": "serum",
+          "frequency": "daily",
+          "required": true,
+          "targets": "primary"
+        },
+        {
+          "order": 3,
+          "type": "cream",
+          "frequency": "daily",
+          "required": true
+        },
+        {
+          "order": 4,
+          "type": "exfoliant",
+          "frequency": "occasional",
+          "required": false
+        },
+        {
+          "order": 5,
+          "type": "mask",
+          "frequency": "occasional",
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "E",
+      "name_fr": "Anti-âge",
+      "name_en": "Anti-ageing",
+      "primary_concerns": [
+        "fine_lines",
+        "wrinkles",
+        "loss_of_firmness",
+        "loss_of_elasticity"
+      ],
+      "preferred_range": "Temps (test)",
+      "premium_variant": "Exception (test)",
+      "premium_when": "deep wrinkles or the customer asks for the most advanced care; never because of age alone",
+      "steps": [
+        {
+          "order": 1,
+          "type": "cleanser",
+          "frequency": "daily",
+          "required": true
+        },
+        {
+          "order": 2,
+          "type": "serum",
+          "frequency": "daily",
+          "required": true,
+          "targets": "primary"
+        },
+        {
+          "order": 3,
+          "type": "cream",
+          "frequency": "daily",
+          "required": true,
+          "texture_by_skin_type": true
+        },
+        {
+          "order": 4,
+          "type": "lotion",
+          "frequency": "daily",
+          "required": false
+        },
+        {
+          "order": 5,
+          "type": "exfoliant",
+          "frequency": "occasional",
+          "required": false
+        },
+        {
+          "order": 6,
+          "type": "mask",
+          "frequency": "occasional",
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "F",
+      "name_fr": "Taches",
+      "name_en": "Dark spots",
+      "primary_concerns": [
+        "dark_spots",
+        "uneven_tone"
+      ],
+      "preferred_range": "Lumière (test)",
+      "steps": [
+        {
+          "order": 1,
+          "type": "cleanser",
+          "frequency": "daily",
+          "required": true
+        },
+        {
+          "order": 2,
+          "type": "serum",
+          "frequency": "daily",
+          "required": true,
+          "targets": "primary"
+        },
+        {
+          "order": 3,
+          "type": "cream",
+          "frequency": "daily",
+          "required": true
+        },
+        {
+          "order": 4,
+          "type": "spf",
+          "frequency": "daily",
+          "required": false,
+          "module": "spf"
+        },
+        {
+          "order": 5,
+          "type": "lotion",
+          "frequency": "daily",
+          "required": false
+        },
+        {
+          "order": 6,
+          "type": "exfoliant",
+          "frequency": "occasional",
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "G",
+      "name_fr": "Routine de base",
+      "name_en": "Basic routine",
+      "primary_concerns": [],
+      "only_on_explicit_request": true,
+      "preferred_range": "Essentiel (test)",
+      "steps": [
+        {
+          "order": 1,
+          "type": "cleanser",
+          "frequency": "daily",
+          "required": true
+        },
+        {
+          "order": 2,
+          "type": "cream",
+          "frequency": "daily",
+          "required": true
+        },
+        {
+          "order": 3,
+          "type": "exfoliant",
+          "frequency": "occasional",
+          "required": false
+        },
+        {
+          "order": 4,
+          "type": "cream",
+          "frequency": "daily",
+          "required": false,
+          "note": "an instant-glow complexion cream (CC, BB) as the option"
+        }
+      ]
+    }
+  ],
+  "secondary_effects": {
+    "_rule": "Other concerns change WHICH PRODUCT fills a step, never the foundation (§ 3.1).",
+    "dehydration": {
+      "step": "cream",
+      "effect": "a hydrating cream, texture by skin type"
+    },
+    "dryness": {
+      "step": "cream",
+      "effect": "a richer cream"
+    },
+    "fine_lines": {
+      "step": "serum",
+      "effect": "an anti-ageing serum"
+    },
+    "wrinkles": {
+      "step": "serum",
+      "effect": "an anti-ageing serum"
+    },
+    "loss_of_firmness": {
+      "step": "serum",
+      "effect": "a firming serum"
+    },
+    "dullness": {
+      "step": "serum",
+      "effect": "a radiance serum, or the glow option"
+    },
+    "signs_of_fatigue": {
+      "step": "serum",
+      "effect": "a radiance serum"
+    },
+    "blemishes": {
+      "step": "cream",
+      "effect": "a light texture; a purifying cleanser"
+    },
+    "excess_sebum": {
+      "step": "cream",
+      "effect": "a light, mattifying texture"
+    },
+    "redness": {
+      "step": "all",
+      "effect": "every product suits sensitive skin"
+    },
+    "discomfort": {
+      "step": "all",
+      "effect": "every product suits sensitive skin"
+    },
+    "dark_spots": {
+      "step": "serum",
+      "effect": "an anti-spot serum; the SPF module proposed"
+    },
+    "dark_circles": {
+      "step": "module:eyes",
+      "effect": "the eyes module added (complete or spa size)"
+    },
+    "puffiness": {
+      "step": "module:eyes",
+      "effect": "the eyes module added (complete or spa size)"
+    },
+    "eye_wrinkles": {
+      "step": "module:eyes",
+      "effect": "the eyes module added (complete or spa size)"
+    }
+  },
+  "skin_type_texture": {
+    "dry": "rich",
+    "normal": "standard",
+    "combination": "light",
+    "oily": "light",
+    "_rule": "skin type chooses the cream's texture; it never forces the Hydration foundation when another concern is the main one"
+  },
+  "modules": [
+    {
+      "key": "eyes",
+      "type": "eye",
+      "frequency": "daily",
+      "when": [
+        "dark_circles",
+        "puffiness",
+        "eye_wrinkles"
+      ],
+      "standalone": true,
+      "note": "added to any foundation, or asked for alone (« just an eye cream »)"
+    },
+    {
+      "key": "spf",
+      "type": "spf",
+      "frequency": "daily",
+      "when": [
+        "dark_spots",
+        "uneven_tone"
+      ],
+      "standalone": true,
+      "note": "proposed with the Dark spots foundation, or on request"
+    },
+    {
+      "key": "occasional",
+      "types": [
+        "exfoliant",
+        "mask"
+      ],
+      "frequency": "occasional",
+      "when_size": "spa",
+      "standalone": true
+    }
+  ],
+  "sizes": {
+    "essential": {
+      "rule": "the first daily required steps of the foundation",
+      "steps": [
+        2,
+        3
+      ],
+      "default": true
+    },
+    "complete": {
+      "rule": "every daily step that has a suitable product, plus the relevant modules",
+      "steps": [
+        4,
+        5
+      ]
+    },
+    "spa": {
+      "rule": "complete plus the occasional steps (exfoliant, mask, patches); chosen by the customer, never added automatically"
+    },
+    "one_product": {
+      "rule": "the first useful step the customer does not already cover; only on request",
+      "steps": [
+        1,
+        1
+      ]
+    },
+    "never_pad": "a step is filled only when a suitable product exists; an empty step is said, never filled with a poor match",
+    "owned": "a product type the customer already has or uses counts toward the size and is not doubled — unless their concern points to a specific product for that step (« j'ai un sérum hydratant mais j'ai des taches »: the anti-spot serum is still proposed, with why)"
+  },
+  "preferences": {
+    "men": "a preference, not a routine: men's products ranked first in each step, others still possible",
+    "budget": "a small budget: the essential size, no treat",
+    "exclusions": "an ingredient the customer avoids is never in any step",
+    "basic_routine": "foundation G only when asked for (« juste une routine de base »); « je ne sais pas ce qu'il me faut » gets one useful question instead"
+  },
+  "questions": {
+    "_rule": "the question whose answer changes the routine most first; skin traits before naming a concern; never age first (§ 3.3)",
+    "order": [
+      "concern",
+      "skin_type",
+      "sensitivity",
+      "current_routine",
+      "size"
+    ],
+    "chips": {
+      "skin_type": {
+        "fr": [
+          "Plutôt sèche",
+          "Équilibrée",
+          "Grasse sur la zone T",
+          "Grasse partout",
+          "Je ne sais pas"
+        ],
+        "en": [
+          "Rather dry",
+          "Balanced",
+          "Oily in the T-zone",
+          "Oily all over",
+          "I don't know"
+        ]
+      },
+      "sensitivity": {
+        "fr": [
+          "Elle réagit facilement",
+          "Rarement"
+        ],
+        "en": [
+          "It reacts easily",
+          "Rarely"
+        ]
+      },
+      "size": {
+        "fr": [
+          "Essentielle (2–3 produits)",
+          "Complète (4–5)",
+          "Rituel spa",
+          "J'ai déjà des produits"
+        ],
+        "en": [
+          "Essential (2–3 products)",
+          "Complete (4–5)",
+          "Spa ritual",
+          "I already have products"
+        ]
+      }
+    }
+  },
+  "treats": {
+    "_rule": "commercial offers, separate from the advice: one at most per conversation, never with a small budget (§ 3.4)",
+    "max_price": 25,
+    "situations": {
+      "asks_masks_or_spa": "recommend a treat directly",
+      "likes_wraps": "suggest a relevant daily-care complement",
+      "full_routine": "one relevant treat at most, if appropriate",
+      "small_budget": "no treat",
+      "gift": "gift sets and spa experiences first",
+      "end_of_consultation": "optional, never automatic"
+    },
+    "treat_routines": [
+      {
+        "key": "soiree_spa",
+        "name_fr": "Soirée spa",
+        "name_en": "Spa evening",
+        "types": [
+          "exfoliant",
+          "mask",
+          "mask:eyes"
+        ],
+        "kit": "t-coffret-spa"
+      },
+      {
+        "key": "a_partager",
+        "name_fr": "À partager",
+        "name_en": "To share",
+        "types": [
+          "kit"
+        ],
+        "kit": "t-kit-masques"
+      }
+    ]
+  },
+  "engine_playbooks": {
+    "_about": "Today's engine still runs the 11 playbooks of data/advisor/qiriness.json; this maps them to the foundations for the scorecard.",
+    "face_hydration": "A",
+    "face_oily_imperfections": "B",
+    "face_sensitive_comfort": "C",
+    "face_radiance_energy": "D",
+    "face_global_anti_age": "E",
+    "face_firmness_lift": "E",
+    "face_advanced_anti_age": "E",
+    "face_dark_spots": "F",
+    "men_face": "men",
+    "eye_advisor": "eyes",
+    "body_hydration": "body",
+    "A": "A",
+    "B": "B",
+    "C": "C",
+    "D": "D",
+    "E": "E",
+    "F": "F",
+    "G": "G",
+    "eyes": "eyes",
+    "gift": "gift",
+    "spa": "spa"
+  }
+}

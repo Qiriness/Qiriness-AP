@@ -11,7 +11,9 @@ export const EXCLUSION = {
   WRONG_TARGET: 'wrong_target',
   BUNDLE_NOT_REQUESTED: 'bundle_not_requested',
   EXCLUDED_BY_CUSTOMER: 'excluded_by_customer',
-  UNSUITABLE: 'unsuitable'
+  UNSUITABLE: 'unsuitable',
+  /** The brand's knowledge says « Ne pas conseiller ». */
+  NOT_ADVISED: 'not_advised'
 };
 
 /** Why a product was chosen for a step (`code` or `code:detail`). */
@@ -28,13 +30,29 @@ export const FIT = {
   PREFERRED_FAMILY: 'preferred_family',
   PREFERRED_UNAVAILABLE: 'preferred_unavailable',
   SLOT_NAME_MATCH: 'slot_name_match',
-  MERCHANDISED: 'merchandised'
+  MERCHANDISED: 'merchandised',
+  /** From a range the customer uses (purchase history): a nudge, never a reason alone. */
+  CUSTOMER_RANGE: 'customer_range',
+  /** The product the customer came in with (or is running low on): the routine is built around it. */
+  CUSTOMER_INTEREST: 'customer_interest',
+  /** They have a product of this type, but their concern needs a specific one for this step (owner's rule). */
+  CONCERN_NEEDS_SPECIFIC_PRODUCT: 'concern_needs_specific_product'
 };
 
 /** Why a step of the playbook was not filled. */
 export const SKIPPED = {
   ALREADY_IN_ROUTINE: 'already_in_routine',
+  /** A product the customer said they still use fills this step (`product_id`). */
+  ALREADY_OWNED: 'already_owned',
   NO_ELIGIBLE_PRODUCT: 'no_eligible_product'
+};
+
+/** Why a product to build the routine around was not placed (`pinned` in the advice). */
+export const PINNED = {
+  PLACED: 'placed',
+  UNAVAILABLE: 'pinned_unavailable',
+  UNSUITABLE: 'pinned_unsuitable',
+  NO_STEP: 'pinned_no_step'
 };
 
 /** Why the engine has no recommendation yet. */
@@ -47,5 +65,7 @@ export const STATUS = {
 export const NO_MATCH = {
   NO_PLAYBOOK: 'no_playbook_for_concern',
   NO_PLAYBOOK_FOR_AREA: 'no_playbook_for_area',
-  NO_PRODUCT: 'no_eligible_product'
+  NO_PRODUCT: 'no_eligible_product',
+  /** The brand's routines have no foundation for this area (a body request on a face-only bench). */
+  AREA_NOT_COVERED: 'area_not_covered'
 };

@@ -5,7 +5,8 @@
  *   eligible?      stock, area, target, bundle, the customer's exclusions   HARD (rules 2, 3, 4, 5)
  *   suitability    primary concern > sensitivity > secondary concerns;
  *                  skin type → texture for cream steps (rule 8); age ≤ 0.05 (rule 6)
- *   routine fit    the playbook's preferred family; the slot's preferred name words
+ *   routine fit    the playbook's preferred family; the slot's preferred name words;
+ *                  a range the customer already uses (≤ 0.15, purchase history)
  *   merchandising  a tier boost (≤ 0.2) for products whose suitability is within
  *                  `window` of the best — it reorders good matches and can never
  *                  lift an unsuitable one (rule 10)
@@ -38,6 +39,8 @@ export const WEIGHTS = {
   ageMax: 0.05,
   family: 0.5,
   slotName: 0.2,
+  /** Below the family and the slot name: it orders suitable products, nothing more. */
+  customerRange: 0.15,
   /** Below this, a product is unsuitable: never recommended, never boosted. */
   floor: -0.25
 };
@@ -45,6 +48,7 @@ export const WEIGHTS = {
 /** Hard eligibility. Returns the exclusion code, or null when eligible. */
 export function exclusionOf(sig, { area, men, exclusions = [], wantsBundle = false }) {
   if (!sig.inStock) return EXCLUSION.OUT_OF_STOCK;
+  if (sig.knowledge?.status === 'do_not_advise') return EXCLUSION.NOT_ADVISED;
   if (!sig.areas.has(area)) return EXCLUSION.WRONG_AREA;
   if (men ? !sig.men : sig.men) return EXCLUSION.WRONG_TARGET;
   if (sig.bundle && !wantsBundle) return EXCLUSION.BUNDLE_NOT_REQUESTED;
@@ -162,19 +166,27 @@ export function merchandisingTier(sig, { merchandising, raw, slotKey, primary, n
  * Rank the candidates for one step.
  * @returns {{ ranked: object[], excluded: Record<string, number>, preferredUnavailable: boolean }}
  */
-export function rankSlot({ slotKey, spec, signals, profile, raw, merchandising, family, texture, eligibility, used = new Set(), toleranceFirst = false, now = new Date() }) {
+export function rankSlot({ slotKey, spec, signals, profile, raw, merchandising, family, texture, eligibility, used = new Set(), toleranceFirst = false, now = new Date(), ranges = new Set(), include = new Set() }) {
   const excluded = {};
-  const inThisSlot = signals.filter((s) => inSlot(s, spec) && !used.has(s.id));
+  // `include`: a product the routine is built around (the customer's interest),
+  // considered for this step even outside its catalogue rules; `rejected` says why it was not kept.
+  const rejected = {};
+  const inThisSlot = signals.filter((s) => (inSlot(s, spec) || include.has(s.id)) && !used.has(s.id));
   const pool = [];
   for (const sig of inThisSlot) {
     const code = exclusionOf(sig, eligibility);
-    if (code) { excluded[code] = (excluded[code] ?? 0) + 1; continue; }
+    if (code) { excluded[code] = (excluded[code] ?? 0) + 1; if (include.has(sig.id)) rejected[sig.id] = code; continue; }
     const fit = suitability(sig, { profile, raw, texture });
     // A treatment step must address the need: a product with no concern of the
     // customer's, outside the preferred line, is not « the best available ».
     const addressesNeed = fit.reasons.some((r) => r.startsWith(FIT.PRIMARY_CONCERN) || r.startsWith(FIT.SECONDARY_CONCERN))
       || (family && inFamily(sig, raw.families[family]));
-    if (fit.score < WEIGHTS.floor || (spec.concern_required && !addressesNeed)) { excluded[EXCLUSION.UNSUITABLE] = (excluded[EXCLUSION.UNSUITABLE] ?? 0) + 1; continue; }
+    // Their interest stands in for the concern; never for the suitability floor.
+    if (fit.score < WEIGHTS.floor || (spec.concern_required && !addressesNeed && !include.has(sig.id))) {
+      excluded[EXCLUSION.UNSUITABLE] = (excluded[EXCLUSION.UNSUITABLE] ?? 0) + 1;
+      if (include.has(sig.id)) rejected[sig.id] = EXCLUSION.UNSUITABLE;
+      continue;
+    }
     pool.push({ sig, fit });
   }
   const familySpec = family ? raw.families[family] : null;
@@ -189,6 +201,8 @@ export function rankSlot({ slotKey, spec, signals, profile, raw, merchandising, 
     let routineFit = 0;
     if (familySpec && inFamily(sig, familySpec)) { routineFit += WEIGHTS.family; reasons.push(`${FIT.PREFERRED_FAMILY}:${family}`); }
     if ((spec.prefer_name_words ?? []).some((w) => hasPhrase(sig.name, w))) { routineFit += WEIGHTS.slotName; reasons.push(FIT.SLOT_NAME_MATCH); }
+    const range = sig.knowledge?.range;
+    if (range && ranges.has(range)) { routineFit += WEIGHTS.customerRange; reasons.push(`${FIT.CUSTOMER_RANGE}:${range}`); }
     // Merchandising: suitable AND within the window of the best fit, or nothing.
     // A tolerance-first playbook boosts only products made for sensitive skin.
     let merch = null;
@@ -201,7 +215,7 @@ export function rankSlot({ slotKey, spec, signals, profile, raw, merchandising, 
     return { id: sig.id, handle: sig.handle, sig, suitability: fit.score, routineFit, merch, total: round(fit.score + routineFit + (merch?.boost ?? 0)), reasons };
   });
   ranked.sort((a, b) => b.total - a.total || b.suitability - a.suitability || a.sig.name.localeCompare(b.sig.name));
-  return { ranked, excluded, preferredUnavailable };
+  return { ranked, excluded, preferredUnavailable, rejected };
 }
 
 const round = (n) => Math.round(n * 1000) / 1000;

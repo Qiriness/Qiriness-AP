@@ -1,0 +1,2020 @@
+{
+  "_about": "INVENTED: no real product, price or customer. The routines of docs/storefront-advisor-plan.md § 3.1–3.4 and a catalogue that fills them, to measure and optimise the routine builder (npm run advisor:score).",
+  "products": [
+    {
+      "id": "00000000-0000-4000-b000-000000000001",
+      "shopifyId": "gid://shopify/Product/700001",
+      "handle": "t-lait-aqua",
+      "name": "Lait Démaquillant Aqua (test)",
+      "type": "Nettoyant",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Lait Démaquillant Aqua (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Inconfort.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600001",
+          "title": null,
+          "price": 21,
+          "sku": "T-001",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-001"
+      ],
+      "priceFrom": 21,
+      "inStock": true,
+      "collections": [
+        "nettoyants-et-lotions",
+        "peaux-sensibles",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000002",
+      "shopifyId": "gid://shopify/Product/700002",
+      "handle": "t-lotion-aqua",
+      "name": "Lotion Hydratante Aqua (test)",
+      "type": "Lotion",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Lotion Hydratante Aqua (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Teint terne.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600002",
+          "title": null,
+          "price": 24,
+          "sku": "T-002",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-002"
+      ],
+      "priceFrom": 24,
+      "inStock": true,
+      "collections": [
+        "eclat-et-bonne-mine-1",
+        "exfoliant-lotion-gommage",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000003",
+      "shopifyId": "gid://shopify/Product/700003",
+      "handle": "t-serum-aqua",
+      "name": "Sérum Hydratant Aqua (test)",
+      "type": "Sérum",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Hydratant Aqua (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Sécheresse, Ridules.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600003",
+          "title": null,
+          "price": 39,
+          "sku": "T-003",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-003"
+      ],
+      "priceFrom": 39,
+      "inStock": true,
+      "collections": [
+        "cremes-hydratantes",
+        "diag-rides-legeres",
+        "serums-visage",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000004",
+      "shopifyId": "gid://shopify/Product/700004",
+      "handle": "t-creme-aqua-riche",
+      "name": "Crème Aqua Riche (test)",
+      "type": "Crème",
+      "tags": [
+        "crème riche",
+        "peaux sèches",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Aqua Riche (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Sécheresse, Déshydratation, Inconfort.",
+      "keyIngredients": "Parfum",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600004",
+          "title": null,
+          "price": 42,
+          "sku": "T-004",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-004"
+      ],
+      "priceFrom": 42,
+      "inStock": true,
+      "collections": [
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "peaux-sensibles",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000005",
+      "shopifyId": "gid://shopify/Product/700005",
+      "handle": "t-creme-aqua",
+      "name": "Crème Aqua (test)",
+      "type": "Crème",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Aqua (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Sécheresse.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600005",
+          "title": null,
+          "price": 38,
+          "sku": "T-005",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-005"
+      ],
+      "priceFrom": 38,
+      "inStock": true,
+      "collections": [
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000006",
+      "shopifyId": "gid://shopify/Product/700006",
+      "handle": "t-creme-aqua-light",
+      "name": "Crème Aqua Light (test)",
+      "type": "Crème",
+      "tags": [
+        "matifiant",
+        "peaux grasses",
+        "peaux mixtes",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Aqua Light (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Excès de sébum.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600006",
+          "title": null,
+          "price": 38,
+          "sku": "T-006",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-006"
+      ],
+      "priceFrom": 38,
+      "inStock": true,
+      "collections": [
+        "anti-imperfections",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000007",
+      "shopifyId": "gid://shopify/Product/700007",
+      "handle": "t-gommage-aqua",
+      "name": "Gommage Doux Aqua (test)",
+      "type": "Exfoliant",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Gommage Doux Aqua (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Grain de peau irrégulier, Teint terne.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600007",
+          "title": null,
+          "price": 26,
+          "sku": "T-007",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-007"
+      ],
+      "priceFrom": 26,
+      "inStock": true,
+      "collections": [
+        "eclat-et-bonne-mine-1",
+        "exfoliant-lotion-gommage",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000008",
+      "shopifyId": "gid://shopify/Product/700008",
+      "handle": "t-masque-aqua",
+      "name": "Masque Wrap Aqua (test)",
+      "type": "Masque",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Masque Wrap Aqua (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Teint terne.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600008",
+          "title": null,
+          "price": 12,
+          "sku": "T-008",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-008"
+      ],
+      "priceFrom": 12,
+      "inStock": true,
+      "collections": [
+        "eclat-et-bonne-mine-1",
+        "masques-patch",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000009",
+      "shopifyId": "gid://shopify/Product/700009",
+      "handle": "t-serum-aqua-intense",
+      "name": "Sérum Aqua Intense (test)",
+      "type": "Sérum",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Aqua Intense (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Sécheresse.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600009",
+          "title": null,
+          "price": 49,
+          "sku": "T-009",
+          "compareAt": null,
+          "inStock": false
+        }
+      ],
+      "skus": [
+        "T-009"
+      ],
+      "priceFrom": 49,
+      "inStock": false,
+      "collections": [
+        "cremes-hydratantes",
+        "serums-visage",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000010",
+      "shopifyId": "gid://shopify/Product/700010",
+      "handle": "t-gel-pure",
+      "name": "Gel Nettoyant Pure (test)",
+      "type": "Nettoyant",
+      "tags": [
+        "matifiant",
+        "peaux grasses",
+        "peaux mixtes",
+        "pores dilatés",
+        "purifiant",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Gel Nettoyant Pure (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Imperfections, Excès de sébum, Pores dilatés.",
+      "keyIngredients": "Acide salicylique",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600010",
+          "title": null,
+          "price": 20,
+          "sku": "T-010",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-010"
+      ],
+      "priceFrom": 20,
+      "inStock": true,
+      "collections": [
+        "anti-imperfections",
+        "nettoyants-et-lotions"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000011",
+      "shopifyId": "gid://shopify/Product/700011",
+      "handle": "t-lotion-pure",
+      "name": "Lotion Purifiante Pure (test)",
+      "type": "Lotion",
+      "tags": [
+        "matifiant",
+        "peaux grasses",
+        "peaux mixtes",
+        "pores dilatés",
+        "purifiant",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Lotion Purifiante Pure (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Pores dilatés, Excès de sébum, Imperfections.",
+      "keyIngredients": "Acide salicylique",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600011",
+          "title": null,
+          "price": 23,
+          "sku": "T-011",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-011"
+      ],
+      "priceFrom": 23,
+      "inStock": true,
+      "collections": [
+        "anti-imperfections",
+        "exfoliant-lotion-gommage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000012",
+      "shopifyId": "gid://shopify/Product/700012",
+      "handle": "t-serum-pure",
+      "name": "Sérum Anti-imperfections Pure (test)",
+      "type": "Sérum",
+      "tags": [
+        "peaux grasses",
+        "peaux mixtes",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Anti-imperfections Pure (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Imperfections, Grain de peau irrégulier.",
+      "keyIngredients": "Niacinamide",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600012",
+          "title": null,
+          "price": 34,
+          "sku": "T-012",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-012"
+      ],
+      "priceFrom": 34,
+      "inStock": true,
+      "collections": [
+        "anti-imperfections",
+        "serums-visage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000013",
+      "shopifyId": "gid://shopify/Product/700013",
+      "handle": "t-creme-pure-light",
+      "name": "Crème Matifiante Pure Light (test)",
+      "type": "Crème",
+      "tags": [
+        "matifiant",
+        "peaux grasses",
+        "peaux mixtes",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Matifiante Pure Light (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Excès de sébum, Déshydratation, Imperfections.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600013",
+          "title": null,
+          "price": 32,
+          "sku": "T-013",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-013"
+      ],
+      "priceFrom": 32,
+      "inStock": true,
+      "collections": [
+        "anti-imperfections",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000014",
+      "shopifyId": "gid://shopify/Product/700014",
+      "handle": "t-gommage-pure",
+      "name": "Gommage Purifiant Pure (test)",
+      "type": "Exfoliant",
+      "tags": [
+        "peaux grasses",
+        "peaux mixtes",
+        "pores dilatés",
+        "purifiant",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Gommage Purifiant Pure (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Pores dilatés, Grain de peau irrégulier.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600014",
+          "title": null,
+          "price": 22,
+          "sku": "T-014",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-014"
+      ],
+      "priceFrom": 22,
+      "inStock": true,
+      "collections": [
+        "anti-imperfections",
+        "exfoliant-lotion-gommage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000015",
+      "shopifyId": "gid://shopify/Product/700015",
+      "handle": "t-masque-pure",
+      "name": "Masque Argile Pure (test)",
+      "type": "Masque",
+      "tags": [
+        "matifiant",
+        "peaux grasses",
+        "peaux mixtes",
+        "pores dilatés",
+        "purifiant",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Masque Argile Pure (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Excès de sébum, Pores dilatés.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600015",
+          "title": null,
+          "price": 14,
+          "sku": "T-015",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-015"
+      ],
+      "priceFrom": 14,
+      "inStock": true,
+      "collections": [
+        "anti-imperfections",
+        "masques-patch"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000016",
+      "shopifyId": "gid://shopify/Product/700016",
+      "handle": "t-lait-calme",
+      "name": "Lait Nettoyant Calme (test)",
+      "type": "Nettoyant",
+      "tags": [
+        "apaisant",
+        "peaux sensibles",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Lait Nettoyant Calme (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Réactivité, Inconfort, Rougeurs.",
+      "keyIngredients": "Aucun parfum",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600016",
+          "title": null,
+          "price": 22,
+          "sku": "T-016",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-016"
+      ],
+      "priceFrom": 22,
+      "inStock": true,
+      "collections": [
+        "nettoyants-et-lotions",
+        "peaux-sensibles"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000017",
+      "shopifyId": "gid://shopify/Product/700017",
+      "handle": "t-creme-calme",
+      "name": "Crème Apaisante Calme (test)",
+      "type": "Crème",
+      "tags": [
+        "apaisant",
+        "peaux sensibles",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Apaisante Calme (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rougeurs, Inconfort, Déshydratation.",
+      "keyIngredients": "Aucun parfum",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600017",
+          "title": null,
+          "price": 36,
+          "sku": "T-017",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-017"
+      ],
+      "priceFrom": 36,
+      "inStock": true,
+      "collections": [
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "peaux-sensibles",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000018",
+      "shopifyId": "gid://shopify/Product/700018",
+      "handle": "t-serum-calme",
+      "name": "Sérum Apaisant Calme (test)",
+      "type": "Sérum",
+      "tags": [
+        "apaisant",
+        "peaux sensibles",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Apaisant Calme (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Inconfort, Rougeurs, Réactivité.",
+      "keyIngredients": "Aucun parfum",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600018",
+          "title": null,
+          "price": 38,
+          "sku": "T-018",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-018"
+      ],
+      "priceFrom": 38,
+      "inStock": true,
+      "collections": [
+        "peaux-sensibles",
+        "serums-visage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000019",
+      "shopifyId": "gid://shopify/Product/700019",
+      "handle": "t-masque-calme",
+      "name": "Masque Apaisant Calme (test)",
+      "type": "Masque",
+      "tags": [
+        "apaisant",
+        "peaux sensibles",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Masque Apaisant Calme (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Inconfort, Rougeurs.",
+      "keyIngredients": "Aucun parfum",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600019",
+          "title": null,
+          "price": 13,
+          "sku": "T-019",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-019"
+      ],
+      "priceFrom": 13,
+      "inStock": true,
+      "collections": [
+        "masques-patch",
+        "peaux-sensibles"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000020",
+      "shopifyId": "gid://shopify/Product/700020",
+      "handle": "t-mousse-energie",
+      "name": "Mousse Nettoyante Énergie (test)",
+      "type": "Nettoyant",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Mousse Nettoyante Énergie (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Teint terne, Signes de fatigue.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600020",
+          "title": null,
+          "price": 21,
+          "sku": "T-020",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-020"
+      ],
+      "priceFrom": 21,
+      "inStock": true,
+      "collections": [
+        "active-energie-soins-coup-de-boost-pour-un-teint-eclatant-une-peau-revitalisee",
+        "anti-fatigue",
+        "eclat-et-bonne-mine-1",
+        "nettoyants-et-lotions"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000021",
+      "shopifyId": "gid://shopify/Product/700021",
+      "handle": "t-serum-energie",
+      "name": "Sérum Booster Éclat Énergie (test)",
+      "type": "Sérum",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Booster Éclat Énergie (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Teint terne, Signes de fatigue, Ridules.",
+      "keyIngredients": "Vitamine C",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600021",
+          "title": null,
+          "price": 36,
+          "sku": "T-021",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-021"
+      ],
+      "priceFrom": 36,
+      "inStock": true,
+      "collections": [
+        "active-energie-soins-coup-de-boost-pour-un-teint-eclatant-une-peau-revitalisee",
+        "anti-fatigue",
+        "diag-rides-legeres",
+        "eclat-et-bonne-mine-1",
+        "serums-visage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000022",
+      "shopifyId": "gid://shopify/Product/700022",
+      "handle": "t-creme-energie",
+      "name": "Crème Éclat Énergie (test)",
+      "type": "Crème",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Crème Éclat Énergie (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Teint terne, Déshydratation.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600022",
+          "title": null,
+          "price": 39,
+          "sku": "T-022",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-022"
+      ],
+      "priceFrom": 39,
+      "inStock": true,
+      "collections": [
+        "active-energie-soins-coup-de-boost-pour-un-teint-eclatant-une-peau-revitalisee",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "eclat-et-bonne-mine-1",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000023",
+      "shopifyId": "gid://shopify/Product/700023",
+      "handle": "t-gommage-energie",
+      "name": "Gommage Éclat Énergie (test)",
+      "type": "Exfoliant",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Gommage Éclat Énergie (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Teint terne, Grain de peau irrégulier.",
+      "keyIngredients": "AHA",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600023",
+          "title": null,
+          "price": 25,
+          "sku": "T-023",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-023"
+      ],
+      "priceFrom": 25,
+      "inStock": true,
+      "collections": [
+        "active-energie-soins-coup-de-boost-pour-un-teint-eclatant-une-peau-revitalisee",
+        "eclat-et-bonne-mine-1",
+        "exfoliant-lotion-gommage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000024",
+      "shopifyId": "gid://shopify/Product/700024",
+      "handle": "t-masque-energie",
+      "name": "Masque Éclat Énergie (test)",
+      "type": "Masque",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Masque Éclat Énergie (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Signes de fatigue, Teint terne.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600024",
+          "title": null,
+          "price": 12,
+          "sku": "T-024",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-024"
+      ],
+      "priceFrom": 12,
+      "inStock": true,
+      "collections": [
+        "active-energie-soins-coup-de-boost-pour-un-teint-eclatant-une-peau-revitalisee",
+        "anti-fatigue",
+        "eclat-et-bonne-mine-1",
+        "masques-patch"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000025",
+      "shopifyId": "gid://shopify/Product/700025",
+      "handle": "t-lait-temps",
+      "name": "Lait Démaquillant Temps (test)",
+      "type": "Nettoyant",
+      "tags": [
+        "anti-âge",
+        "rides",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Lait Démaquillant Temps (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides, Sécheresse.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600025",
+          "title": null,
+          "price": 24,
+          "sku": "T-025",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-025"
+      ],
+      "priceFrom": 24,
+      "inStock": true,
+      "collections": [
+        "cremes-anti-age-anti-rides",
+        "cremes-hydratantes",
+        "diag-anti-age",
+        "gamme-anti-age-temps-sublime",
+        "nettoyants-et-lotions",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000026",
+      "shopifyId": "gid://shopify/Product/700026",
+      "handle": "t-lotion-temps",
+      "name": "Lotion Lissante Temps (test)",
+      "type": "Lotion",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Lotion Lissante Temps (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Ridules, Teint terne.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600026",
+          "title": null,
+          "price": 27,
+          "sku": "T-026",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-026"
+      ],
+      "priceFrom": 27,
+      "inStock": true,
+      "collections": [
+        "diag-rides-legeres",
+        "eclat-et-bonne-mine-1",
+        "exfoliant-lotion-gommage",
+        "gamme-anti-age-temps-sublime"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000027",
+      "shopifyId": "gid://shopify/Product/700027",
+      "handle": "t-serum-temps",
+      "name": "Sérum Anti-âge Lift Temps (test)",
+      "type": "Sérum",
+      "tags": [
+        "anti-âge",
+        "liftant",
+        "rides",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Anti-âge Lift Temps (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides, Perte de fermeté, Ridules.",
+      "keyIngredients": "Rétinol",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600027",
+          "title": null,
+          "price": 55,
+          "sku": "T-027",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-027"
+      ],
+      "priceFrom": 55,
+      "inStock": true,
+      "collections": [
+        "cremes-anti-age-anti-rides",
+        "diag-anti-age",
+        "diag-rides-legeres",
+        "gamme-anti-age-temps-sublime",
+        "serums-visage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000028",
+      "shopifyId": "gid://shopify/Product/700028",
+      "handle": "t-creme-temps",
+      "name": "Crème Anti-âge Jour Temps (test)",
+      "type": "Crème",
+      "tags": [
+        "anti-âge",
+        "liftant",
+        "rides",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Anti-âge Jour Temps (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides, Perte de fermeté, Sécheresse.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600028",
+          "title": null,
+          "price": 48,
+          "sku": "T-028",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-028"
+      ],
+      "priceFrom": 48,
+      "inStock": true,
+      "collections": [
+        "cremes-anti-age-anti-rides",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "diag-anti-age",
+        "gamme-anti-age-temps-sublime",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000029",
+      "shopifyId": "gid://shopify/Product/700029",
+      "handle": "t-creme-temps-riche",
+      "name": "Crème Anti-âge Riche Temps (test)",
+      "type": "Crème",
+      "tags": [
+        "anti-âge",
+        "crème riche",
+        "peaux sèches",
+        "rides",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Anti-âge Riche Temps (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides, Sécheresse, Perte d'élasticité.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600029",
+          "title": null,
+          "price": 52,
+          "sku": "T-029",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-029"
+      ],
+      "priceFrom": 52,
+      "inStock": true,
+      "collections": [
+        "cremes-anti-age-anti-rides",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "diag-anti-age",
+        "gamme-anti-age-temps-sublime",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000030",
+      "shopifyId": "gid://shopify/Product/700030",
+      "handle": "t-creme-temps-nuit",
+      "name": "Crème de Nuit Temps (test)",
+      "type": "Crème",
+      "tags": [
+        "anti-âge",
+        "crème riche",
+        "rides",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème de Nuit Temps (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides, Perte d'élasticité.",
+      "keyIngredients": "Rétinol",
+      "usage": "Mode d'emploi inventé (soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600030",
+          "title": null,
+          "price": 54,
+          "sku": "T-030",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-030"
+      ],
+      "priceFrom": 54,
+      "inStock": true,
+      "collections": [
+        "creme-de-nuit",
+        "cremes-anti-age-anti-rides",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "cremes-visage-nuit",
+        "diag-anti-age",
+        "gamme-anti-age-temps-sublime"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000031",
+      "shopifyId": "gid://shopify/Product/700031",
+      "handle": "t-serum-exception",
+      "name": "Sérum Régénérant Exception (test)",
+      "type": "Sérum",
+      "tags": [
+        "anti age intégral",
+        "anti-âge",
+        "liftant",
+        "rides",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Régénérant Exception (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides, Perte de fermeté, Perte d'élasticité.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600031",
+          "title": null,
+          "price": 89,
+          "sku": "T-031",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-031"
+      ],
+      "priceFrom": 89,
+      "inStock": true,
+      "collections": [
+        "cremes-anti-age-anti-rides",
+        "diag-anti-age",
+        "diag-rides-visibles",
+        "exception-la-ligne-anti-age-regenerante-pour-peaux-exigeantes",
+        "serums-visage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000032",
+      "shopifyId": "gid://shopify/Product/700032",
+      "handle": "t-creme-exception",
+      "name": "Crème Régénérante Exception (test)",
+      "type": "Crème",
+      "tags": [
+        "anti age intégral",
+        "anti-âge",
+        "crème riche",
+        "liftant",
+        "peaux sèches",
+        "rides",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Régénérante Exception (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides, Perte de fermeté, Sécheresse.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600032",
+          "title": null,
+          "price": 95,
+          "sku": "T-032",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-032"
+      ],
+      "priceFrom": 95,
+      "inStock": true,
+      "collections": [
+        "cremes-anti-age-anti-rides",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "diag-anti-age",
+        "diag-rides-visibles",
+        "exception-la-ligne-anti-age-regenerante-pour-peaux-exigeantes",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000033",
+      "shopifyId": "gid://shopify/Product/700033",
+      "handle": "t-serum-lumiere",
+      "name": "Sérum Anti-taches Lumière (test)",
+      "type": "Sérum",
+      "tags": [
+        "anti-taches",
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Sérum Anti-taches Lumière (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Taches, Teint irrégulier, Teint terne.",
+      "keyIngredients": "Niacinamide",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600033",
+          "title": null,
+          "price": 46,
+          "sku": "T-033",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-033"
+      ],
+      "priceFrom": 46,
+      "inStock": true,
+      "collections": [
+        "anti-taches-et-anti-rougeurs",
+        "eclat-et-bonne-mine-1",
+        "eclat-parfait",
+        "serums-visage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000034",
+      "shopifyId": "gid://shopify/Product/700034",
+      "handle": "t-creme-lumiere",
+      "name": "Crème Unifiante Lumière (test)",
+      "type": "Crème",
+      "tags": [
+        "anti-taches",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Unifiante Lumière (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Teint irrégulier, Taches, Déshydratation.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600034",
+          "title": null,
+          "price": 42,
+          "sku": "T-034",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-034"
+      ],
+      "priceFrom": 42,
+      "inStock": true,
+      "collections": [
+        "anti-taches-et-anti-rougeurs",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "eclat-parfait",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000035",
+      "shopifyId": "gid://shopify/Product/700035",
+      "handle": "t-spf-lumiere",
+      "name": "Fluide SPF 50 Lumière (test)",
+      "type": "SPF",
+      "tags": [
+        "anti-taches",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Fluide SPF 50 Lumière (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Taches, Teint irrégulier.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600035",
+          "title": null,
+          "price": 29,
+          "sku": "T-035",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-035"
+      ],
+      "priceFrom": 29,
+      "inStock": true,
+      "collections": [
+        "anti-taches-et-anti-rougeurs",
+        "eclat-parfait"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000036",
+      "shopifyId": "gid://shopify/Product/700036",
+      "handle": "t-lotion-lumiere",
+      "name": "Lotion Éclat Lumière (test)",
+      "type": "Lotion",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Lotion Éclat Lumière (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Teint irrégulier, Teint terne.",
+      "keyIngredients": "AHA",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600036",
+          "title": null,
+          "price": 26,
+          "sku": "T-036",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-036"
+      ],
+      "priceFrom": 26,
+      "inStock": true,
+      "collections": [
+        "anti-taches-et-anti-rougeurs",
+        "eclat-et-bonne-mine-1",
+        "eclat-parfait",
+        "exfoliant-lotion-gommage"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000037",
+      "shopifyId": "gid://shopify/Product/700037",
+      "handle": "t-lait-essentiel",
+      "name": "Lait Nettoyant Essentiel (test)",
+      "type": "Nettoyant",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Lait Nettoyant Essentiel (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600037",
+          "title": null,
+          "price": 16,
+          "sku": "T-037",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-037"
+      ],
+      "priceFrom": 16,
+      "inStock": true,
+      "collections": [
+        "nettoyants-et-lotions",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000038",
+      "shopifyId": "gid://shopify/Product/700038",
+      "handle": "t-creme-essentiel",
+      "name": "Crème Essentielle (test)",
+      "type": "Crème",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Essentielle (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600038",
+          "title": null,
+          "price": 22,
+          "sku": "T-038",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-038"
+      ],
+      "priceFrom": 22,
+      "inStock": true,
+      "collections": [
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000039",
+      "shopifyId": "gid://shopify/Product/700039",
+      "handle": "t-cc-creme",
+      "name": "CC Crème Bonne Mine Essentiel (test)",
+      "type": "Crème",
+      "tags": [
+        "bonne mine",
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : CC Crème Bonne Mine Essentiel (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Teint terne, Teint irrégulier.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600039",
+          "title": null,
+          "price": 28,
+          "sku": "T-039",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-039"
+      ],
+      "priceFrom": 28,
+      "inStock": true,
+      "collections": [
+        "anti-taches-et-anti-rougeurs",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "eclat-et-bonne-mine-1"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000040",
+      "shopifyId": "gid://shopify/Product/700040",
+      "handle": "t-contour-defatigant",
+      "name": "Contour des Yeux Défatigant (test)",
+      "type": "Yeux",
+      "tags": [
+        "anti-cernes",
+        "test",
+        "tous les types de peaux",
+        "yeux"
+      ],
+      "short": "Produit inventé pour les tests : Contour des Yeux Défatigant (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Cernes, Poches.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600040",
+          "title": null,
+          "price": 32,
+          "sku": "T-040",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-040"
+      ],
+      "priceFrom": 32,
+      "inStock": true,
+      "collections": [
+        "active-energie-soins-coup-de-boost-pour-un-teint-eclatant-une-peau-revitalisee",
+        "anti-fatigue",
+        "diag-cernes-et-poches",
+        "soins-contour-des-yeux"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000041",
+      "shopifyId": "gid://shopify/Product/700041",
+      "handle": "t-contour-lissant",
+      "name": "Contour des Yeux Lissant Temps (test)",
+      "type": "Yeux",
+      "tags": [
+        "anti-cernes",
+        "test",
+        "tous les types de peaux",
+        "yeux"
+      ],
+      "short": "Produit inventé pour les tests : Contour des Yeux Lissant Temps (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides du contour des yeux, Cernes.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600041",
+          "title": null,
+          "price": 44,
+          "sku": "T-041",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-041"
+      ],
+      "priceFrom": 44,
+      "inStock": true,
+      "collections": [
+        "diag-cernes-et-poches",
+        "diag-rides-et-ridules",
+        "gamme-anti-age-temps-sublime",
+        "soins-contour-des-yeux"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000042",
+      "shopifyId": "gid://shopify/Product/700042",
+      "handle": "t-gel-homme",
+      "name": "Gel Nettoyant Homme (test)",
+      "type": "Nettoyant",
+      "tags": [
+        "homme",
+        "matifiant",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Gel Nettoyant Homme (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Excès de sébum, Déshydratation.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600042",
+          "title": null,
+          "price": 19,
+          "sku": "T-042",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-042"
+      ],
+      "priceFrom": 19,
+      "inStock": true,
+      "collections": [
+        "anti-imperfections",
+        "nettoyants-et-lotions",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000043",
+      "shopifyId": "gid://shopify/Product/700043",
+      "handle": "t-creme-homme",
+      "name": "Crème Hydratante Homme (test)",
+      "type": "Crème",
+      "tags": [
+        "homme",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Hydratante Homme (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Sécheresse.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600043",
+          "title": null,
+          "price": 34,
+          "sku": "T-043",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-043"
+      ],
+      "priceFrom": 34,
+      "inStock": true,
+      "collections": [
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000044",
+      "shopifyId": "gid://shopify/Product/700044",
+      "handle": "t-baume-homme-riche",
+      "name": "Baume Hydratant Homme Riche (test)",
+      "type": "Crème",
+      "tags": [
+        "crème riche",
+        "homme",
+        "peaux sèches",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Baume Hydratant Homme Riche (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Sécheresse, Déshydratation, Inconfort.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600044",
+          "title": null,
+          "price": 36,
+          "sku": "T-044",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-044"
+      ],
+      "priceFrom": 36,
+      "inStock": true,
+      "collections": [
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "peaux-sensibles",
+        "soins-hydratants"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000045",
+      "shopifyId": "gid://shopify/Product/700045",
+      "handle": "t-fluide-homme-anti-age",
+      "name": "Fluide Anti-âge Homme (test)",
+      "type": "Crème",
+      "tags": [
+        "anti-âge",
+        "homme",
+        "liftant",
+        "rides",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Fluide Anti-âge Homme (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides, Perte de fermeté.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600045",
+          "title": null,
+          "price": 42,
+          "sku": "T-045",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-045"
+      ],
+      "priceFrom": 42,
+      "inStock": true,
+      "collections": [
+        "cremes-anti-age-anti-rides",
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "diag-anti-age"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000046",
+      "shopifyId": "gid://shopify/Product/700046",
+      "handle": "t-patchs-yeux",
+      "name": "Patchs Yeux Défatigants (test)",
+      "type": "Masque",
+      "tags": [
+        "anti-cernes",
+        "test",
+        "tous les types de peaux",
+        "yeux"
+      ],
+      "short": "Produit inventé pour les tests : Patchs Yeux Défatigants (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Cernes, Poches.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600046",
+          "title": null,
+          "price": 15,
+          "sku": "T-046",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-046"
+      ],
+      "priceFrom": 15,
+      "inStock": true,
+      "collections": [
+        "active-energie-soins-coup-de-boost-pour-un-teint-eclatant-une-peau-revitalisee",
+        "diag-cernes-et-poches",
+        "masques-patch"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000047",
+      "shopifyId": "gid://shopify/Product/700047",
+      "handle": "t-kit-masques",
+      "name": "Kit 4 Masques Wrap (test)",
+      "type": "Coffret / kit",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage",
+        "éclat"
+      ],
+      "short": "Produit inventé pour les tests : Kit 4 Masques Wrap (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Teint terne.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600047",
+          "title": null,
+          "price": 24,
+          "sku": "T-047",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-047"
+      ],
+      "priceFrom": 24,
+      "inStock": true,
+      "collections": [
+        "eclat-et-bonne-mine-1",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000048",
+      "shopifyId": "gid://shopify/Product/700048",
+      "handle": "t-coffret-hydratation",
+      "name": "Coffret Rituel Hydratation (test)",
+      "type": "Coffret / kit",
+      "tags": [
+        "crème riche",
+        "peaux sèches",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Coffret Rituel Hydratation (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Sécheresse.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600048",
+          "title": null,
+          "price": 89,
+          "sku": "T-048",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-048"
+      ],
+      "priceFrom": 89,
+      "inStock": true,
+      "collections": [
+        "cremes-hydratantes",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000049",
+      "shopifyId": "gid://shopify/Product/700049",
+      "handle": "t-coffret-temps",
+      "name": "Coffret Anti-âge Temps (test)",
+      "type": "Coffret / kit",
+      "tags": [
+        "anti-âge",
+        "liftant",
+        "rides",
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Coffret Anti-âge Temps (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Rides, Perte de fermeté.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600049",
+          "title": null,
+          "price": 99,
+          "sku": "T-049",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-049"
+      ],
+      "priceFrom": 99,
+      "inStock": true,
+      "collections": [
+        "cremes-anti-age-anti-rides",
+        "diag-anti-age",
+        "gamme-anti-age-temps-sublime"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000050",
+      "shopifyId": "gid://shopify/Product/700050",
+      "handle": "t-coffret-spa",
+      "name": "Coffret Soirée Spa (test)",
+      "type": "Coffret / kit",
+      "tags": [
+        "test",
+        "tous les types de peaux",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Coffret Soirée Spa (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Déshydratation, Signes de fatigue.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600050",
+          "title": null,
+          "price": 39,
+          "sku": "T-050",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-050"
+      ],
+      "priceFrom": 39,
+      "inStock": true,
+      "collections": [
+        "anti-fatigue",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    },
+    {
+      "id": "00000000-0000-4000-b000-000000000051",
+      "shopifyId": "gid://shopify/Product/700051",
+      "handle": "t-creme-retiree",
+      "name": "Crème Ancienne Formule (test)",
+      "type": "Crème",
+      "tags": [
+        "crème riche",
+        "peaux sèches",
+        "test",
+        "visage"
+      ],
+      "short": "Produit inventé pour les tests : Crème Ancienne Formule (test).",
+      "description": "Produit inventé, aucune donnée réelle. Cible : Sécheresse, Déshydratation.",
+      "keyIngredients": "Glycérine",
+      "usage": "Mode d'emploi inventé (matin et soir).",
+      "faqs": [],
+      "variants": [
+        {
+          "id": "gid://shopify/ProductVariant/600051",
+          "title": null,
+          "price": 30,
+          "sku": "T-051",
+          "compareAt": null,
+          "inStock": true
+        }
+      ],
+      "skus": [
+        "T-051"
+      ],
+      "priceFrom": 30,
+      "inStock": true,
+      "collections": [
+        "cremes-de-jour",
+        "cremes-hydratantes",
+        "soins-hydratants",
+        "source-deau"
+      ]
+    }
+  ],
+  "collections": []
+}

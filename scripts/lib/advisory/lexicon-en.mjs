@@ -5,9 +5,9 @@
  */
 
 /** « skin » then up to three words: « my skin is very dry », « skin that gets oily ». */
-const SKIN_IS = String.raw`\bskin (?:is |feels |gets |can be |tends to be |that is |that gets )(?:\w+ ){0,2}?`;
-/** The type, then up to three words, then « skin »: « dry and dehydrated skin » is dry. */
-const BEFORE_SKIN = String.raw`(?: \w+){0,3}? skin\b`;
+const SKIN_IS = String.raw`\b(?:skin|face) (?:is |feels |gets |can be |tends to be |that is |that gets )(?:\w+ ){0,2}?`;
+/** The type, then up to three words, then « skin » or « face »: « dry and dehydrated skin », « a dry face » are dry. */
+const BEFORE_SKIN = String.raw`(?: \w+){0,3}? (?:skin|face)\b`;
 
 export default {
   code: 'en',
@@ -107,6 +107,14 @@ export default {
     essential: /\b((simple|basic|essential|minimal|quick|easy) (skin ?care )?routine|just the (essentials|basics))\b/,
     targeted: /\b((one|a single|just one) (product|treatment)|targeted (product|treatment|care))\b/
   },
+
+  // What they ask for beyond a routine for a need (plan § 3.1, § 3.4).
+  requests: {
+    basic_routine: /\b(basic (skin ?care )?routine|just the basics|the basics)\b/,
+    gift: /\b(gift|present for|to offer|for (my|a) (mother|mum|mom|wife|friend|sister|girlfriend|daughter) (who|for her))\b/,
+    spa: /\b(spa (evening|night|day|ritual|treatment)|at home spa|home spa|pamper(ing)?( myself)?|self care evening)\b/
+  },
+  budgetSmall: /\b(small budget|on a budget|tight budget|limited budget|affordable|inexpensive|cheap|not too expensive)\b/,
 
   age: [/\b(?:i am|i m|im) (\d{2})\b/, /\b(\d{2}) (?:years? old|yo|y o)\b/],
   ageWords: [[/\b(twenties|20s)\b/, 25], [/\b(thirties|30s)\b/, 35], [/\b(forties|40s)\b/, 45], [/\b(fifties|50s)\b/, 55], [/\b(sixties|seventies|60s|70s)\b/, 65]],

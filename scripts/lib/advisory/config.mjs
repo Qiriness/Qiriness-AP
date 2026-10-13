@@ -58,6 +58,17 @@ export function validateConfig(raw) {
     }
   }
   for (const [key, slot] of Object.entries(raw.slots)) need(typeof slot?.kind === 'string', `slot ${key}: kind`);
+  if (raw.treats !== undefined) {
+    need(raw.treats && typeof raw.treats === 'object', 'treats: an object');
+    need(Array.isArray(raw.treats?.collections), 'treats: collections must be a list');
+    need(raw.treats?.max_price === undefined || (typeof raw.treats.max_price === 'number' && raw.treats.max_price > 0), 'treats: max_price must be a positive number');
+  }
+  // Functional types (product knowledge) name step kinds the slots define.
+  const kinds = new Set([...Object.values(raw.slots), ...Object.values(raw.slot_overrides ?? {}).flatMap((o) => Object.values(o ?? {}))].map((s) => s?.kind));
+  for (const [type, list] of Object.entries(raw.functional_types ?? {})) {
+    need(Array.isArray(list), `functional type ${type}: a list of step kinds`);
+    for (const kind of Array.isArray(list) ? list : []) need(kinds.has(kind), `functional type ${type}: no slot has kind ${kind}`);
+  }
   const tiers = raw.merchandising?.tiers ?? {};
   for (const [tier, boost] of Object.entries(tiers)) need(typeof boost === 'number' && boost >= 0 && boost <= 0.2, `merchandising tier ${tier}: boost must be 0–0.2`);
   for (const e of raw.merchandising?.entries ?? []) {

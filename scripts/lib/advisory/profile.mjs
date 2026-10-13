@@ -23,7 +23,11 @@ export const FIELDS = {
   sex_target: { multi: false },
   age_band: { multi: false },
   preferences: { multi: true },
-  known_exclusions: { multi: true }
+  known_exclusions: { multi: true },
+  // What they ask for beyond a routine for a need (plan § 3.1, § 3.4): a basic
+  // routine, a gift, a spa evening; and a small budget (essential, no treat).
+  request: { multi: false },
+  budget: { multi: false }
 };
 
 export const SOURCES = ['quick_choice', 'natural_language', 'model_inferred', 'page_context', 'inferred'];
@@ -36,9 +40,11 @@ const FIXED_VALUES = {
   skin_type: ['very_dry', 'dry', 'normal', 'combination', 'oily', 'unknown'],
   skin_behaviour: ['tightness', 'shine', 'dehydration', 'dullness', 'reactive', 'flaking'],
   sensitivity: ['none', 'sensitive', 'reactive', 'unknown'],
-  routine_scope: ['targeted', 'essential', 'complete', 'complete_existing', 'unknown'],
+  routine_scope: ['targeted', 'essential', 'complete', 'complete_existing', 'spa', 'unknown'],
   sex_target: ['men', 'women'],
-  age_band: ['under_30', '30_44', '45_59', '60_plus', 'unknown']
+  age_band: ['under_30', '30_44', '45_59', '60_plus', 'unknown'],
+  request: ['basic_routine', 'gift', 'spa'],
+  budget: ['small']
 };
 const FREE_TEXT = /^[\p{L}\p{N} '’-]{2,40}$/u;
 

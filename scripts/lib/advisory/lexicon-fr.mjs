@@ -55,11 +55,12 @@ export default {
   },
 
   skinTypes: {
-    very_dry: new RegExp(`${SKIN}(tres|extremement|vraiment|super) seches?\\b`),
-    dry: new RegExp(`${SKIN}seches?\\b|^ seches? $`),
-    normal: new RegExp(`${SKIN}(normales?|equilibrees?)\\b|^ (normale|equilibree)s? $`),
-    combination: new RegExp(`${SKIN}mixtes?\\b|^ mixtes? $`),
-    oily: new RegExp(`${SKIN}grasses?\\b|^ grasses? $`)
+    // « le visage sec » says the skin type as well as « la peau sèche » (masculine forms).
+    very_dry: new RegExp(`${SKIN}(tres|extremement|vraiment|super) seches?\\b|\\bvisage (tres|extremement|vraiment|super) secs?\\b`),
+    dry: new RegExp(`${SKIN}seches?\\b|\\bvisage secs?\\b|^ seches? $`),
+    normal: new RegExp(`${SKIN}(normales?|equilibrees?)\\b|\\bvisage (normal|equilibre)\\b|^ (normale|equilibree)s? $`),
+    combination: new RegExp(`${SKIN}mixtes?\\b|\\bvisage mixte\\b|^ mixtes? $`),
+    oily: new RegExp(`${SKIN}grasses?\\b|\\bvisage gras\\b|^ grasses? $`)
   },
 
   men: /\b(homme|hommes|masculin|pour mon (mari|copain|compagnon|pere|fils|frere|conjoint)|je suis un homme|barbe|rasage)\b/,
@@ -105,6 +106,14 @@ export default {
     essential: /\b(routine (simple|essentielle|de base|minimale|rapide)|l essentiel|juste l essentiel)\b/,
     targeted: /\b(un seul (produit|soin)|juste un (produit|soin)|un soin cible|un produit cible)\b/
   },
+
+  // What they ask for beyond a routine for a need (plan § 3.1, § 3.4).
+  requests: {
+    basic_routine: /\b(routine (de base|basique|toute simple)|les bases|juste les basiques)\b/,
+    gift: /\b(cadeau|offrir|a offrir|pour offrir|idee cadeau)\b/,
+    spa: /\b(soiree spa|moment spa|spa a la maison|rituel spa|soin spa|me chouchouter|cocooning)\b/
+  },
+  budgetSmall: /\b(petit budget|pas trop cher|pas cher|budget (serre|limite|reduit)|petits prix|economique)\b/,
 
   /** Group 1: the age in years. */
   age: [/\b(\d{2}) ans\b/],
