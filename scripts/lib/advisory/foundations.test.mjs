@@ -115,17 +115,47 @@ test('§ 3.3 questions: only those that change the routine, in the brand\'s orde
   assert.ok(!JSON.stringify([first, sized]).includes('age_band'));
 });
 
-test('§ 3.4 a gift is gift sets first; a spa evening is the spa routine; a small budget is essential with no treat', () => {
+test('§ 3.4 a gift is gift sets first; a spa evening is the spa routine', () => {
   const gift = advisor.advise({ profile: said('Je cherche un cadeau pour ma mère') });
   assert.equal(gift.playbook.key, 'gift');
   assert.ok(KNOWLEDGE.get(gift.steps[0].handle).gift || KNOWLEDGE.get(gift.steps[0].handle).functional_type === 'kit');
   const spa = advisor.advise({ profile: said('I want a spa evening at home') });
   assert.equal(spa.playbook.key, 'spa');
   assert.ok(types(spa).includes('mask'));
-  const budget = build({ ...said("J'ai un petit budget"), primary_concern: nl('dehydration'), routine_scope: q('complete') });
-  assert.equal(budget.scope, 'essential');
-  assert.equal(advisor.treat({ profile: { budget: q('small') } }), null);
   assert.ok(advisor.treat({ profile: { primary_concern: nl('dehydration') } }));
+});
+
+test('budget (owner): « petit budget » or « trop cher » is a « petit plaisir » for the concern instead of a routine', () => {
+  for (const words of ["J'ai un petit budget", "C'est trop cher", 'That is too expensive']) {
+    const a = build({ ...said(words), primary_concern: nl('dehydration'), routine_scope: q('complete') });
+    assert.equal(a.playbook.key, 'treat', words);
+    assert.equal(a.steps.length, 1);
+    assert.ok(K(a.steps[0]).treat);
+    assert.ok(a.total_price <= ROUTINES.treats.max_price);
+  }
+  // The treat is the advice: no second one after it.
+  assert.equal(advisor.treat({ profile: { budget: q('small') } }), null);
+});
+
+test('budget: a ceiling cuts the routine to fit, keeps the concern\'s step, says what it left out', () => {
+  const full = build({ primary_concern: nl('dehydration'), skin_type: q('normal') });
+  assert.ok(full.total_price > 60);
+  const cut = build({ primary_concern: nl('dehydration'), skin_type: q('normal'), budget_max: q('60') });
+  assert.ok(cut.total_price <= 60);
+  assert.ok(types(cut).includes('serum'));
+  assert.ok(cut.skipped.some((s) => s.reason === 'over_budget'));
+  assert.deepEqual(cut.budget.dropped.length, cut.skipped.filter((s) => s.reason === 'over_budget').length);
+  // Below even the serum: a treat within the ceiling.
+  const low = build({ primary_concern: nl('dehydration'), budget_max: q('15') });
+  assert.equal(low.playbook.key, 'treat');
+  assert.ok(low.total_price <= 15);
+});
+
+test('budget: the cheaper of two products that fit about as well; each size priced on its button', () => {
+  const sized = advisor.advise({ profile: { primary_concern: nl('dehydration'), skin_type: q('dry'), sensitivity: q('none'), current_routine: q(['none']) }, mode: 'routine_builder', locale: 'fr' });
+  const essential = sized.next_question.options.find((o) => o.value === 'essential');
+  const complete = sized.next_question.options.find((o) => o.value === 'complete');
+  assert.ok(essential.total > 0 && complete.total > essential.total);
 });
 
 test('the lexicon reads the new requests and « visage sec » / « dry face », in French and English', () => {

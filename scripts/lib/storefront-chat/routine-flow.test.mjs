@@ -181,3 +181,18 @@ test('« oui » to a routine after a one-product request builds a routine, not o
   assert.equal(r2.advisor.profile.desired_care_type, undefined);
   assert.equal(r2.advisor.mode === 'routine_builder' || (r2.trace.advice.steps ?? []).length > 1, true);
 });
+
+// BUDGET through the agent, on the foundation engine (the routines bench).
+const BENCH = read('data/advisor/sample-routines/catalogue.json');
+const BENCH_SHEET = read('data/advisor/sample-routines/knowledge.json');
+const BENCH_KNOWLEDGE = knowledgeIndex(parseKnowledgeRows(BENCH_SHEET.rows, { concerns: BENCH_SHEET.concerns }).products);
+const benchAgent = (client) => createLlmAgent({ client, company: { name: 'Lumen' }, catalogue: BENCH, advisor: createAdvisor(CONFIG, BENCH, { knowledge: BENCH_KNOWLEDGE, routines: read('data/advisor/sample-routines/routines.json') }), productKnowledge: BENCH_KNOWLEDGE });
+
+test('« trop cher »: a « petit plaisir » with its price, and neither the routine offer nor a second treat after it', async () => {
+  const client = scripted(answer('Je vous propose un petit plaisir plus doux pour votre budget.'));
+  const reply = await benchAgent(client).respond({ message: "C'est trop cher pour moi, j'ai le visage déshydraté", context: { locale: 'fr' } });
+  assert.equal(reply.trace.advice.playbook, 'treat');
+  assert.equal(reply.followUp, undefined);
+  assert.match(client.calls.at(-1).system, /"total_price":"\d+[,.]\d{2}/);
+  assert.match(client.calls.at(-1).system, /playbook treat is a small affordable treat/);
+});

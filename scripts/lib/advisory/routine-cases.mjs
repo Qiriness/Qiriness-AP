@@ -23,6 +23,8 @@
  *     no_handles       products never shown (out of stock, not advised)
  *     kit_first        the first product is a kit or a gift set
  *     no_treat         no treat is offered
+ *     max_total        the routine's price is at most this (the products' « from » prices)
+ *     dropped          at least this many steps left out for the budget
  */
 
 const both = (id, fr, en, rest) => [
@@ -121,11 +123,29 @@ export const ROUTINE_CASES = [
     'An anti-wrinkle routine for my face',
     { builder: true, expect: { foundation: ['E'], status: 'recommended', every: 'not_premium' } }),
 
-  // § 4 — budget: the essential size, no treat.
+  // Budget (owner, 2026-10-13): a small budget gets a « petit plaisir » for the concern INSTEAD of a routine (treats are cheaper).
   ...both('small-budget',
     "J'ai un petit budget, une routine pour mon visage déshydraté",
     'I have a small budget, a routine for my dehydrated face',
-    { builder: true, expect: { foundation: ['A'], status: 'recommended', steps: [2, 3], no_treat: true } }),
+    { builder: true, expect: { foundation: ['treat'], status: 'recommended', steps: [1, 1], max_total: 25, targets: [{ type: 'mask', any: ['dehydration', 'dryness'] }], no_treat: true } }),
+
+  // The same said the other way: « c'est trop cher ».
+  ...both('too-expensive',
+    "C'est trop cher pour moi, j'ai le visage déshydraté",
+    'That is too expensive for me, my face is dehydrated',
+    { builder: true, expect: { foundation: ['treat'], status: 'recommended', steps: [1, 1], max_total: 25 } }),
+
+  // A ceiling: the routine cut to fit, the concern's step kept, what was left out said.
+  ...both('budget-ceiling',
+    'Une routine pour mon visage déshydraté, moins de 60 euros',
+    'A routine for my dehydrated face, under 60 euros',
+    { builder: true, expect: { foundation: ['A'], status: 'recommended', types: ['serum'], max_total: 60, dropped: 1, no_treat: true } }),
+
+  // A ceiling below even the concern's product: a « petit plaisir » within it.
+  ...both('budget-too-low',
+    'Une routine pour mon visage déshydraté, 15 euros max',
+    'A routine for my dehydrated face, 15 euros max',
+    { builder: true, expect: { foundation: ['treat'], status: 'recommended', steps: [1, 1], max_total: 15 } }),
 
   // § 3.4 — a gift: gift sets first.
   ...both('gift',

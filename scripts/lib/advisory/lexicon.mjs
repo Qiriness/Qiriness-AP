@@ -90,6 +90,7 @@ const L = {
   scope: keyed('scope', SCOPE_ORDER),
   requests: keyed('requests', REQUEST_ORDER),
   budgetSmall: union((l) => l.budgetSmall),
+  budgetAmount: LANGUAGES.flatMap((l) => l.budgetAmount ?? []),
   age: LANGUAGES.flatMap((l) => l.age),
   ageWords: LANGUAGES.flatMap((l) => l.ageWords),
   routineBuilder: union((l) => l.routineBuilder),
@@ -103,7 +104,7 @@ const ALL_PATTERNS = [
   L.eyes, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.routineBuilder, L.dontKnow,
   ...L.concerns.map(([re]) => re), ...L.skinTypes.map(([, re]) => re), ...L.sensitivity.map(([, re]) => re),
   ...L.routineSteps.map(([, re]) => re), ...L.desired.map(([, re]) => re), ...L.scope.map(([, re]) => re),
-  ...L.requests.map(([, re]) => re), L.budgetSmall,
+  ...L.requests.map(([, re]) => re), L.budgetSmall, ...L.budgetAmount,
   ...L.exclusions, ...L.routineClauses, ...L.age, ...L.ageWords.map(([re]) => re)
 ];
 const NEUTRAL = new Set(LANGUAGES.flatMap((l) => [...l.markers, ...l.fillers]));
@@ -203,6 +204,9 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
   const request = L.requests.find(([, re]) => re.test(text));
   if (request) add('request', request[0], 'high');
   if (L.budgetSmall.test(text)) add('budget', 'small', 'high');
+  const amount = L.budgetAmount.map((re) => text.match(re)).find(Boolean);
+  // Under 5 is a count, not a price (« max 3 »).
+  if (amount && Number(amount[1]) >= 5) add('budget_max', String(Number(amount[1])), 'high');
 
   const age = L.age.map((re) => text.match(re)).find(Boolean);
   const band = age ? ageBand(Number(age[1])) : ageBand(L.ageWords.find(([re]) => re.test(text))?.[1]);

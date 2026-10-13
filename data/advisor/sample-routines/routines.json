@@ -545,7 +545,7 @@
   },
   "preferences": {
     "men": "a preference, not a routine: men's products ranked first in each step, others still possible",
-    "budget": "a small budget: the essential size, no treat",
+    "budget": "a small budget (« petit budget », « trop cher »): a « petit plaisir » for their concern instead of a routine, since treats are cheaper (owner, 2026-10-13); a ceiling (« moins de 60 € »): the routine cut to fit, optional steps first, the concern's step last, and a treat under the ceiling when even that step is over",
     "exclusions": "an ingredient the customer avoids is never in any step",
     "basic_routine": "foundation G only when asked for (« juste une routine de base »); « je ne sais pas ce qu'il me faut » gets one useful question instead"
   },
@@ -608,7 +608,7 @@
       "asks_masks_or_spa": "recommend a treat directly",
       "likes_wraps": "suggest a relevant daily-care complement",
       "full_routine": "one relevant treat at most, if appropriate",
-      "small_budget": "no treat",
+      "small_budget": "a « petit plaisir » for their concern instead of a routine (owner, 2026-10-13; the plan had « no upsell »)",
       "gift": "gift sets and spa experiences first",
       "end_of_consultation": "optional, never automatic"
     },
@@ -657,6 +657,7 @@
     "G": "G",
     "eyes": "eyes",
     "gift": "gift",
-    "spa": "spa"
+    "spa": "spa",
+    "treat": "treat"
   }
 }

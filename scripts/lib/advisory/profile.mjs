@@ -27,7 +27,9 @@ export const FIELDS = {
   // What they ask for beyond a routine for a need (plan § 3.1, § 3.4): a basic
   // routine, a gift, a spa evening; and a small budget (essential, no treat).
   request: { multi: false },
-  budget: { multi: false }
+  budget: { multi: false },
+  /** A spending ceiling for the routine, in the shop's currency (« moins de 60 € »). */
+  budget_max: { multi: false }
 };
 
 export const SOURCES = ['quick_choice', 'natural_language', 'model_inferred', 'page_context', 'inferred'];
@@ -67,6 +69,7 @@ export function allowedValues(vocabulary) {
 export function isValidUpdate(update, allowed) {
   if (!update || !FIELDS[update.field]) return false;
   if (update.field === 'preferences' || update.field === 'known_exclusions') return typeof update.value === 'string' && FREE_TEXT.test(update.value);
+  if (update.field === 'budget_max') return typeof update.value === 'string' && /^[1-9]\d{0,4}$/.test(update.value);
   return (allowed[update.field] ?? []).includes(update.value);
 }
 

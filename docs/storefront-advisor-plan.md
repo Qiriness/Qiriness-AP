@@ -106,7 +106,7 @@ Tick items as they land; move each one's rationale into `docs/decisions/` when i
 - [ ] **The most useful question first** (partly, 2026-10-13: the foundation engine asks only a field that changes the routine, in the brand's order, never age; the concern is still asked first when none is known): score each unanswered field by how much its answer changes the result; prefer skin traits (« Usually dry or oily in the T-zone? », « Does your skin react easily? ») over asking the customer to name a concern (today: « Déshydratation / Sensibilité / Sécheresse / Rougeurs ? »). Never age first.
 - [ ] Allow **one** such question outside the builder when the engine is not confident, instead of recommending blind.
 - [ ] Conversational chips in FR and EN (partly, 2026-10-13: the size chips come from `routines.questions.chips`; the skin type chips still use the config's labels): sizes « Essentielle (2–3 produits) / Complète (4–5) / Rituel spa / J'ai déjà des produits »; skin type « Plutôt sèche / Grasse sur la zone T / … ».
-- [ ] Optional: the total price of each size on its chip, computed from the catalogue.
+- [x] The total price of each size on its chip, computed from the products it would hold (2026-10-13, foundation engine): « Essentielle (2–3 produits) · 98 € ».
 
 ### 3.4 Treats (commercial offers, separate from advice)
 
@@ -117,7 +117,7 @@ Wraps, patches and kits are the entry door (Wraps in 48 % of first orders), but 
 | Asks about masks or spa | Recommend directly |
 | Has bought or likes Wraps | Suggest a relevant daily-care complement |
 | Builds a full routine | One relevant treat at most, if appropriate |
-| Small budget | No upsell |
+| Small budget | A « petit plaisir » for their concern instead of a routine (owner, 2026-10-13: treats are usually cheaper; was « no upsell ») |
 | Buying a gift | Gift sets and spa experiences first |
 | End of consultation | Optional, never automatic |
 
@@ -128,7 +128,7 @@ Wraps, patches and kits are the entry door (Wraps in 48 % of first orders), but 
 
 ## 4. Evaluation (must pass before deployment)
 
-**The bench** (2026-10-13): `data/advisor/sample-routines/` holds INVENTED routines for § 3.1–3.4 (`routines.json`: the 7 foundations as ordered product types, sizes, modules, secondary effects, preferences, questions, treats) and 51 invented products that fill them, each with a type and the concerns it targets. `scripts/lib/advisory/routine-cases.mjs` holds the cases below plus the owner's « no doubling » rule, in FR and EN, judged on product types and target concerns, never on product names. `npm run advisor:score` runs today's engine on them. **Baseline: 14/38 (37 %)** (`score-baseline.json`); **the foundation engine: 38/38** (`score-foundations.json`, 2026-10-13). The failures below were the baseline's: - « dry skin » is a skin type only, so « je suis un homme, peau sèche » and « visage très sec » get a concern question (§ 3.1);
+**The bench** (2026-10-13): `data/advisor/sample-routines/` holds INVENTED routines for § 3.1–3.4 (`routines.json`: the 7 foundations as ordered product types, sizes, modules, secondary effects, preferences, questions, treats) and 51 invented products that fill them, each with a type and the concerns it targets. `scripts/lib/advisory/routine-cases.mjs` holds the cases below plus the owner's « no doubling » rule, in FR and EN, judged on product types and target concerns, never on product names. `npm run advisor:score` runs today's engine on them. **Baseline: 14/38 (37 %)** (`score-baseline.json`); **the foundation engine: 44/44** with the budget cases (`score-foundations.json`, 2026-10-13). The failures below were the baseline's: - « dry skin » is a skin type only, so « je suis un homme, peau sèche » and « visage très sec » get a concern question (§ 3.1);
 - « rides » is shared by three of the old playbooks, so « un sérum pour les rides » gets a question (§ 3.1, the 7 foundations);
 - essential has no cleanser (§ 3.2);
 - dry + dull + wrinkles picks Éclat, not Hydration or Anti-âge: a secondary concern switches the foundation instead of filling a step (§ 3.1);

@@ -24,8 +24,13 @@ The owner's model (plan § 3.1–3.4): a routine is a foundation's ordered list 
 - **Sizes are rules over the list:** essential = the daily required steps; complete = every daily step plus the relevant modules (eyes for an eye concern; SPF in Taches); spa adds the occasional steps; targeted is one (the type asked for, else the step that targets the concern). A small budget is essential, with no treat.
 - **An owned type is not doubled** (owner): « j'utilise déjà un nettoyant » skips the cleanser step, unless that step is the one their concern needs (`targets: primary`): « j'ai un sérum hydratant mais des taches » still gets the anti-spot serum, with `concern_needs_specific_product` so the reply says why.
 - **Hard rules before the score:** stock, « Ne pas conseiller », type and area, men's products only for a man, skin « Non adapté », « Déconseillé » for sensitive skin, the customer's exclusions, and a concern step needs a product that targets the concern (never pad). **The score:** the primary concern, the secondary ones, skin « Idéal », texture by skin type, the preferred range, premium only when a concern justifies it, men's first for a man, the customer's range.
-- **§ 3.4:** « cadeau » gives gift sets first, « soirée spa » the spa treat routine, both new profile `request` values read by the lexicon (FR/EN) with `budget: small`.
-- **Measured:** `npm run advisor:score` 38/38 on the bench (the playbooks: 14/38). The bench is invented: the real score waits for Qiriness's spreadsheet.
+- **§ 3.4:** « cadeau » gives gift sets first, « soirée spa » the spa treat routine, both new profile `request` values read by the lexicon (FR/EN).
+- **Budget** (owner, 2026-10-13, replacing the plan's « small budget: no upsell »):
+  - a small budget, said either way (« petit budget », « pas cher », or « c'est trop cher », « vous avez moins cher ? », "too expensive", "can't afford"), gets a « petit plaisir » for their concern INSTEAD of a routine, because treats are usually cheaper; no routine offer and no second treat after it;
+  - a ceiling (« moins de 60 € », « 40 euros max », "under 60"; a number under 5 or followed by « ans », « produits », « étapes » is not a price) cuts the routine to fit: optional steps first, then the required ones that are not the concern's step, the concern's step last; what was left out is said (`over_budget`), and when even that step is over, a treat within the ceiling;
+  - with a budget, the cheaper of two products within 0.15 of the best fit;
+  - the routine's price (`total_price`) and each size's price on its button come from the engine; the model quotes them, never adds them up.
+- **Measured:** `npm run advisor:score` 44/44 on the bench with the budget cases (the playbooks: 14/38 before them). The bench is invented: the real score waits for Qiriness's spreadsheet.
 
 ### The routine builder is a skill: its rules and tools only while it is open (2026-10-13)
 

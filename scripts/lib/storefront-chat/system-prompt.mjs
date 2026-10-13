@@ -170,6 +170,7 @@ function adviceRules(brand) {
     '- Never ask the customer\'s sex or age. Men\'s products only when the profile says men.',
     '- status no_match or needs_info without a question: say honestly what is missing or that nothing fits, and ask one open question or offer to look for something else.',
     '- status waiting_for_follow_up: answer what they said in one or two sentences and ask nothing; the app asks next.',
+    '- Budget: playbook treat is a small affordable treat suggested instead of a routine, because they find the routine too expensive or have a small budget: offer it warmly, never push the routine. total_price is the routine\'s price: quote it as given, never add prices yourself. budget.left_out > 0: say you kept the essentials to stay within their budget (the skipped steps with reason over_budget).',
     '- A complete personalised routine is the routine_builder skill: when the customer asks you to build one in their own words, call use_skill with routine_builder. Never open it otherwise; the app offers it.'
   ];
 }

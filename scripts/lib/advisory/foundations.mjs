@@ -22,6 +22,12 @@
  *   product      hard rules (stock, advisable, type, area, men, exclusions,
  *                skin « Non adapté », sensitive « Déconseillé »), then a score
  *   never pad    a step with no eligible product is said, never filled
+ *   budget       « petit budget » / « trop cher »: a « petit plaisir » for their
+ *                concern INSTEAD of a routine (owner, 2026-10-13: treats are
+ *                cheaper); a ceiling (« moins de 60 € »): the routine trimmed to
+ *                fit (optional steps first, the concern's step last), and a
+ *                treat under it when even that step is over; with a budget, the
+ *                cheaper of two products that fit about as well
  *
  * Same advice shape as the playbook engine (recommend.mjs), which it replaces
  * for a shop that has routines and product knowledge (side by side, owner).
@@ -53,6 +59,8 @@ export const WEIGHTS = {
   primary: 1, primaryAmongOthers: 0.6, foundationConcern: 0.4, secondary: 0.3, secondaryCap: 0.6,
   skinIdeal: 0.3, skinSuitable: 0.1, texture: 0.3, textureMismatch: -0.3, preferredRange: 0.4, premiumRange: 0.6,
   caution: -0.2, unjustifiedPremium: -1, men: 0.8, customerRange: 0.15,
+  /** With a budget, a product this close to the best fit and cheaper takes its place. */
+  budgetWindow: 0.15,
 };
 
 /**
@@ -91,6 +99,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       desired: DESIRED_TYPE[valueOf(profile, 'desired_care_type')] ?? null,
       request: valueOf(profile, 'request'),
       budget: valueOf(profile, 'budget'),
+      budgetMax: Number(valueOf(profile, 'budget_max')) || null,
       area: valueOf(profile, 'body_area'),
     };
   }
@@ -245,6 +254,12 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         if (at >= 0) ranked[0].reasons = [...ranked[0].reasons, FIT.CUSTOMER_INTEREST];
       }
       if (!ranked.length) { skipped.push({ slot, kind, reason: SKIPPED.NO_ELIGIBLE_PRODUCT, optional }); continue; }
+      // With a budget: the cheapest of the products that fit about as well as the best.
+      if ((c.budget || c.budgetMax) && !pin) {
+        const close = ranked.filter((r) => r.s >= ranked[0].s - WEIGHTS.budgetWindow);
+        const cheapest = close.reduce((a, b) => ((b.x.product.priceFrom ?? Infinity) < (a.x.product.priceFrom ?? Infinity) ? b : a));
+        if (cheapest !== ranked[0]) { ranked.splice(ranked.indexOf(cheapest), 1); ranked.unshift(cheapest); }
+      }
       const [top, ...rest] = ranked;
       used.add(top.x.id);
       steps.push({
@@ -258,7 +273,41 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       });
     }
     for (const x of wanted) if (!placed.some((p) => p.product_id === x.id)) placed.push({ product_id: x.id, handle: x.handle, status: PINNED.NO_STEP });
-    return { f, scope, steps, skipped, pinned: placed, c };
+    const budget = c.budgetMax ? withinBudget(steps, skipped, plan, c.budgetMax) : null;
+    return { f, scope, steps, skipped, pinned: placed, c, budget };
+  }
+
+  const priceOf = (s) => byId.get(s.product_id)?.product.priceFrom ?? 0;
+  const totalOf = (steps) => Math.round(steps.reduce((n, s) => n + priceOf(s), 0) * 100) / 100;
+
+  /**
+   * A ceiling: drop steps until the routine fits. Optional steps first, then
+   * the required ones that are not the concern's step, from the last; the
+   * concern's step goes last. Dropped steps are said (`over_budget`).
+   */
+  function withinBudget(steps, skipped, plan, max) {
+    const dropped = [];
+    const stepOf = (s) => plan.find((p) => (p.module ? `module_${p.module}` : `${p.type}_${p.order}`) === s.slot);
+    const rank = (s) => (s.optional ? 0 : stepOf(s)?.targets === 'primary' ? 2 : 1);
+    while (steps.length && totalOf(steps) > max) {
+      const victim = [...steps].sort((a, b) => rank(a) - rank(b) || steps.indexOf(b) - steps.indexOf(a))[0];
+      steps.splice(steps.indexOf(victim), 1);
+      skipped.push({ slot: victim.slot, kind: victim.kind, reason: SKIPPED.OVER_BUDGET, product_id: victim.product_id, handle: victim.handle });
+      dropped.push(victim.slot);
+    }
+    return { max, total: totalOf(steps), dropped };
+  }
+
+  /** A « petit plaisir » for their concern, instead of a routine (owner): within the ceiling when there is one. */
+  function budgetTreat(c, max) {
+    const ceiling = Math.min(routines.treats?.max_price ?? Infinity, max ?? Infinity);
+    const fit = (x) => [x.k.primary_concern, ...x.k.other_concerns].filter((t) => c.concerns.includes(t)).length;
+    const pool = products
+      .filter((x) => x.k.treat && x.product.inStock && x.k.status !== 'do_not_advise' && (!x.k.men || c.men) && x.product.priceFrom <= ceiling)
+      .sort((a, b) => fit(b) - fit(a) || a.product.priceFrom - b.product.priceFrom || a.name.localeCompare(b.name));
+    if (!pool.length) return null;
+    const [top, ...rest] = pool;
+    return [{ slot: 'treat', kind: KIND[top.k.functional_type] ?? top.k.functional_type, type: top.k.functional_type, optional: false, product_id: top.id, handle: top.handle, alternatives: rest.slice(0, 2).map((x) => ({ product_id: x.id, handle: x.handle })), reason_codes: ['budget_treat', ...(fit(top) ? [`${FIT.PRIMARY_CONCERN}:${[top.k.primary_concern, ...top.k.other_concerns].find((t) => c.concerns.includes(t))}`] : [])], merchandised: null, scores: { suitability: fit(top), routine_fit: 0, total: fit(top) } }];
   }
 
   /** § 3.4: a gift (gift sets first) or a spa evening (the treat routine). */
@@ -294,10 +343,16 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     return question('primary_concern', values, locale, 'missing');
   }
 
-  function sizeQuestion(locale) {
+  function sizeQuestion(locale, profile, history) {
     const q = question('routine_scope', QUESTION_OPTIONS.routine_scope.filter((v) => allowed.routine_scope.includes(v)), locale, 'changes_recommendation');
     const labels = sizeLabels[String(locale).slice(0, 2)] ?? sizeLabels.fr;
     if (labels?.length === q.options.length) q.options = q.options.map((o, i) => ({ ...o, label: labels[i] }));
+    // Each size's price, from the products it would hold (plan § 3.3): the channel formats it.
+    q.options = q.options.map((o) => {
+      if (o.value === 'complete_existing') return o;
+      const r = evaluate(withAnswer(profile, 'routine_scope', o.value), 'routine_builder', history);
+      return r?.steps?.length ? { ...o, total: totalOf(r.steps) } : o;
+    });
     return q;
   }
 
@@ -308,7 +363,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       if (!field || field === 'primary_concern' || isAnswered(profile, field) || asked.includes(field)) continue;
       const values = (QUESTION_OPTIONS[field] ?? []).filter((v) => v === 'unknown' || String(v).split('+').every((x) => allowed[field]?.includes(x)));
       const outcomes = new Set(values.filter((v) => v !== 'unknown').map((v) => signature(evaluate(withAnswer(profile, field, v), 'routine_builder', history))));
-      if (outcomes.size > 1) return field === 'routine_scope' ? sizeQuestion(locale) : question(field, values, locale, 'changes_recommendation');
+      if (outcomes.size > 1) return field === 'routine_scope' ? sizeQuestion(locale, profile, history) : question(field, values, locale, 'changes_recommendation');
     }
     return null;
   }
@@ -325,6 +380,12 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         if (!r) return { ...base(mode), status: STATUS.NO_MATCH, reason: NO_MATCH.NO_PRODUCT };
         return { ...base(mode), status: STATUS.RECOMMENDED, playbook: { key: r.key, route: null, scope: null, preferred_family: null, notes: [] }, scope: request, area: 'face', steps: r.steps, considered: r.steps.length };
       }
+      // « Petit budget », « trop cher », no amount: a « petit plaisir » instead of a routine (owner).
+      const budgetSaid = valueOf(profile, 'budget') === 'small' && !Number(valueOf(profile, 'budget_max'));
+      if (budgetSaid) {
+        const treat = budgetTreat(read(profile), null);
+        if (treat) return { ...base(mode), status: STATUS.RECOMMENDED, playbook: { key: 'treat', route: null, scope: 'targeted', preferred_family: null, notes: ['a small budget: a « petit plaisir » rather than a routine'] }, scope: 'targeted', area: 'face', steps: treat, considered: 1, total_price: totalOf(treat) };
+      }
       const result = evaluate(profile, mode, history);
       if (result.none) return { ...base(mode), status: STATUS.NO_MATCH, reason: result.none };
       if (result.missing) {
@@ -334,6 +395,11 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       if (mode === 'routine_builder' && asked.length < MAX_BUILDER_QUESTIONS + 2) {
         const q = nextQuestion(profile, asked, history, locale);
         if (q) return { ...base(mode), status: STATUS.NEEDS_INFO, reason: 'routine_builder', playbook: summary(result.f, null), next_question: q };
+      }
+      // A ceiling even the concern's step is over: a « petit plaisir » under it.
+      if (result.budget && !result.steps.length) {
+        const treat = budgetTreat(result.c, result.budget.max);
+        if (treat) return { ...base(mode), status: STATUS.RECOMMENDED, playbook: { key: 'treat', route: null, scope: 'targeted', preferred_family: null, notes: ['the routine is over the budget: a « petit plaisir » within it'] }, scope: 'targeted', area: 'face', steps: treat, considered: 1, total_price: totalOf(treat), budget: { ...result.budget, total: totalOf(treat) } };
       }
       return {
         ...base(mode),
@@ -345,6 +411,8 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         steps: result.steps,
         skipped: result.skipped,
         considered: result.steps.length,
+        total_price: totalOf(result.steps),
+        ...(result.budget ? { budget: result.budget } : {}),
         ...(result.pinned.length ? { pinned: result.pinned } : {}),
       };
     },
@@ -352,7 +420,8 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     /** One « petit plaisir » (§ 3.4): never with a small budget, never in the routine. */
     treat({ profile = {}, exclude = [] } = {}) {
       const c = read(profile);
-      if (c.budget === 'small') return null;
+      // With a budget the advice already is the treat, or a routine cut to fit: nothing more.
+      if (c.budget === 'small' || c.budgetMax) return null;
       const skip = new Set(exclude);
       const max = routines.treats?.max_price ?? Infinity;
       const pool = products.filter((x) => x.k.treat && x.product.inStock && x.k.status !== 'do_not_advise' && !skip.has(x.id) && (!x.k.men || c.men) && x.product.priceFrom <= max);

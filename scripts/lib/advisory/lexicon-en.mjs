@@ -114,7 +114,13 @@ export default {
     gift: /\b(gift|present for|to offer|for (my|a) (mother|mum|mom|wife|friend|sister|girlfriend|daughter) (who|for her))\b/,
     spa: /\b(spa (evening|night|day|ritual|treatment)|at home spa|home spa|pamper(ing)?( myself)?|self care evening)\b/
   },
-  budgetSmall: /\b(small budget|on a budget|tight budget|limited budget|affordable|inexpensive|cheap|not too expensive)\b/,
+  // A small budget, said either way: « affordable » or « too expensive » (owner, 2026-10-13).
+  budgetSmall: /\b(small budget|on a budget|tight budget|limited budget|affordable|inexpensive|cheap|cheaper|not too expensive|too expensive|too pricey|(a bit|quite|very|so) (expensive|pricey)|pricey|costs too much|less expensive|can t afford|cannot afford|out of my budget|over my budget|beyond my budget|outside my budget)\b/,
+  // A ceiling, in the normalised text: « under 60 », « 40 euros max ». Group 1: the amount.
+  budgetAmount: [
+    /\b(?:under|less than|below|no more than|up to|max|maximum|at most|budget of|budget is|budget around)\s(\d{1,4})\b(?! (?:ans?|ml|jours?|semaines?|mois|minutes?|min|h|heures?|fois|produits?|etapes?|soins?|years?|yo|days?|weeks?|months?|hours?|times|products?|steps?))/,
+    /\b(\d{1,4}) (?:euros? |dollars? |pounds? |eur |usd |gbp )?(?:max|maximum|tops|at most)\b/
+  ],
 
   age: [/\b(?:i am|i m|im) (\d{2})\b/, /\b(\d{2}) (?:years? old|yo|y o)\b/],
   ageWords: [[/\b(twenties|20s)\b/, 25], [/\b(thirties|30s)\b/, 35], [/\b(forties|40s)\b/, 45], [/\b(fifties|50s)\b/, 55], [/\b(sixties|seventies|60s|70s)\b/, 65]],

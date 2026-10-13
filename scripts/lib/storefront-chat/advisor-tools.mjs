@@ -187,7 +187,8 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
     /** The next question's options as chips — from the engine, never the model. */
     choices() {
       const q = advice?.next_question;
-      return q ? q.options.map((o) => ({ label: o.label, value: `profile:${q.field}:${o.value}` })) : [];
+      // A size's price (foundation engine), formatted by the shop's currency: « Essentielle (2–3 produits) · 98 € ».
+      return q ? q.options.map((o) => ({ label: typeof o.total === 'number' ? `${o.label} · ${money(o.total)}` : o.label, value: `profile:${q.field}:${o.value}` })) : [];
     },
 
     /** What the message log keeps for the next turn. */
@@ -237,7 +238,10 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
         alternatives: s.alternatives.map((x) => ({ handle: x.handle, name: byId.get(x.product_id)?.name ?? null }))
       })),
       // already_owned: a product they said they still use fills it; the model says to keep theirs.
-      skipped_steps: a.skipped.map((s) => ({ step: s.slot, reason: s.reason, ...(s.product_id ? { customer_product: byId.get(s.product_id)?.name ?? null } : {}) })),
+      skipped_steps: a.skipped.map((s) => ({ step: s.slot, reason: s.reason, ...(s.product_id && s.reason !== 'over_budget' ? { customer_product: byId.get(s.product_id)?.name ?? null } : {}) })),
+      // The routine's price, and what a budget left out: quoted from here, never computed by the model.
+      ...(typeof a.total_price === 'number' ? { total_price: money(a.total_price) } : {}),
+      ...(a.budget ? { budget: { max: money(a.budget.max), total: money(a.budget.total), left_out: a.budget.dropped.length } } : {}),
       // The product they came for, when it could not go in: say why, briefly.
       ...((a.pinned ?? []).some((p) => p.status !== 'placed') ? { customer_interest_not_used: a.pinned.filter((p) => p.status !== 'placed').map((p) => ({ name: byId.get(p.product_id)?.name ?? null, why: p.status })) } : {}),
       ...(a.defaulted ? { defaulted_after_question: true } : {})

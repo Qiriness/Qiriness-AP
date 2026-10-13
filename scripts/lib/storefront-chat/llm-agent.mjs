@@ -319,7 +319,9 @@ export function createLlmAgent({
         }
         const finalAdvice = advisorTurn.advice;
         const runningLow = purchaseAnswer?.answer === 'running_low' ? { product_id: purchaseAnswer.productId, name: byId(purchaseAnswer.productId)?.name ?? '' } : null;
-        const treatDue = !flow.treat_offered && (flowStart.answer === 'no' || (builder && finalAdvice?.status === 'recommended'));
+        // A budget treat already is the treat: never another one, never the routine offer after it.
+        const budgetTreat = finalAdvice?.playbook?.key === 'treat';
+        const treatDue = !budgetTreat && !flow.treat_offered && (flowStart.answer === 'no' || (builder && finalAdvice?.status === 'recommended'));
         const treat = treatDue
           ? advisor.treat({ profile: advisorTurn.profile, exclude: [...(finalAdvice?.steps ?? []).flatMap((s) => [s.product_id]), ...purchaseState.around] })
           : null;
@@ -330,7 +332,7 @@ export function createLlmAgent({
           builder,
           answer: flowStart.answer,
           advice: finalAdvice,
-          showsProducts: !otherTopic && (finalAdvice?.status === 'recommended' || resolvedIds.size > 0),
+          showsProducts: !otherTopic && !budgetTreat && (finalAdvice?.status === 'recommended' || resolvedIds.size > 0),
           anchor: anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds], advice: finalAdvice }),
           purchaseAsk,
           runningLow,

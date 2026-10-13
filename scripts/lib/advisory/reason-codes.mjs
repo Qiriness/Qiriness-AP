@@ -44,6 +44,8 @@ export const SKIPPED = {
   ALREADY_IN_ROUTINE: 'already_in_routine',
   /** A product the customer said they still use fills this step (`product_id`). */
   ALREADY_OWNED: 'already_owned',
+  /** Left out to keep the routine within the customer's budget. */
+  OVER_BUDGET: 'over_budget',
   NO_ELIGIBLE_PRODUCT: 'no_eligible_product'
 };
 
