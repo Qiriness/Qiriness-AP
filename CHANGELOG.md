@@ -10,6 +10,18 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Product knowledge spreadsheet: « Électrocosmétique », « Toute la journée », « Masque tissu » (2026-10-14)
+
+- **A greasy-skin foundation** (owner added G « Peaux grasse » / « Greasy Skin » to the Routines tab; the basic routine moved to H). Rules tab: « G Peaux grasse » in the concerns' foundation dropdown; peau grasse proposed as G when nothing else is the main need, like dry skin → A (yellow); the basic routine row now says « Fondation H » (yellow); an open question `q_oily` (does « Excès de sébum » / « Pores dilatés » stay in B?). Routines title: 8 fondations. Exactly 9 cells changed. Engine: the basic routine is the foundation marked « only on explicit request », not the literal key G. The oily-skin choice itself is not wired until Qiriness confirms it.
+
+- **Cream masks and sheet masks are two types** (owner: « the paper masques are the treat and not the cream ones »). « Masque tissu » (`sheet_mask`) joins the dropdown; « Masque » is the cream mask. The type decides the « Petit plaisir » flag for both: a sheet mask is always a treat, a cream mask never, whatever the column says. A routine's mask step takes a cream mask only; the « Soirée spa » takes a sheet mask first. Neither is replenished. Invented sample sheets: two bench masks and the old sample's mask became « Masque tissu », the two others lost their treat flag; the small-budget cases now expect a sheet mask.
+- **In the filled copy** (yellow): seven masks become « Masque tissu » (Hyal-Aqua, Wrap d'Or, Wrap Éclat, Wrap Apaisant, Wrap Purifiant, and the hand and foot masks, confirmed by the owner); the clay mask Wrap Terre d'Orient stays a cream mask and its « Petit plaisir » goes to « Non ». Backup taken; exactly these 8 cells changed.
+- **Routines tab:** « Masque tissu » added to the step-type dropdown (with a help message), and a legend line (row 5): a « Masque » step is a cream mask; a sheet mask is the treat, offered apart, and fills no « Masque » step except in the « Soirée spa ». The mask steps themselves stay « Masque ». Only that legend cell changed.
+
+- **« Moment » gains « Toute la journée »** (owner; `all_day` in the importer), for products used at any time (a mist, a perfume, sun protection reapplied). Only the dropdown changed; no cell was filled.
+- **A type for devices** (owner): « Électrocosmétique » in the Products dropdown (`device`); the « Masque LED Visage Éclat & Régénération » moves from « Accessoire » (yellow). It fills no routine step and is not replenished, like an accessory. The face sauna (boiling water), the gua sha and the eye roller are not electrical and are unchanged.
+- **Proven:** root suite pass, `advisor:score` 50/50; every other cell verified unchanged.
+
 ## Product knowledge spreadsheet: « Autre type » next to the main type (2026-10-14)
 
 - **`data/advisor/qiriness-knowledge-template.xlsx`, Products:** « Type fonctionnel » keeps the main types as a dropdown, with « Autre » in place of « Hors routine »; a new free-text column « Autre type » (`other_type`) after it, for what an « Autre » product is (peignoir, déodorant, parfum…). Inserted in place in the filled copy; validations, merged legend rows, filter and frozen panes shifted; every other cell verified unchanged against a backup.
