@@ -19,7 +19,7 @@
 
 /** The Products tab's columns, by their (key) names, in order. */
 export const TEMPLATE_KEYS = [
-  'handle', 'title', 'price', 'stock', 'range', 'status', 'functional_type', 'ritual_stage', 'frequency', 'usage_weeks',
+  'handle', 'title', 'price', 'stock', 'range', 'status', 'functional_type', 'other_type', 'ritual_stage', 'frequency', 'usage_weeks',
   'measured_repurchase_weeks', 'measured_repurchase_detail', 'time_of_day', 'area', 'primary_concern', 'other_concerns',
   'skin_dry', 'skin_normal', 'skin_combination', 'skin_oily', 'texture', 'sensitive', 'contains', 'precautions', 'compatibility',
   'men', 'premium', 'treat', 'gift', 'kit_contents', 'usage', 'actives', 'faq_count', 'note',
@@ -30,6 +30,9 @@ const SKIPPED_STATUS = new Set(['À valider', 'Exemple', '']);
 
 export const FUNCTIONAL_TYPES = {
   'Nettoyant': 'cleanser',
+  // A make-up remover also cleanses (owner, 2026-10-14): it fills a « Nettoyant »
+  // step too, while a cleanser never fills a « Démaquillant » step. See ALSO_FILLS.
+  'Démaquillant': 'makeup_remover',
   'Exfoliant': 'exfoliant',
   'Lotion': 'lotion',
   'Sérum': 'serum',
@@ -37,8 +40,16 @@ export const FUNCTIONAL_TYPES = {
   'SPF': 'spf',
   'Yeux': 'eye',
   'Masque': 'mask',
-  'Coffret / kit': 'kit',
+  // Not the same thing (owner, 2026-10-14). A coffret: products also sold on their
+  // own, boxed together (« Coffret Temps Sublime », a duo). A kit: a pack for one
+  // ritual or treatment (« Kit 4 Masques », « Kit Rituel Spa »). Both may list their
+  // contents; the engine treats them alike until the owner says how they differ.
+  'Coffret': 'coffret',
+  'Kit': 'kit',
   'Accessoire': 'tool',
+  // Anything else (a bathrobe, a deodorant, a perfume): « Autre type » says what.
+  'Autre': 'out_of_routine',
+  // The template's earlier label for the same thing.
   'Hors routine': 'out_of_routine',
 };
 const ENUMS = {
@@ -87,6 +98,9 @@ export function parseKnowledgeRows(rows, { concerns }) {
     const record = { handle, status: pick('status', STATUS) };
     record.functional_type = pick('functional_type', FUNCTIONAL_TYPES);
     if (!record.functional_type && !rowErrors.length) bad('functional_type', '(vide)');
+    // « Autre type »: what a product of type « Autre » is, in the shop's words; only for that type.
+    record.other_type = record.functional_type === 'out_of_routine' ? text(row.other_type) || null : null;
+    if (text(row.other_type) && record.functional_type && record.functional_type !== 'out_of_routine') bad('other_type', 'only for « Autre »');
     record.range = text(row.range) || null;
     for (const [field, map] of Object.entries(ENUMS)) record[field] = pick(field, map);
 
@@ -113,7 +127,7 @@ export function parseKnowledgeRows(rows, { concerns }) {
     for (const flag of FLAGS) record[flag] = pick(flag, YES_NO);
 
     record.kit_contents = list(row.kit_contents);
-    if (record.kit_contents.length && record.functional_type !== 'kit') bad('kit_contents', 'only for « Coffret / kit »');
+    if (record.kit_contents.length && !isBundle(record)) bad('kit_contents', 'only for « Coffret » or « Kit »');
     for (const h of record.kit_contents) if (!handles.has(h) || h === handle) bad('kit_contents', h);
 
     if (rowErrors.length) errors.push(...rowErrors);
@@ -121,6 +135,15 @@ export function parseKnowledgeRows(rows, { concerns }) {
   }
   return { products, skipped, errors };
 }
+
+/** The other step types a product type can fill, besides its own. */
+const ALSO_FILLS = { makeup_remover: ['cleanser'] };
+/** Whether a product (its knowledge) can fill a step of this type. */
+export const fillsStep = (record, type) => record?.functional_type === type || (ALSO_FILLS[record?.functional_type] ?? []).includes(type);
+
+/** A coffret or a kit: several products in one, standing for its contents. */
+export const BUNDLE_TYPES = new Set(['coffret', 'kit']);
+export const isBundle = (record) => BUNDLE_TYPES.has(record?.functional_type);
 
 /** Records by handle, for the engine and the purchase turn. */
 export function knowledgeIndex(products) {
@@ -130,5 +153,5 @@ export function knowledgeIndex(products) {
 /** A kit's contents, as handles; a product that is not a kit is itself. */
 export function coveredHandles(handle, index) {
   const k = index?.get(handle);
-  return k?.functional_type === 'kit' && k.kit_contents.length ? k.kit_contents : [handle];
+  return isBundle(k) && k.kit_contents.length ? k.kit_contents : [handle];
 }

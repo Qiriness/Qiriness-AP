@@ -21,6 +21,7 @@ import { selectPlaybook } from './select-playbook.mjs';
 import { exclusionOf, rankSlot, suitability, wantedTexture } from './ranking.mjs';
 import { EXCLUSION, FIT, NO_MATCH, PINNED, SKIPPED, STATUS } from './reason-codes.mjs';
 import { createFoundationAdvisor } from './foundations.mjs';
+import { isBundle } from './product-knowledge.mjs';
 
 /** Questions the routine builder may ask beyond the gates, at most. */
 export const MAX_BUILDER_QUESTIONS = 4;
@@ -58,13 +59,13 @@ export function createAdvisor(rawConfig, catalogue, { knowledge = null, routines
   const byId = new Map(signals.map((s) => [s.id, s]));
   const byHandle = new Map(signals.map((s) => [s.handle, s]));
 
-  /** Products the customer still uses, a kit standing for what it contains. */
+  /** Products the customer still uses, a coffret or kit standing for what it contains. */
   function ownedSignals(ids) {
     const out = [];
     for (const id of ids ?? []) {
       const sig = byId.get(id);
       if (!sig) continue;
-      const contents = sig.knowledge?.functional_type === 'kit' ? sig.knowledge.kit_contents : [];
+      const contents = isBundle(sig.knowledge) ? sig.knowledge.kit_contents : [];
       for (const s of contents.length ? contents.map((h) => byHandle.get(h)).filter(Boolean) : [sig]) if (!out.includes(s)) out.push(s);
     }
     return out;

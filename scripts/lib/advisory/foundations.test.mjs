@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { createAdvisor } from './recommend.mjs';
 import { extractProfile } from './lexicon.mjs';
 import { mergeProfile } from './profile.mjs';
-import { knowledgeIndex, parseKnowledgeRows } from './product-knowledge.mjs';
+import { fillsStep, isBundle, knowledgeIndex, parseKnowledgeRows } from './product-knowledge.mjs';
 
 // The foundation engine (plan § 3.1–3.4), one rule per test, on the INVENTED
 // routines bench (data/advisor/sample-routines/). The full scorecard is
@@ -118,7 +118,7 @@ test('§ 3.3 questions: only those that change the routine, in the brand\'s orde
 test('§ 3.4 a gift is gift sets first; a spa evening is the spa routine', () => {
   const gift = advisor.advise({ profile: said('Je cherche un cadeau pour ma mère') });
   assert.equal(gift.playbook.key, 'gift');
-  assert.ok(KNOWLEDGE.get(gift.steps[0].handle).gift || KNOWLEDGE.get(gift.steps[0].handle).functional_type === 'kit');
+  assert.ok(KNOWLEDGE.get(gift.steps[0].handle).gift || isBundle(KNOWLEDGE.get(gift.steps[0].handle)));
   const spa = advisor.advise({ profile: said('I want a spa evening at home') });
   assert.equal(spa.playbook.key, 'spa');
   assert.ok(types(spa).includes('mask'));
@@ -194,4 +194,18 @@ test('« trop cher » after one product: the cheapest of its type for the same n
   assert.equal(serum.playbook.key, 'treat');
   // In the builder the budget rules stay: no « cheaper » step-by-step.
   assert.notEqual(build({ ...said("C'est trop cher"), primary_concern: nl('dehydration') }, { previous: previous('t-creme-aqua') }).playbook.key, 'cheaper');
+});
+
+test('a make-up remover also cleanses: it fills the cleanser step; a cleanser never fills a make-up remover step', () => {
+  assert.ok(fillsStep({ functional_type: 'makeup_remover' }, 'cleanser'));
+  assert.ok(!fillsStep({ functional_type: 'cleanser' }, 'makeup_remover'));
+  const cleanser = (a) => a.steps.find((s) => s.slot.startsWith('cleanser'));
+  const profile = { primary_concern: q('dryness'), skin_type: q('dry'), routine_scope: q('essential') };
+  const before = cleanser(build(profile));
+  assert.ok(before, 'the bench routine has a cleanser step');
+  // The same product as a « Démaquillant »: still chosen for that step.
+  const remover = new Map(KNOWLEDGE);
+  remover.set(before.handle, { ...KNOWLEDGE.get(before.handle), functional_type: 'makeup_remover' });
+  const again = cleanser(createAdvisor(CONFIG, CATALOGUE, { knowledge: remover, routines: ROUTINES }).advise({ profile, mode: 'routine_builder', asked: ASKED }));
+  assert.equal(again?.handle, before.handle);
 });

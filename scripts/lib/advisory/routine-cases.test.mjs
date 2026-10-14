@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { FUNCTIONAL_TYPES, TEMPLATE_KEYS, knowledgeIndex, parseKnowledgeRows } from './product-knowledge.mjs';
+import { FUNCTIONAL_TYPES, TEMPLATE_KEYS, isBundle, knowledgeIndex, parseKnowledgeRows } from './product-knowledge.mjs';
 import { ROUTINE_CASES } from './routine-cases.mjs';
 
 // The invented routines bench stays consistent: every step of every foundation
@@ -41,7 +41,7 @@ test('the modules, the men\'s range and the treats have products', () => {
   for (const type of ['eye', 'spf']) assert.ok(advisable.some((k) => k.functional_type === type), type);
   assert.ok(advisable.some((k) => k.men && k.functional_type === 'cream') && advisable.some((k) => k.men && k.functional_type === 'cleanser'));
   assert.ok(advisable.some((k) => k.treat && CATALOGUE.products.find((p) => p.handle === k.handle).priceFrom <= ROUTINES.treats.max_price));
-  for (const r of ROUTINES.treats.treat_routines) assert.ok(KNOWLEDGE.get(r.kit)?.functional_type === 'kit', r.kit);
+  for (const r of ROUTINES.treats.treat_routines) assert.ok(isBundle(KNOWLEDGE.get(r.kit)), r.kit);
 });
 
 test('the cases: unique ids, French and English, expectations that name real types and products', () => {

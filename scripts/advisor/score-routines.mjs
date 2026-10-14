@@ -80,7 +80,7 @@ function judge(c, r) {
     if (menExists && !s.knowledge?.men) fails.push(`the ${s.knowledge?.functional_type} is not the men's one`);
   }
   for (const h of e.no_handles ?? []) if (shown.includes(h)) fails.push(`shows ${h}`);
-  if (e.kit_first && !(r.steps[0] && (r.steps[0].knowledge?.functional_type === 'kit' || r.steps[0].knowledge?.gift))) fails.push(`first product ${r.steps[0]?.handle ?? 'none'}, expected a gift set`);
+  if (e.kit_first && !(r.steps[0] && (['coffret', 'kit'].includes(r.steps[0].knowledge?.functional_type) || r.steps[0].knowledge?.gift))) fails.push(`first product ${r.steps[0]?.handle ?? 'none'}, expected a gift set`);
   if (e.no_treat && r.treat) fails.push(`offers a treat (${byId.get(r.treat.product_id)?.handle})`);
   const total = r.steps.reduce((n, s) => n + (byId.get(s.product_id)?.priceFrom ?? 0), 0);
   if (e.max_total !== undefined && total > e.max_total) fails.push(`costs ${total}, expected at most ${e.max_total}`);

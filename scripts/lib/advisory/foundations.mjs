@@ -42,6 +42,7 @@ import { mergeProfile, valueOf, isAnswered } from './profile.mjs';
 import { ingredientWords } from './ingredients.mjs';
 import { hasPhrase, norm } from './text.mjs';
 import { FIT, NO_MATCH, PINNED, SKIPPED, STATUS } from './reason-codes.mjs';
+import { fillsStep, isBundle } from './product-knowledge.mjs';
 
 const MAX_BUILDER_QUESTIONS = 4;
 /** Profile current_routine kinds → product types. */
@@ -49,7 +50,7 @@ const OWNED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'c
 /** The engine's desired care types → product types. */
 const DESIRED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'cream', serum: 'serum', lotion: 'lotion', mask: 'mask', eye_care: 'eye', booster: 'serum' };
 /** The engine's step kinds per product type, for the conversation layer (Phase 2's « already owned » and its prompts). */
-const KIND = { cleanser: 'cleanser', lotion: 'lotion', exfoliant: 'lotion', serum: 'serum', cream: 'moisturiser', spf: 'spf', eye: 'eye_care', mask: 'mask', kit: 'kit' };
+const KIND = { cleanser: 'cleanser', makeup_remover: 'cleanser', lotion: 'lotion', exfoliant: 'lotion', serum: 'serum', cream: 'moisturiser', spf: 'spf', eye: 'eye_care', mask: 'mask', kit: 'kit' };
 const QUESTION_FIELDS = { concern: 'primary_concern', skin_type: 'skin_type', sensitivity: 'sensitivity', current_routine: 'current_routine', size: 'routine_scope' };
 const QUESTION_OPTIONS = {
   skin_type: ['dry', 'normal', 'combination', 'oily', 'unknown'],
@@ -148,7 +149,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   function eligible(x, step, f, c, used) {
     const k = x.k;
     if (used.has(x.id) || k.status === 'do_not_advise' || !x.product.inStock) return false;
-    if (k.functional_type !== step.type || k.functional_type === 'kit') return false;
+    if (!fillsStep(k, step.type) || isBundle(k)) return false;
     if ((step.type === 'eye' ? 'eyes' : 'face') !== (k.area ?? 'face')) return false;
     if (k.men && !c.men) return false;
     if (c.skin && k.skin?.[c.skin] === 'unsuitable') return false;
@@ -193,7 +194,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     return ids.flatMap((id) => {
       const x = byId.get(id);
       if (!x) return [];
-      return x.k.functional_type === 'kit' && x.k.kit_contents.length ? x.k.kit_contents.map((h) => byHandle.get(h)).filter(Boolean) : [x];
+      return isBundle(x.k) && x.k.kit_contents.length ? x.k.kit_contents.map((h) => byHandle.get(h)).filter(Boolean) : [x];
     });
   }
 
@@ -221,8 +222,8 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     let plan = stepsFor(f, scope, c);
     // A product they came for brings its step in when the size has none (§ the routine flow).
     for (const x of wanted) {
-      if (!plan.some((s) => s.type === x.k.functional_type)) {
-        const extra = f.steps.find((s) => s.type === x.k.functional_type);
+      if (!plan.some((s) => fillsStep(x.k, s.type))) {
+        const extra = f.steps.find((s) => fillsStep(x.k, s.type));
         if (extra && scope !== 'targeted') plan = [...plan, extra];
         if (extra && scope === 'targeted') plan = [extra];
       }
@@ -235,7 +236,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       const slot = step.module ? `module_${step.module}` : `${step.type}_${step.order}`;
       const kind = KIND[step.type] ?? step.type;
       const optional = !step.required;
-      const theirs = mine.find((x) => x.k.functional_type === step.type);
+      const theirs = mine.find((x) => fillsStep(x.k, step.type));
       if (theirs) {
         mine.splice(mine.indexOf(theirs), 1);
         skipped.push({ slot, kind, reason: SKIPPED.ALREADY_OWNED, product_id: theirs.id, handle: theirs.handle });
@@ -249,7 +250,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         if (step.targets !== 'primary') { skipped.push({ slot, kind, reason: SKIPPED.ALREADY_IN_ROUTINE }); continue; }
         keptForConcern = true;
       }
-      const pin = wanted.find((x) => x.k.functional_type === step.type && !used.has(x.id));
+      const pin = wanted.find((x) => fillsStep(x.k, step.type) && !used.has(x.id));
       const pool = products.filter((x) => eligible(x, step, f, c, used));
       // A man: his range first among the suitable products (owner: « ranked first, others still
       // possible »); a sensitive-skin cleanser outscored the men's one in the customer batch.
@@ -329,7 +330,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
    */
   function cheaperThan(previousId, profile) {
     const prev = byId.get(previousId);
-    if (!prev || prev.k.functional_type === 'kit') return null;
+    if (!prev || isBundle(prev.k)) return null;
     const c = read(profile);
     const choice = chooseFoundation(c);
     // The main need: theirs, else what the product they found too expensive was for.
@@ -366,7 +367,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     const fit = (x) => [x.k.primary_concern, ...x.k.other_concerns].filter((t) => c.concerns.includes(t)).length;
     const available = products.filter((x) => x.product.inStock && x.k.status !== 'do_not_advise' && (!x.k.men || c.men));
     if (request === 'gift') {
-      const gifts = available.filter((x) => x.k.gift || x.k.functional_type === 'kit').sort((a, b) => fit(b) - fit(a) || (b.k.functional_type === 'kit') - (a.k.functional_type === 'kit') || a.product.priceFrom - b.product.priceFrom);
+      const gifts = available.filter((x) => x.k.gift || isBundle(x.k)).sort((a, b) => fit(b) - fit(a) || isBundle(b.k) - isBundle(a.k) || a.product.priceFrom - b.product.priceFrom);
       if (!gifts.length) return null;
       return { key: 'gift', steps: [{ slot: 'gift', kind: 'kit', type: 'kit', optional: false, product_id: gifts[0].id, handle: gifts[0].handle, alternatives: gifts.slice(1, 3).map((x) => ({ product_id: x.id, handle: x.handle })), reason_codes: ['gift'], merchandised: null, scores: { suitability: fit(gifts[0]), routine_fit: 0, total: fit(gifts[0]) } }] };
     }

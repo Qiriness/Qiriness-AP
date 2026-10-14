@@ -31,7 +31,7 @@ test('the sample is complete: every product has every column of the template, an
   assert.equal(SHEET.rows.length, CATALOGUE.products.length);
   for (const row of SHEET.rows) {
     assert.deepEqual(Object.keys(row), TEMPLATE_KEYS, row.handle);
-    for (const key of TEMPLATE_KEYS.filter((k) => !['kit_contents', 'measured_repurchase_weeks', 'measured_repurchase_detail'].includes(k))) {
+    for (const key of TEMPLATE_KEYS.filter((k) => !['kit_contents', 'other_type', 'measured_repurchase_weeks', 'measured_repurchase_detail'].includes(k))) {
       assert.notEqual(String(row[key] ?? '').trim(), '', `${row.handle} ${key}`);
     }
   }
@@ -52,7 +52,16 @@ test('the importer rejects what the dropdowns do not allow, and reads a blank as
   assert.deepEqual(fieldsOf(one({ usage_weeks: '3,5' })), ['usage_weeks']);
   assert.deepEqual(fieldsOf(one({ skin_dry: 'Oui' })), ['skin_dry']);
   assert.deepEqual(fieldsOf(one({ kit_contents: 'test-serum-hydratant-aqua' })), ['kit_contents']);
-  assert.deepEqual(fieldsOf(one({ functional_type: 'Coffret / kit', kit_contents: 'test-inconnu' })), ['kit_contents']);
+  assert.deepEqual(fieldsOf(one({ functional_type: 'Coffret', kit_contents: 'test-inconnu' })), ['kit_contents']);
+  // Coffret and kit are two types; the old joint label is refused, to be chosen again.
+  assert.deepEqual(fieldsOf(one({ functional_type: 'Coffret / kit' })), ['functional_type']);
+  const kit = one({ functional_type: 'Kit', kit_contents: 'test-serum-hydratant-aqua' }).products.find((p) => p.handle === 'test-x');
+  assert.deepEqual([kit.functional_type, kit.kit_contents], ['kit', ['test-serum-hydratant-aqua']]);
+  assert.deepEqual(fieldsOf(one({ other_type: 'Peignoir' })), ['other_type']);
+  const other = one({ functional_type: 'Autre', other_type: 'Peignoir' }).products.find((p) => p.handle === 'test-x');
+  assert.deepEqual([other.functional_type, other.other_type], ['out_of_routine', 'Peignoir']);
+  assert.equal(one({ functional_type: 'Hors routine' }).products.find((p) => p.handle === 'test-x').functional_type, 'out_of_routine');
+  assert.equal(one({ functional_type: 'Démaquillant' }).products.find((p) => p.handle === 'test-x').functional_type, 'makeup_remover');
   const blank = one({ skin_oily: '', texture: '', men: '' });
   const rec = blank.products.find((p) => p.handle === 'test-x');
   assert.equal(rec.skin.oily, null);

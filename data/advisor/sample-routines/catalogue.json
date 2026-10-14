@@ -1828,7 +1828,7 @@
       "shopifyId": "gid://shopify/Product/700047",
       "handle": "t-kit-masques",
       "name": "Kit 4 Masques Wrap (test)",
-      "type": "Coffret / kit",
+      "type": "Kit",
       "tags": [
         "test",
         "tous les types de peaux",
@@ -1866,7 +1866,7 @@
       "shopifyId": "gid://shopify/Product/700048",
       "handle": "t-coffret-hydratation",
       "name": "Coffret Rituel Hydratation (test)",
-      "type": "Coffret / kit",
+      "type": "Coffret",
       "tags": [
         "crème riche",
         "peaux sèches",
@@ -1904,7 +1904,7 @@
       "shopifyId": "gid://shopify/Product/700049",
       "handle": "t-coffret-temps",
       "name": "Coffret Anti-âge Temps (test)",
-      "type": "Coffret / kit",
+      "type": "Coffret",
       "tags": [
         "anti-âge",
         "liftant",
@@ -1944,7 +1944,7 @@
       "shopifyId": "gid://shopify/Product/700050",
       "handle": "t-coffret-spa",
       "name": "Coffret Soirée Spa (test)",
-      "type": "Coffret / kit",
+      "type": "Coffret",
       "tags": [
         "test",
         "tous les types de peaux",

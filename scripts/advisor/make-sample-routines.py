@@ -26,7 +26,7 @@ TAG = {'Perte de fermeté': ['liftant'], 'Rides': ['rides', 'anti-âge'], 'Teint
 SLOT = {
     'Nettoyant': ['nettoyants-et-lotions'], 'Lotion': ['exfoliant-lotion-gommage'], 'Exfoliant': ['exfoliant-lotion-gommage'],
     'Sérum': ['serums-visage'], 'Crème': ['cremes-hydratantes', 'cremes-de-jour'], 'Yeux': ['soins-contour-des-yeux'],
-    'Masque': ['masques-patch'], 'SPF': [], 'Coffret / kit': [], 'Accessoire': [], 'Hors routine': [],
+    'Masque': ['masques-patch'], 'SPF': [], 'Coffret': [], 'Kit': [], 'Accessoire': [], 'Hors routine': [], 'Autre': [],
 }
 SKIN_TAGS = {'dry': 'peaux sèches', 'normal': 'peaux normales', 'combination': 'peaux mixtes', 'oily': 'peaux grasses'}
 # The real config's ranges (families), so « preferred range » means something to today's engine.
@@ -97,10 +97,10 @@ p('t-baume-homme-riche', 'Baume Hydratant Homme Riche (test)', 36, 'Homme (test)
 p('t-fluide-homme-anti-age', 'Fluide Anti-âge Homme (test)', 42, 'Homme (test)', 'Crème', 'Rides', 'Perte de fermeté', ALL, 'Légère', men='Oui')
 # Treats and gifts (§ 3.4)
 p('t-patchs-yeux', 'Patchs Yeux Défatigants (test)', 15, 'Énergie (test)', 'Masque', 'Cernes', 'Poches', ALL, area='Yeux', freq='Occasionnel', weeks=1, stage='Régénérer', treat='Oui')
-p('t-kit-masques', 'Kit 4 Masques Wrap (test)', 24, 'Aqua (test)', 'Coffret / kit', 'Déshydratation', 'Teint terne', ALL, freq='Occasionnel', weeks=4, stage='Régénérer', treat='Oui', gift='Oui', kit='t-masque-aqua, t-masque-energie')
-p('t-coffret-hydratation', 'Coffret Rituel Hydratation (test)', 89, 'Aqua (test)', 'Coffret / kit', 'Déshydratation', 'Sécheresse', DRY, 'Riche', gift='Oui', kit='t-lait-aqua, t-serum-aqua, t-creme-aqua-riche')
-p('t-coffret-temps', 'Coffret Anti-âge Temps (test)', 99, 'Temps (test)', 'Coffret / kit', 'Rides', 'Perte de fermeté', ALL, premium='Oui', gift='Oui', kit='t-serum-temps, t-creme-temps')
-p('t-coffret-spa', 'Coffret Soirée Spa (test)', 39, 'Aqua (test)', 'Coffret / kit', 'Déshydratation', 'Signes de fatigue', ALL, freq='Occasionnel', treat='Oui', gift='Oui', kit='t-masque-aqua, t-patchs-yeux, t-gommage-aqua')
+p('t-kit-masques', 'Kit 4 Masques Wrap (test)', 24, 'Aqua (test)', 'Kit', 'Déshydratation', 'Teint terne', ALL, freq='Occasionnel', weeks=4, stage='Régénérer', treat='Oui', gift='Oui', kit='t-masque-aqua, t-masque-energie')
+p('t-coffret-hydratation', 'Coffret Rituel Hydratation (test)', 89, 'Aqua (test)', 'Coffret', 'Déshydratation', 'Sécheresse', DRY, 'Riche', gift='Oui', kit='t-lait-aqua, t-serum-aqua, t-creme-aqua-riche')
+p('t-coffret-temps', 'Coffret Anti-âge Temps (test)', 99, 'Temps (test)', 'Coffret', 'Rides', 'Perte de fermeté', ALL, premium='Oui', gift='Oui', kit='t-serum-temps, t-creme-temps')
+p('t-coffret-spa', 'Coffret Soirée Spa (test)', 39, 'Aqua (test)', 'Coffret', 'Déshydratation', 'Signes de fatigue', ALL, freq='Occasionnel', treat='Oui', gift='Oui', kit='t-masque-aqua, t-patchs-yeux, t-gommage-aqua')
 # Never recommended
 p('t-creme-retiree', 'Crème Ancienne Formule (test)', 30, 'Aqua (test)', 'Crème', 'Sécheresse', 'Déshydratation', DRY, 'Riche', status='Ne pas conseiller')
 
@@ -129,7 +129,7 @@ for n, x in enumerate(P, start=1):
     })
     rows.append({
         'handle': x['handle'], 'title': x['name'], 'price': x['price'], 'stock': 100 if x['in_stock'] else 0, 'range': x['range'],
-        'status': x['status'], 'functional_type': x['functional_type'], 'ritual_stage': x['stage'], 'frequency': x['frequency'], 'usage_weeks': x['weeks'],
+        'status': x['status'], 'functional_type': x['functional_type'], 'other_type': '', 'ritual_stage': x['stage'], 'frequency': x['frequency'], 'usage_weeks': x['weeks'],
         'measured_repurchase_weeks': None, 'measured_repurchase_detail': '', 'time_of_day': x['time'], 'area': x['area'],
         'primary_concern': x['primary'], 'other_concerns': x['others'],
         'skin_dry': skin[0], 'skin_normal': skin[1], 'skin_combination': skin[2], 'skin_oily': skin[3],

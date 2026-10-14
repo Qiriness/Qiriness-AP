@@ -270,13 +270,14 @@
   "_functional_types_note": "Product knowledge (spreadsheet « Type fonctionnel ») → the step kinds a product the customer still uses fills (Phase 2). One product fills one step at most. A kit fills nothing itself: its « Contenu du coffret » does.",
   "functional_types": {
     "cleanser": ["cleanser", "body_cleanser"],
+    "makeup_remover": ["cleanser"],
     "exfoliant": ["lotion"],
     "lotion": ["lotion"],
     "serum": ["serum", "booster"],
     "cream": ["moisturiser", "night_cream", "body_moisturiser"],
     "eye": ["eye_care"],
     "mask": ["mask", "body_treatment"],
-    "spf": [], "kit": [], "tool": [], "out_of_routine": []
+    "spf": [], "coffret": [], "kit": [], "tool": [], "out_of_routine": []
   },
 
   "_treats_note": "« Petit plaisir » offered once after a routine, or when the customer declines one (owner, 2026-10-13). Product knowledge `treat` decides once imported; until then, these collections under max_price (owner: €25).",
