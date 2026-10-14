@@ -120,7 +120,7 @@ const S = {
   gift: {
     what: 'A gift, in passing.',
     turns: { fr: [{ say: "C'est pour l'anniversaire de ma sœur, elle adore prendre soin de sa peau" }], en: [{ say: "It's for my sister's birthday, she loves looking after her skin" }] },
-    check: ([r]) => [cardsOf(r).some((c) => k(c).gift || k(c).functional_type === 'kit') || 'no gift set among the cards'],
+    check: ([r]) => [cardsOf(r).some((c) => k(c).gift || ['coffret', 'kit'].includes(k(c).functional_type)) || 'no gift set among the cards'],
   },
   pamper: {
     what: 'A spa evening without the word spa.',
@@ -192,6 +192,8 @@ const only = flag('--only');
 const langs = flag('--lang') ? [flag('--lang')] : ['fr', 'en'];
 const line = (s = '') => console.log(s);
 const results = [];
+// Every turn's time, as the customer waits for it (the widget's request, minus the network).
+const timings = [];
 
 for (const [key, s] of Object.entries(S)) {
   if (only && key !== only) continue;
@@ -214,6 +216,7 @@ for (const [key, s] of Object.entries(S)) {
         choice = chip.value;
       }
       line(`  CUSTOMER  ${message}`);
+      const started = Date.now();
       try {
         last = await agent.respond({ message, choice, context, history, advisorState: advisorStateFromHistory(history), shopDomain: 'test.myshopify.com' });
       } catch (error) {
@@ -221,6 +224,10 @@ for (const [key, s] of Object.entries(S)) {
         break;
       }
       replies.push(last);
+      const ms = Date.now() - started;
+      const calls = last.trace?.calls ?? [];
+      timings.push({ id: `${key}.${lang}`, ms, modelCalls: calls.length, tools: (last.trace?.tools ?? []).length });
+      line(`  TIME      ${(ms / 1000).toFixed(1)} s (${calls.length ? `${calls.length} model call${calls.length > 1 ? 's' : ''}: ${calls.map((c) => (c / 1000).toFixed(1)).join(' + ')} s` : 'no model call'})`);
       line(`  ADVISOR   ${last.text.replace(/\n+/g, ' ')}`);
       if (cardsOf(last).length) line(`  CARDS     ${cardsOf(last).map((c) => `${c.title} ${byId(c.id)?.priceFrom ?? ''}€`).join(' | ')}`);
       if (last.followUp) line(`  ADVISOR²  ${last.followUp.text}`);
@@ -238,4 +245,10 @@ for (const [key, s] of Object.entries(S)) {
 }
 line(`\n${results.filter((r) => r.pass).length}/${results.length} situations as expected (${model}).`);
 for (const r of results.filter((x) => !x.pass)) line(`  FAIL ${r.id}: ${r.fails.join('; ')}`);
-if (flag('--json')) fs.writeFileSync(path.resolve(flag('--json')), `${JSON.stringify({ at: new Date().toISOString(), model, results }, null, 2)}\n`);
+const pct = (xs, q) => { const v = [...xs].sort((a, b) => a - b); return v.length ? v[Math.min(v.length - 1, Math.floor(q * v.length))] : 0; };
+const sec = (ms) => `${(ms / 1000).toFixed(1)} s`;
+const report = (label, xs) => xs.length && line(`  ${label.padEnd(26)} ${String(xs.length).padStart(3)} turns  median ${sec(pct(xs, 0.5))}  p90 ${sec(pct(xs, 0.9))}  max ${sec(Math.max(...xs))}`);
+line('\nResponse time per customer message:');
+report('all', timings.map((t) => t.ms));
+for (const n of [0, 1, 2, 3]) report(n ? `${n} model call${n > 1 ? 's' : ''}${n === 3 ? '+' : ''}` : 'no model call (code)', timings.filter((t) => (n === 3 ? t.modelCalls >= 3 : t.modelCalls === n)).map((t) => t.ms));
+if (flag('--json')) fs.writeFileSync(path.resolve(flag('--json')), `${JSON.stringify({ at: new Date().toISOString(), model, results, timings }, null, 2)}\n`);
