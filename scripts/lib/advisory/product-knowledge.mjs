@@ -39,13 +39,19 @@ export const FUNCTIONAL_TYPES = {
   'Crème': 'cream',
   'SPF': 'spf',
   'Yeux': 'eye',
+  // A cream mask and a sheet mask are two types (owner, 2026-10-14): the sheet
+  // mask is the treat, the cream mask is not. The type decides `treat` for both
+  // (see parseKnowledgeRows); a routine's mask step takes the cream one.
   'Masque': 'mask',
+  'Masque tissu': 'sheet_mask',
   // Not the same thing (owner, 2026-10-14). A coffret: products also sold on their
   // own, boxed together (« Coffret Temps Sublime », a duo). A kit: a pack for one
   // ritual or treatment (« Kit 4 Masques », « Kit Rituel Spa »). Both may list their
   // contents; the engine treats them alike until the owner says how they differ.
   'Coffret': 'coffret',
   'Kit': 'kit',
+  // A device (an LED mask, owner 2026-10-14): fills no step, like an accessory.
+  'Électrocosmétique': 'device',
   'Accessoire': 'tool',
   // Anything else (a bathrobe, a deodorant, a perfume): « Autre type » says what.
   'Autre': 'out_of_routine',
@@ -55,7 +61,7 @@ export const FUNCTIONAL_TYPES = {
 const ENUMS = {
   ritual_stage: { 'Préparer': 'prepare', 'Activer': 'activate', 'Optimiser': 'optimise', 'Régénérer': 'regenerate' },
   frequency: { 'Quotidien': 'daily', 'Occasionnel': 'occasional' },
-  time_of_day: { 'Matin': 'morning', 'Soir': 'evening', 'Matin et soir': 'morning_and_evening' },
+  time_of_day: { 'Matin': 'morning', 'Soir': 'evening', 'Matin et soir': 'morning_and_evening', 'Toute la journée': 'all_day' },
   area: { 'Visage': 'face', 'Yeux': 'eyes', 'Lèvres': 'lips', 'Corps': 'body', 'Mains': 'hands', 'Pieds': 'feet' },
   texture: { 'Riche': 'rich', 'Standard': 'standard', 'Légère': 'light' },
   sensitive: { 'Adapté': 'suitable', 'Avec précaution': 'caution', 'Déconseillé': 'avoid' },
@@ -64,6 +70,8 @@ const SKIN = { 'Idéal': 'ideal', 'Adapté': 'suitable', 'Non adapté': 'unsuita
 const SKIN_COLUMNS = { skin_dry: 'dry', skin_normal: 'normal', skin_combination: 'combination', skin_oily: 'oily' };
 const YES_NO = { 'Oui': true, 'Non': false };
 const FLAGS = ['men', 'premium', 'treat', 'gift'];
+/** The types whose type alone says whether they are a treat (owner, 2026-10-14). */
+const TREAT_BY_TYPE = { sheet_mask: true, mask: false };
 const HANDLE = /^[a-z0-9][a-z0-9-]{0,254}$/;
 
 const text = (v) => (v === null || v === undefined ? '' : String(v).trim());
@@ -125,6 +133,7 @@ export function parseKnowledgeRows(rows, { concerns }) {
     record.precautions = text(row.precautions) || null;
     record.compatibility = text(row.compatibility) || null;
     for (const flag of FLAGS) record[flag] = pick(flag, YES_NO);
+    if (record.functional_type in TREAT_BY_TYPE) record.treat = TREAT_BY_TYPE[record.functional_type];
 
     record.kit_contents = list(row.kit_contents);
     if (record.kit_contents.length && !isBundle(record)) bad('kit_contents', 'only for « Coffret » or « Kit »');

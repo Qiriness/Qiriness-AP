@@ -18,7 +18,7 @@
 export const MIN_MEASURED_GAPS = 10;
 /** Past this many intervals they have most likely stopped or buy elsewhere: not mentioned. */
 export const STALE_AFTER = 3;
-const NOT_SCHEDULED = new Set(['mask', 'coffret', 'kit', 'tool', 'out_of_routine']);
+const NOT_SCHEDULED = new Set(['mask', 'sheet_mask', 'coffret', 'kit', 'device', 'tool', 'out_of_routine']);
 const WEEK_MS = 7 * 24 * 3600 * 1000;
 
 /** The measured file's rows by handle: the size with the most repurchases. */

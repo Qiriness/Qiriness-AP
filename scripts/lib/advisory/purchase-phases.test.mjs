@@ -61,6 +61,11 @@ test('the importer rejects what the dropdowns do not allow, and reads a blank as
   const other = one({ functional_type: 'Autre', other_type: 'Peignoir' }).products.find((p) => p.handle === 'test-x');
   assert.deepEqual([other.functional_type, other.other_type], ['out_of_routine', 'Peignoir']);
   assert.equal(one({ functional_type: 'Hors routine' }).products.find((p) => p.handle === 'test-x').functional_type, 'out_of_routine');
+  assert.equal(one({ time_of_day: 'Toute la journée' }).products.find((p) => p.handle === 'test-x').time_of_day, 'all_day');
+  // A sheet mask is a treat and a cream mask is not, whatever the « Petit plaisir » column says.
+  assert.equal(one({ functional_type: 'Masque tissu', treat: 'Non' }).products.find((p) => p.handle === 'test-x').treat, true);
+  assert.equal(one({ functional_type: 'Masque', treat: 'Oui' }).products.find((p) => p.handle === 'test-x').treat, false);
+  assert.equal(one({ functional_type: 'Électrocosmétique' }).products.find((p) => p.handle === 'test-x').functional_type, 'device');
   assert.equal(one({ functional_type: 'Démaquillant' }).products.find((p) => p.handle === 'test-x').functional_type, 'makeup_remover');
   const blank = one({ skin_oily: '', texture: '', men: '' });
   const rec = blank.products.find((p) => p.handle === 'test-x');

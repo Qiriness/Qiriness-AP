@@ -129,7 +129,7 @@ export const ROUTINE_CASES = [
   ...both('small-budget',
     "J'ai un petit budget, une routine pour mon visage déshydraté",
     'I have a small budget, a routine for my dehydrated face',
-    { builder: true, expect: { foundation: ['treat'], status: 'recommended', steps: [1, 1], max_total: 25, targets: [{ type: 'mask', any: ['dehydration', 'dryness'] }], no_treat: true } }),
+    { builder: true, expect: { foundation: ['treat'], status: 'recommended', steps: [1, 1], max_total: 25, targets: [{ type: 'sheet_mask', any: ['dehydration', 'dryness'] }], no_treat: true } }),
 
   // The same said the other way: « c'est trop cher ».
   ...both('too-expensive',

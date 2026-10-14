@@ -50,7 +50,7 @@ const OWNED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'c
 /** The engine's desired care types → product types. */
 const DESIRED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'cream', serum: 'serum', lotion: 'lotion', mask: 'mask', eye_care: 'eye', booster: 'serum' };
 /** The engine's step kinds per product type, for the conversation layer (Phase 2's « already owned » and its prompts). */
-const KIND = { cleanser: 'cleanser', makeup_remover: 'cleanser', lotion: 'lotion', exfoliant: 'lotion', serum: 'serum', cream: 'moisturiser', spf: 'spf', eye: 'eye_care', mask: 'mask', kit: 'kit' };
+const KIND = { cleanser: 'cleanser', makeup_remover: 'cleanser', lotion: 'lotion', exfoliant: 'lotion', serum: 'serum', cream: 'moisturiser', spf: 'spf', eye: 'eye_care', mask: 'mask', sheet_mask: 'mask', kit: 'kit' };
 const QUESTION_FIELDS = { concern: 'primary_concern', skin_type: 'skin_type', sensitivity: 'sensitivity', current_routine: 'current_routine', size: 'routine_scope' };
 const QUESTION_OPTIONS = {
   skin_type: ['dry', 'normal', 'combination', 'oily', 'unknown'],
@@ -113,7 +113,11 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
 
   /** The foundation (§ 3.1), or why there is none. */
   function chooseFoundation(c) {
-    if (c.request === 'basic_routine') return { key: 'G' };
+    // The basic routine is the foundation given only on request, whatever its key (G, then H in Qiriness's sheet).
+    if (c.request === 'basic_routine') {
+      const basic = routines.foundations.find((f) => f.only_on_explicit_request);
+      if (basic) return { key: basic.key };
+    }
     if (c.area === 'body') return { none: NO_MATCH.AREA_NOT_COVERED };
     const face = c.concerns.filter((x) => !eyeConcerns.has(x));
     const eyes = c.concerns.filter((x) => eyeConcerns.has(x));
@@ -377,7 +381,9 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     const used = new Set();
     for (const t of routine.types) {
       const [type, area] = t.split(':');
-      const pool = available.filter((x) => x.k.functional_type === type && (x.k.area ?? 'face') === (area ?? 'face') && !used.has(x.id)).sort((a, b) => fit(b) - fit(a) || a.product.priceFrom - b.product.priceFrom);
+      // A spa evening is a treat: its mask is a sheet mask first, a cream mask otherwise.
+      const fills = (k) => k.functional_type === type || (type === 'mask' && k.functional_type === 'sheet_mask');
+      const pool = available.filter((x) => fills(x.k) && (x.k.area ?? 'face') === (area ?? 'face') && !used.has(x.id)).sort((a, b) => Boolean(b.k.treat) - Boolean(a.k.treat) || fit(b) - fit(a) || a.product.priceFrom - b.product.priceFrom);
       if (!pool.length) continue;
       used.add(pool[0].id);
       steps.push({ slot: `spa_${t.replace(':', '_')}`, kind: KIND[type] ?? type, type, optional: false, product_id: pool[0].id, handle: pool[0].handle, alternatives: pool.slice(1, 3).map((x) => ({ product_id: x.id, handle: x.handle })), reason_codes: ['spa'], merchandised: null, scores: { suitability: fit(pool[0]), routine_fit: 0, total: fit(pool[0]) } });
