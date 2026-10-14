@@ -49,6 +49,7 @@ Needs the dev store (Supabase back) and `shopify app dev` restarted.
 1. **The routine button.** **Check:** build a routine; « Ajouter la routine au panier » adds every single-size product in one go, the cart count updates (or the next page shows them), the button reads « Ajouté au panier », and `advisory_events` has one `added_to_cart` per product. A product with several sizes is named under the button and not added.
 2. **The question.** **Check:** after the routine, « Souhaitez-vous que j'ajoute cette routine à votre panier ? »; « Oui, ajouter » adds them and shows « C'est dans votre panier. »; reloading the page adds nothing a second time. « Je cherche encore » adds nothing and the treat follows.
 3. **A single product.** **Check:** after the routine offer has been answered, a product answer asks « …l'ajoute à votre panier ? » once for that product; a typed « oui, ajoutez-le » adds it.
+4. **A slow reply (2026-10-14).** **Check:** a routine request shows the dots, then « Je regarde ça pour vous… » after about 1.5 s, and the reply replaces it; « Où en est ma commande 1004 ? » shows « Je vérifie votre commande… »; « Oui, ajouter » shows nothing (it is instant); the same in English. While there: does the app proxy pass a streamed response through (a test route sending text in chunks: do they arrive one by one)? That decides streaming.
 
 ## 55. Order status by number, the contact form link, the routine builder skill: live model on invented orders only — 2026-10-13
 

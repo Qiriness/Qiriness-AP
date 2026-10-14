@@ -342,7 +342,8 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |                                # (scripts/advisor/measure-repurchase.mjs, read-only)
 |                                # npm run advisor:try-batch (scripts/advisor/
 |                                # try-customer-batch.mjs): customer situations, FR + EN,
-|                                # judged on what the customer sees; live model, no database
+|                                # judged on what the customer sees; live model, no database;
+|                                # prints each turn's time and a summary by model calls
 |                                # npm run advisor:try-flow (scripts/advisor/
 |                                # try-routine-flow.mjs): the routine builder flow with
 |                                # the real agent and model on the sample set, FR + EN,

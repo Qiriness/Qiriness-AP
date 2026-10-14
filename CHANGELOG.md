@@ -10,6 +10,21 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Product knowledge spreadsheet: « Autre type » next to the main type (2026-10-14)
+
+- **`data/advisor/qiriness-knowledge-template.xlsx`, Products:** « Type fonctionnel » keeps the main types as a dropdown, with « Autre » in place of « Hors routine »; a new free-text column « Autre type » (`other_type`) after it, for what an « Autre » product is (peignoir, déodorant, parfum…). Inserted in place in the filled copy; validations, merged legend rows, filter and frozen panes shifted; every other cell verified unchanged against a backup.
+- **Filled (yellow, to check):** Peignoir Cocooning, the deodorant, Eau Qi (perfume) and the bath fizz tablets (was « Accessoire ») → « Autre » with their type; « Lait Corps Qi » « Nettoyant » → « Crème » (a body milk moisturises). Every product row now has a type (3 were empty).
+- **Importer** (`product-knowledge.mjs`): `other_type` read for « Autre » only, rejected on a main type; « Hors routine » still read as the same thing. Sample sheets carry the new key (empty).
+- **« Démaquillant » is a type of its own, and also a nettoyant** (owner): in the Products and Routines dropdowns; a make-up remover fills a « Nettoyant » step too (`fillsStep`, the foundation engine; `functional_types.makeup_remover` → cleanser for Phase 2), a cleanser never a « Démaquillant » step. Four products moved from « Nettoyant » (yellow): the biphase eye remover, the micellar water, the cleansing milk, the cleansing and make-up removing foam. No routine has a « Démaquillant » step yet. One engine test added.
+- **« Coffret » and « Kit » are two types** (owner: not the same thing). A coffret boxes products also sold on their own; a kit is a pack for one ritual or treatment. The 23 « Coffret / kit » rows: 16 « Coffret » (the « Coffret … » titles and the two duos), 7 « Kit » (the « Kit … » titles), yellow. Importer: `coffret` and `kit`, both may list their contents (`isBundle`), the old joint label refused. The engines treat both as before (gifts, standing for their contents, never filling a step, not replenished) until the owner says how they differ. Sample sheets and catalogues: the kit of masks is « Kit », the others « Coffret ». Playbook score unchanged (14/50).
+- **Proven:** root suite 3,682 pass, 0 fail; `advisor:score` 50/50 (playbooks 14/50, unchanged); every other cell of the workbook verified unchanged against a backup.
+
+## Storefront advisor: response times measured, and a line of text on a slow reply (2026-10-14)
+
+- **`npm run advisor:try-batch` prints each turn's time** and a summary by number of model calls. One run (gpt-6-luna, 43 turns): median 3.7 s, p90 5.1 s, max 8.8 s; one model call 3.0 s median (20 turns), one tool then the answer 4.3 s (18), two tools 5.4 s (1), code-written turns under 0.1 s (4). Network and widget time not included.
+- **The widget's typing dots get a line of text** after 1.5 s (« Je regarde ça pour vous… », « Je vérifie votre commande… » for an order question; EN "Looking into it for you…", "Checking your order…") and « Encore un instant… » / "Just a moment more…" after 6 s; worded from the customer's message only. Streaming is set aside until the app proxy is tested (decision 2026-10-14).
+- **Proven:** syntax check, Theme Check clean. **Not proven:** in a browser (VALIDATION_LOG 56, step 4).
+
 ## Storefront advisor: purchase history, Phases 2–3 — their products fill the routine, running low is asked about (2026-10-13)
 
 - **Phase 2, routine gaps** (`advisory/recommend.mjs`): a product the customer said they still use fills its routine step and counts toward the routine size (`skipped` reason `already_owned`, with the product); it is never recommended again, not even as an alternative. Which step comes from the brand's knowledge (« Type fonctionnel », « Zone ») through the new config section `functional_types` in `data/advisor/qiriness.json` (validated: every kind must exist in the slots), else the step's catalogue rules. One product fills one step at most; a kit fills the steps of its contents. A step asked for by type is still filled. « Ne pas conseiller » products are excluded (`not_advised`).
