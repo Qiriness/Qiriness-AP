@@ -369,10 +369,28 @@
     ]);
   }
 
-  function TypingIndicator(strings) {
+  // A slow reply (an AI lookup takes 4-5 s): after a moment the dots get a line
+  // of text, worded from what the customer asked, never from what the server
+  // does (the widget only hears back once the whole answer is ready).
+  var WAIT_TEXT_AFTER_MS = 1500;
+  var WAIT_LONGER_AFTER_MS = 6000;
+  // An order question (FR, EN): « ma commande », "my order", a parcel, an order number.
+  var ORDER_WORDS = /\b(commandes?|colis|orders?|parcels?|packages?)\b|#\s?\d{3,}/i;
+
+  function waitText(stage, message, strings) {
+    if (stage >= 2) return strings.waitLonger || 'Encore un instant…';
+    if (stage === 1) return ORDER_WORDS.test(message || '') ? strings.waitOrder || 'Je vérifie votre commande…' : strings.waitLooking || 'Je regarde ça pour vous…';
+    return '';
+  }
+
+  function TypingIndicator(strings, stage, message) {
+    var text = waitText(stage, message, strings);
     return el('div', { className: 'sa-message sa-message--assistant sa-typing', role: 'status' }, [
-      el('span', { className: 'sa-visually-hidden', text: strings.typing }),
-      el('span', { className: 'sa-typing__dots', 'aria-hidden': 'true' }, [el('i'), el('i'), el('i')])
+      el('span', { className: 'sa-visually-hidden', text: text ? '' : strings.typing }),
+      el('span', { className: 'sa-typing__dots', 'aria-hidden': text ? null : 'true' }, [
+        el('i'), el('i'), el('i'),
+        text ? el('span', { className: 'sa-typing__text', text: text }) : null
+      ])
     ]);
   }
 
@@ -403,8 +421,29 @@
       sessionId: stored ? stored.sessionId : newSessionId(),
       open: stored ? Boolean(stored.open) : false,
       messages: stored ? stored.messages : [],
-      pending: false
+      pending: false,
+      // 0 dots, 1 a line of text, 2 « encore un instant »: see waitText.
+      waitStage: 0
     };
+    var waitTimers = [];
+
+    function startWaiting(message) {
+      stopWaiting();
+      [WAIT_TEXT_AFTER_MS, WAIT_LONGER_AFTER_MS].forEach(function (ms, i) {
+        waitTimers.push(setTimeout(function () {
+          if (!state.pending) return;
+          state.waitStage = i + 1;
+          var shown = log.querySelector('.sa-typing');
+          if (shown) shown.parentNode.replaceChild(TypingIndicator(strings, state.waitStage, message), shown);
+        }, ms));
+      });
+    }
+
+    function stopWaiting() {
+      waitTimers.forEach(clearTimeout);
+      waitTimers = [];
+      state.waitStage = 0;
+    }
 
     var panelId = ROOT_ID + '-panel';
     var titleId = ROOT_ID + '-title';
@@ -513,7 +552,9 @@
     function deliver(userMessage) {
       userMessage.failed = false;
       state.pending = true;
+      state.waitingFor = userMessage.text;
       render();
+      startWaiting(userMessage.text);
       send({
         sessionId: state.sessionId,
         message: userMessage.text,
@@ -567,6 +608,7 @@
         userMessage.failed = true;
       }).then(function () {
         state.pending = false;
+        stopWaiting();
         saveState(state);
         render();
         if (state.open && !mobile.matches) input.focus();
@@ -591,7 +633,7 @@
           : null;
         log.appendChild(Bubble(message, strings, function () { deliver(message); }, onChoice));
       });
-      if (state.pending) log.appendChild(TypingIndicator(strings));
+      if (state.pending) log.appendChild(TypingIndicator(strings, state.waitStage, state.waitingFor));
 
       actionsSlot.textContent = '';
       var started = state.messages.some(function (m) { return m.role === 'user'; });
