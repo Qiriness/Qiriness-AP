@@ -16,7 +16,9 @@ export const ADVISOR_T = {
   PLAYBOOKS: 'advisor_playbooks',
   MAPPINGS: 'advisor_mappings',
   MERCHANDISING: 'advisor_merchandising',
-  EVENTS: 'advisory_events'
+  EVENTS: 'advisory_events',
+  /** Product knowledge and assembled routines, one version per load (advisor-knowledge.mjs). */
+  KNOWLEDGE: 'advisor_knowledge'
 };
 
 /** Sections stored entry by entry. */

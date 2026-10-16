@@ -84,6 +84,11 @@ const ORDINALS = [
   [/\b(le |la )?(troisieme|third)\b/, 2],
   [/\b(le |la )?(dernier|derniere|last)\b/, -1]
 ];
+// « est-elle recommandée ? », « convient-il aux peaux sèches ? »: the subject
+// pronoun after its verb is the product just discussed. Only after a verb: a
+// plain « il » (« il fait chaud ») points at nothing. Missed, the question about
+// the hand cream got the anti-age cream's card (dev store, 2026-10-16).
+const INVERTED = /\b(est|sont|convient|conviennent|conviendrait|contient|marche|fonctionne|dure|coute|sent|existe|reste|peut|va|irait|serait|a t|existe t|convient t|faut) (elle|il|elles|ils)\b/;
 const THIS = /\b(celui ci|celle ci|celui la|celle la|ce produit|ce soin|cet article|ca|cela|this one|that one|this product|this item|it)\b/;
 
 /**
@@ -123,7 +128,7 @@ export function detectReference(normalised, { refs = null, pageProductId = null,
     }
   }
 
-  const demonstrative = text.match(THIS) ?? matchDemonstrativeCare(text, careWords);
+  const demonstrative = text.match(THIS) ?? text.match(INVERTED) ?? matchDemonstrativeCare(text, careWords);
   if (demonstrative) {
     const cue = demonstrative[0].trim();
     if (refs?.lastSingle) return { ids: [refs.lastSingle], reason: 'conversation: the product just discussed', cue };

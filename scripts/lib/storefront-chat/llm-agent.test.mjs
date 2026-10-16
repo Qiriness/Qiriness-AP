@@ -8,6 +8,7 @@ import {
   StorefrontAgentError,
   createLlmAgent,
   historyMessages,
+  newCardsOnly,
   noRetryWait,
   parseReply,
   productLinkBase,
@@ -97,6 +98,28 @@ test('a search, then an answer with a card built from the catalogue, not the mod
   assert.deepEqual(reply.usage, { inputTokens: 1700, outputTokens: 60 });
   assert.equal(reply.trace.calls.length, 2);
   assert.deepEqual(reply.trace.tools, [{ name: 'search_products', args: { query: 'peau sèche', collection: null, limit: null }, found: 1 }]);
+});
+
+test('a card only for a product new to the conversation, unless they ask to see it (owner, 2026-10-16)', async () => {
+  // Dev store, 2026-10-16: the same night cream's card on five replies.
+  const shown = [{ role: 'user', content: 'une crème', context: {} }, { role: 'assistant', content: 'La Crème de Nuit.', context: { products: ['/products/creme-nuit'] } }];
+  const again = async (message, extra = {}) => (await createLlmAgent({ client: scripted(answer('La Crème de Nuit, encore.', [{ handle: 'creme-nuit', rationale: '' }])), catalogue: CATALOGUE })
+    .respond({ message, history: shown, context: { pageType: 'product', productHandle: 'creme-nuit', locale: 'fr' }, ...extra })).products;
+  assert.deepEqual(await again('elle convient aux peaux sèches ?'), []);
+  assert.equal((await again('vous pouvez me montrer la Crème de Nuit ?')).length, 1);
+  // Already in the cart: no card either, even new to the conversation.
+  const inCart = await createLlmAgent({ client: scripted(answer('La Crème de Nuit.', [{ handle: 'creme-nuit', rationale: '' }])), catalogue: CATALOGUE })
+    .respond({ message: 'elle convient aux peaux sèches ?', context: { pageType: 'product', productHandle: 'creme-nuit', locale: 'fr' }, cart: { currency: 'EUR', lines: [{ productId: 'gid://shopify/Product/1', variantId: 'gid://shopify/ProductVariant/1', quantity: 1 }] } });
+  assert.deepEqual(inCart.products, []);
+});
+
+test('newCardsOnly: none on a policy or offer answer; a routine keeps its cards', () => {
+  const cards = [{ id: 'a' }, { id: 'b' }];
+  assert.deepEqual(newCardsOnly(cards, { shownBefore: ['a'] }), [{ id: 'b' }]);
+  assert.deepEqual(newCardsOnly(cards, { otherTopic: true }), []);
+  assert.deepEqual(newCardsOnly(cards, { shownBefore: ['a', 'b'], routine: true }), cards);
+  assert.deepEqual(newCardsOnly(cards, { shownBefore: ['a', 'b'], message: 'show me the link' }), cards);
+  assert.deepEqual(newCardsOnly(cards, { shownBefore: ['a'], message: 'vous pouvez avoir moins cher ?' }), [{ id: 'b' }]);
 });
 
 test('a handle the tools never returned is not shown as a card', async () => {

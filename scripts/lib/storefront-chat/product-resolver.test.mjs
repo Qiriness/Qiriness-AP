@@ -133,6 +133,15 @@ test('conversation references: les deux, l’autre, le premier, celui-ci', () =>
   assert.equal(resolve('celui-ci ?', { refs }).status, 'ambiguous');
 });
 
+test('« est-elle … ? » is the product just discussed; a plain « il » is not', () => {
+  // Dev store, 2026-10-16: the hand cream, then « est-elle recommandée pour les peaux sensibles ».
+  const refs = { lastSet: ['p9'], lastRecommended: ['p9'], lastSingle: 'p9', focus: 'p9', pending: null };
+  assert.deepEqual(ids(resolve('est-elle recommandée pour les peaux sensibles', { refs })), ['p9']);
+  assert.deepEqual(ids(resolve('convient-il aux peaux sèches ?', { refs })), ['p9']);
+  assert.deepEqual(ids(resolve('a-t-elle du parfum ?', { refs })), ['p9']);
+  assert.equal(detectReference('il fait tres chaud chez moi', { refs }), null);
+});
+
 test('precedence: an explicit name beats the page; the page answers « ça »', () => {
   assert.deepEqual(ids(resolve('et la Voile Mains Satin ?', { pageProductId: 'p1' })), ['p9']);
   assert.deepEqual(ids(resolve('est-ce que ça convient aux peaux sèches ?', { pageProductId: 'p1' })), ['p1']);

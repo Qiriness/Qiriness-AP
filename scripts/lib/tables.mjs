@@ -150,7 +150,8 @@ export const ADVISOR_T = {
   PLAYBOOKS: 'advisor_playbooks',
   MAPPINGS: 'advisor_mappings',
   MERCHANDISING: 'advisor_merchandising',
-  EVENTS: 'advisory_events'
+  EVENTS: 'advisory_events',
+  KNOWLEDGE: 'advisor_knowledge'
 };
 
 export const ADVISOR_RPC = {

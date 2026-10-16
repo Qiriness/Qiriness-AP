@@ -50,7 +50,11 @@ test('§ 3.1 dry skin is Hydration only when nothing else is the main need', () 
 });
 
 test('§ 3.1 the basic routine only on request; no concern and no request is one question', () => {
-  assert.equal(build({ request: q('basic_routine') }).playbook.key, 'G');
+  assert.equal(build({ request: q('basic_routine') }).playbook.key, 'H');
+  // A skin type picks its foundation only when no concern does.
+  assert.equal(build({ skin_type: q('oily') }).playbook.key, 'G');
+  assert.equal(build({ skin_type: q('dry') }).playbook.key, 'A');
+  assert.equal(build({ skin_type: q('oily'), primary_concern: nl('imperfections') }).playbook.key, 'B');
   const none = advisor.advise({ profile: {}, mode: 'routine_builder' });
   assert.equal(none.status, 'needs_info');
   assert.equal(none.next_question.field, 'primary_concern');
@@ -182,6 +186,19 @@ test('outside the builder a need gets our top choices: the best product of each 
   assert.equal(KNOWLEDGE.get(blemishes.steps[0].handle).functional_type, 'cleanser');
 });
 
+test('a required step with no product is replaced by the next optional step that has one, without asking', () => {
+  // Owner, 2026-10-16 (dev store): imperfections, cleanser and cream owned, « nothing to add » though a patch was there.
+  const noCleanser = { products: CATALOGUE.products.filter((p) => !['cleanser', 'makeup_remover'].includes(KNOWLEDGE.get(p.handle)?.functional_type)) };
+  const a = createAdvisor(CONFIG, noCleanser, { knowledge: KNOWLEDGE, routines: ROUTINES }).advise({ profile: { primary_concern: q('dehydration'), routine_scope: q('essential') }, mode: 'routine_builder', asked: ASKED });
+  assert.equal(a.status, 'recommended');
+  assert.ok(a.skipped.some((s) => s.reason === 'no_eligible_product' && !s.optional));
+  const replacing = a.steps.filter((s) => s.reason_codes.includes('replaces_missing_step'));
+  assert.equal(replacing.length, 1, 'one empty required step, one optional step in its place');
+  assert.equal(replacing[0].optional, true);
+  // Nothing missing: no optional step is added to an essential routine.
+  assert.ok(!build({ primary_concern: q('dehydration'), routine_scope: q('essential') }).steps.some((s) => s.reason_codes.includes('replaces_missing_step')));
+});
+
 test('« trop cher » after one product: the cheapest of its type for the same need, else the treat', () => {
   const previous = (handle) => ({ product_ids: [id(handle)] });
   const cream = advisor.advise({ profile: { ...said("C'est trop cher"), primary_concern: nl('dehydration') }, previous: previous('t-creme-aqua') });
@@ -189,9 +206,22 @@ test('« trop cher » after one product: the cheapest of its type for the same n
   assert.equal(K(cream.steps[0]).functional_type, 'cream');
   assert.ok(cream.total_price < CATALOGUE.products.find((p) => p.handle === 't-creme-aqua').priceFrom);
   assert.ok([K(cream.steps[0]).primary_concern, ...K(cream.steps[0]).other_concerns].includes('dehydration'));
-  // No cheaper hydrating serum: the treat, never a radiance serum that only matches a side concern.
+  // No cheaper hydrating serum: a coffret or kit for the same need (owner, 2026-10-16), never a
+  // radiance serum presented as matching a side concern.
   const serum = advisor.advise({ profile: { ...said("C'est trop cher"), primary_concern: nl('dehydration') }, previous: previous('t-serum-aqua') });
-  assert.equal(serum.playbook.key, 'treat');
+  assert.equal(serum.playbook.key, 'cheaper');
+  assert.equal(serum.steps[0].reason_codes[0], 'cheaper_bundle');
+  assert.ok(isBundle(K(serum.steps[0])));
+  assert.ok([K(serum.steps[0]).primary_concern, ...K(serum.steps[0]).other_concerns].includes('dehydration'));
+  // No bundle either: a generic serum, said as such (« if there are no options… a generic one »).
+  const noBundles = { products: CATALOGUE.products.filter((p) => !isBundle(KNOWLEDGE.get(p.handle))) };
+  const generic = createAdvisor(CONFIG, noBundles, { knowledge: KNOWLEDGE, routines: ROUTINES }).advise({ profile: { ...said("C'est trop cher"), primary_concern: nl('dehydration') }, previous: previous('t-serum-aqua') });
+  assert.equal(generic.playbook.key, 'cheaper');
+  assert.equal(generic.steps[0].reason_codes[0], 'cheaper_generic');
+  assert.equal(K(generic.steps[0]).functional_type, 'serum');
+  assert.ok(![K(generic.steps[0]).primary_concern, ...K(generic.steps[0]).other_concerns].includes('dehydration'));
+  // Never premium, never barely cheaper: at most 90 % of its price.
+  for (const a of [cream, serum]) assert.ok(a.total_price <= 0.9 * CATALOGUE.products.find((p) => p.id === a.cheaper_than).priceFrom);
   // In the builder the budget rules stay: no « cheaper » step-by-step.
   assert.notEqual(build({ ...said("C'est trop cher"), primary_concern: nl('dehydration') }, { previous: previous('t-creme-aqua') }).playbook.key, 'cheaper');
 });

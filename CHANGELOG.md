@@ -10,6 +10,57 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The knowledge spreadsheet is live; « trop cher » and empty steps (2026-10-16)
+
+Owner: « you can make the spreadsheet live »; « if there are no options… suggest a generic one »; routines may show cards shown before.
+
+- **`advisor_knowledge`** (migration 97, applied to production, baseline regenerated, `db:check:baseline --production` identical): one version per load, one active per shop. **Version 1 loaded**: 94 products, 8 foundations, 3 modules; 1 warning (foundation B's preferred range is a description).
+- **`assemble-routines.mjs`** + **`data/advisor/qiriness-routine-settings.json`**: the sheet's foundations, steps and modules with what it does not carry (`targets`, skin types, tolerance first, the basic routine, concern words, priority, questions, treats; PROPOSED). **`advisor-knowledge.mjs`**: build, row, load. **`advisor:load`** writes the knowledge after the config; errors write nothing.
+- **The service runs the foundation engine** with the active version and passes `productKnowledge` to the agent; no version: the playbooks.
+- **Engine:** a required step with no product is replaced by the next optional one (`replaces_missing_step`); « trop cher » tries the same type for the need, then a coffret or kit, then a generic one of the same type, each at most 90 % of the price and never premium without reason, then the treat.
+- **Measured on the real catalogue** (93 live products): anti-age essential = cleanser, Temps Sublime vitamin C serum, Temps Sublime Light cream (was the night cream alone); imperfections with a cleanser and a cream owned = cleanser, Kéfir lotion, rice exfoliant (was nothing); « trop cher » on the €98.50 night cream = the Temps Sublime coffret at €60.83 (was the €96.90 Caresse d'Exception). On the dev store (12 live products) imperfections now gets the Flash Patch®.
+- **Cards:** a routine shows all its cards, shown before or not, even of one step in the builder.
+- Tests 3700/3700 (new: `advisor-knowledge.test.mjs`); `advisor:score` 54/54; `eval:resolution` 123/123; `eval:storefront-knowledge` 15/15; web tsc clean. Not yet seen in the widget.
+
+## Storefront advisor: two fixes from the first dev-store test (2026-10-16)
+
+From the owner's notes (`data/advisor/qiriness-advisor-conversation-notes-v1.xlsx`) and the stored turns' traces.
+
+- **The cart question lives one turn** (`routine-flow.mjs`): passed over, it is dropped. Session `0a1662`: asked about the retinol night cream at 07:34, then « trop cher », « sans rétinol ? », the model's own yes/no question, and « oui » at 07:39 added the retinol cream.
+- **« est-elle … ? », « convient-il … ? » point at the product just discussed** (`conversation-refs.mjs`). Session `2d2afb` 07:50: the hand cream's question resolved nothing, so the advice ran on the earlier anti-age profile and showed the night cream's card.
+- **A card only for a product new to the conversation** (owner; `newCardsOnly`, decision of the same name): not again, not when in the cart, none on a policy or offer answer, unless asked to see it; a routine keeps its cards.
+- **The product's approved FAQ is read by the code** (decision of the same name): before the model for the product in focus, and with `get_product`. The LED mask's FAQ held both answers the reply said it lacked; matching first would not have helped (its 4 real questions matched none of the 12 entries).
+- **Order status on locally** (`STOREFRONT_CHAT_ORDER_STATUS=on` in `.env.local`; owner): it reads production's synced orders, so a real order number is the only test (#7183 is synced).
+- Tests 3692/3692; `eval:resolution` 123/123; `eval:storefront-knowledge` 15/15; web tsc clean. Not yet re-run on the dev store.
+
+## Knowledge spreadsheet: first import (2026-10-15)
+
+- **`npm run advisor:import`** (`scripts/advisor/import-knowledge.mjs`): reads Products, Routines and Rules (`export-knowledge-sheet.py`, openpyxl) into `data/advisor/qiriness-knowledge.json`, every cell as typed with its spreadsheet row; reports what the rules keep. `--check` writes nothing; `--file`/`--out` for another brand.
+- **Routines and Rules rules** (`scripts/lib/advisory/routine-knowledge.mjs`): foundations with ordered steps (type, daily/occasional, required, time of day, preferred range), modules with their concerns from the Rules tab, the 20 concerns with their foundation, cream texture by skin type; dropdown values only, concern labels forgiving accents and case; the two tabs cross-checked. `ENUMS` exported from `product-knowledge.mjs`.
+- **Spreadsheet:** Routines K6 named « Matin ou soir (time_of_day) » so the column is read; K51 « Matin et Soire » → « Matin et soir ». Exactly 2 cells changed (backup taken).
+- **First import:** 93 products advisable, 1 rejected (the « ® » handle); 8 foundations, 3 modules, 20 concerns. Open: « Patch » as a Routines type (row 17), foundation F named « Fermeté et lift » vs « Taches ». Nothing reaches the advisor or the database yet.
+- **« Patch » is a type** (owner): in both type dropdowns (Products G, Routines E), in the importer (`patch`) and in `qiriness.json` `functional_types` (fills no playbook step). The Flash Patch® (Products G89) « Autre » → « Patch », its « Autre type » cleared (H89); B's step 5 now reads. Eye patches stay « Yeux ». Exactly 2 cells changed (backup taken).
+- **Handles as Shopify has them:** `patch-anti-bouton-invisible-flash-patch®` is the real handle on both shops; the importer now accepts any lowercase handle without space or slash.
+- **Import after these:** 94 of 94 products advisable, 0 errors; left to check: foundation F « Fermeté et lift » vs « Taches ».
+- **Foundation F settled** (owner): « Fermeté et lift » is the early signs of ageing (Active Énergie, the range before Temps Sublime) and protection. Rules: « Ridules » E → F; « Taches » and « Teint irrégulier » → B Imperfections; a 21st concern « Protection » (`protection`, family Protection, → F; secondary effect yellow) in row 26, inside the concern list (`ConcernLabels` C6:C26) so Products can use it; the foundation dropdown says « F Fermeté et lift »; A2 says 21 concerns in 8 families; E57 notes the change. Routines: B + Taches, Teint irrégulier; E − Ridules; F → Ridules, Protection; the SPF module's note no longer names a Taches foundation. 16 cells changed (backup taken).
+- **Import after these:** 94 of 94 products advisable, 21 concerns, no error, the two tabs agree.
+- **Proven:** `routine-knowledge.test.mjs` (4); advisory tests 75/75; `advisor:score` 54/54; root suite 3,686 pass.
+
+## Product knowledge spreadsheet: « Idéal » for sensitive skin, spellings, notes (2026-10-15)
+
+- **« Peau sensible » accepts « Idéal »** (owner): « Idéal / Adapté / Avec précaution / Déconseillé », one dropdown over W10:W104 (pasting had left 33 cells with the skin columns' list). Importer: `ideal`; engine: +0.3 for a sensitive customer, like « Idéal » on a skin type. Rules F18–F20 name it.
+- **Spellings** in « Autres préoccupations », to the standard labels: Q49 « Réactivité, Imperfections », Q66 « Perte de fermeté », Q71 « Imperfections, Teint terne », Q104 « Ridules, Perte de fermeté, Taches ».
+- **Notes out of the measured column:** the 25 usage estimates typed into « Détail de la mesure » (grey, recomputed from orders) moved to « Remarque » as « Durée d'utilisation : … », after any existing note; M103's « Big promo over this period » as « Rachat mesuré : … ».
+- Exactly 59 cells changed (backup taken; formatting, widths and the other cells verified unchanged). With every row treated as approved, 91 of 94 rows import (was 56); left: two combined areas (« Mains et Corps », « Corps et Cheveux ») and the handle `patch-anti-bouton-invisible-flash-patch®`. All 94 rows are still « À valider ».
+- **Proven:** advisory unit tests 71/71; `advisor:score` 54/54.
+
+## Routines: oily skin, excess sebum and enlarged pores go to G (2026-10-14)
+
+- **Owner's answer to `q_oily`:** « Excès de sébum », « Pores dilatés » and oily skin go to G « Peaux grasse ». Filled copy: Rules E15–E16 now « G Peaux grasse », the answer written after the question (E60); Routines: B's « Préoccupations principales » lose the two, G's gain them. Exactly 5 cells changed.
+- **Engine** (`foundations.mjs`): a skin type picks the foundation whose `skin_types` names it (A: dry → dryness; G: oily → excess sebum), only when no concern votes. Before, « dry → A » was written in the code.
+- **Bench** (`sample-routines/routines.json`, invented): G is now « Peaux grasses » (cleanser and lotion for the concern, a light cream, occasional exfoliant and mask); the basic routine moves to H; B keeps blemishes and uneven texture; G sits after B in `foundation_priority` (proposed), so blemishes with shine stay B. Four new cases (FR + EN): oily skin alone, excess sebum and pores.
+- **Proven:** `advisor:score` 54/54; `--engine playbooks` 14/54; root suite 3,682 pass.
+
 ## Product knowledge spreadsheet: « Électrocosmétique », « Toute la journée », « Masque tissu » (2026-10-14)
 
 - **A greasy-skin foundation** (owner added G « Peaux grasse » / « Greasy Skin » to the Routines tab; the basic routine moved to H). Rules tab: « G Peaux grasse » in the concerns' foundation dropdown; peau grasse proposed as G when nothing else is the main need, like dry skin → A (yellow); the basic routine row now says « Fondation H » (yellow); an open question `q_oily` (does « Excès de sébum » / « Pores dilatés » stay in B?). Routines title: 8 fondations. Exactly 9 cells changed. Engine: the basic routine is the foundation marked « only on explicit request », not the literal key G. The oily-skin choice itself is not wired until Qiriness confirms it.

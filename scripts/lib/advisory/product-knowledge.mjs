@@ -44,6 +44,9 @@ export const FUNCTIONAL_TYPES = {
   // (see parseKnowledgeRows); a routine's mask step takes the cream one.
   'Masque': 'mask',
   'Masque tissu': 'sheet_mask',
+  // A patch applied to the skin (owner, 2026-10-15): the anti-blemish « Flash Patch® »;
+  // it fills a « Patch » step (Imperfections). Eye patches stay « Yeux ».
+  'Patch': 'patch',
   // Not the same thing (owner, 2026-10-14). A coffret: products also sold on their
   // own, boxed together (« Coffret Temps Sublime », a duo). A kit: a pack for one
   // ritual or treatment (« Kit 4 Masques », « Kit Rituel Spa »). Both may list their
@@ -58,13 +61,14 @@ export const FUNCTIONAL_TYPES = {
   // The template's earlier label for the same thing.
   'Hors routine': 'out_of_routine',
 };
-const ENUMS = {
+export const ENUMS = {
   ritual_stage: { 'Préparer': 'prepare', 'Activer': 'activate', 'Optimiser': 'optimise', 'Régénérer': 'regenerate' },
   frequency: { 'Quotidien': 'daily', 'Occasionnel': 'occasional' },
   time_of_day: { 'Matin': 'morning', 'Soir': 'evening', 'Matin et soir': 'morning_and_evening', 'Toute la journée': 'all_day' },
   area: { 'Visage': 'face', 'Yeux': 'eyes', 'Lèvres': 'lips', 'Corps': 'body', 'Mains': 'hands', 'Pieds': 'feet' },
   texture: { 'Riche': 'rich', 'Standard': 'standard', 'Légère': 'light' },
-  sensitive: { 'Adapté': 'suitable', 'Avec précaution': 'caution', 'Déconseillé': 'avoid' },
+  // « Idéal » as on the skin columns (owner, 2026-10-15): made for sensitive skin, not only tolerated.
+  sensitive: { 'Idéal': 'ideal', 'Adapté': 'suitable', 'Avec précaution': 'caution', 'Déconseillé': 'avoid' },
 };
 const SKIN = { 'Idéal': 'ideal', 'Adapté': 'suitable', 'Non adapté': 'unsuitable' };
 const SKIN_COLUMNS = { skin_dry: 'dry', skin_normal: 'normal', skin_combination: 'combination', skin_oily: 'oily' };
@@ -72,7 +76,9 @@ const YES_NO = { 'Oui': true, 'Non': false };
 const FLAGS = ['men', 'premium', 'treat', 'gift'];
 /** The types whose type alone says whether they are a treat (owner, 2026-10-14). */
 const TREAT_BY_TYPE = { sheet_mask: true, mask: false };
-const HANDLE = /^[a-z0-9][a-z0-9-]{0,254}$/;
+// Shopify's own handles: lowercase, no space or slash; not only ASCII (Qiriness has
+// « patch-anti-bouton-invisible-flash-patch® », 2026-10-15).
+const HANDLE = /^[^\s/A-Z]{1,255}$/u;
 
 const text = (v) => (v === null || v === undefined ? '' : String(v).trim());
 const list = (v) => text(v).split(/\s*[,;\n]\s*/).filter(Boolean);

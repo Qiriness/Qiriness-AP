@@ -93,7 +93,17 @@ export const ROUTINE_CASES = [
   ...both('basic-explicit',
     'Je veux juste une routine de base pour mon visage',
     'I just want a basic routine for my face',
-    { builder: true, expect: { foundation: ['G'], status: 'recommended', steps: [2, 2], types: ['cleanser', 'cream'], no_types: ['serum'] } }),
+    { builder: true, expect: { foundation: ['H'], status: 'recommended', steps: [2, 2], types: ['cleanser', 'cream'], no_types: ['serum'] } }),
+
+  // Owner, 2026-10-14: oily skin, excess sebum and enlarged pores have their own foundation (G).
+  ...both('oily-skin-alone',
+    "J'ai la peau du visage grasse, construisez-moi une routine",
+    'My facial skin is oily, build me a routine',
+    { builder: true, expect: { foundation: ['G'], status: 'recommended', types: ['cleanser', 'cream'], texture: { type: 'cream', is: 'light' }, targets: [{ type: 'cleanser', any: ['excess_sebum', 'enlarged_pores'] }] } }),
+  ...both('excess-sebum-pores',
+    'Une routine pour mon visage : excès de sébum et pores dilatés',
+    'A routine for my face: excess sebum and enlarged pores',
+    { builder: true, expect: { foundation: ['G'], status: 'recommended', types: ['cleanser', 'lotion'], targets: [{ type: 'lotion', any: ['excess_sebum', 'enlarged_pores'] }] } }),
 
   // § 4 — « I don't know what I need »: one useful question, no routine.
   ...both('dont-know',
@@ -149,11 +159,12 @@ export const ROUTINE_CASES = [
     'That is too expensive',
     { previous: 't-creme-aqua', expect: { foundation: ['cheaper'], status: 'recommended', steps: [1, 1], types: ['cream'], max_total: 37, targets: [{ type: 'cream', any: ['dehydration', 'dryness'] }] } }),
 
-  // …and the « petit plaisir » only when there is none.
-  ...both('too-expensive-no-cheaper',
+  // …else a coffret or kit for the same need (owner, 2026-10-16: « it should be able to offer a kit »);
+  // then a generic one of the same type, and the « petit plaisir » only when there is nothing.
+  ...both('too-expensive-cheaper-kit',
     "C'est trop cher",
     'That is too expensive',
-    { previous: 't-serum-aqua', expect: { foundation: ['treat'], status: 'recommended', steps: [1, 1], max_total: 25 } }),
+    { previous: 't-serum-aqua', expect: { foundation: ['cheaper'], status: 'recommended', steps: [1, 1], types: ['kit'], targets: [{ type: 'kit', any: ['dehydration', 'dryness'] }] } }),
 
   // A ceiling: the routine cut to fit, the concern's step kept, what was left out said.
   ...both('budget-ceiling',

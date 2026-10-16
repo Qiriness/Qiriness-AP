@@ -248,6 +248,15 @@ test('a typed « oui » or « je cherche encore » answers the cart question onl
   assert.equal(beforeAdvice({ ...pending, cart: { pending: [], asked: [] } }, { message: 'Oui' }).cart, null);
 });
 
+test('a cart question passed over is no longer pending: a later « oui » answers something else', () => {
+  // Dev store, 2026-10-16: asked about the retinol cream, then « trop cher », « sans rétinol ? »,
+  // the model's own yes/no question, and « oui » added the retinol cream.
+  const asked = { ...emptyFlow(), offer: 'accepted', cart: { pending: [{ id: ID(1), variant_id: 'gid://shopify/ProductVariant/9' }], asked: [ID(1)] } };
+  const passedOver = followUpFor({ ...base, flow: beforeAdvice(asked, { message: "c'est un peu trop cher pour moi" }).flow, showsProducts: false });
+  assert.deepEqual(passedOver.flow.cart, { pending: [], asked: [ID(1)] });
+  assert.equal(beforeAdvice(passedOver.flow, { message: 'oui' }).cart, null);
+});
+
 test('a routine the AI builds through advise during its turn still gets the cart question after it', async () => {
   const toolCall = (name, args) => ({ content: null, message: { role: 'assistant', content: null, tool_calls: [{ id: 'c1', type: 'function', function: { name, arguments: JSON.stringify(args) } }] }, toolCalls: [{ id: 'c1', name, args, argsError: null }], usage: {} });
   const calls = [];

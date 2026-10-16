@@ -42,6 +42,18 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 57. The first dev-store test's fixes and the live spreadsheet: tested offline, not yet in the widget — 2026-10-16
+
+From the owner's notes (`data/advisor/qiriness-advisor-conversation-notes-v1.xlsx`). Restart `cd storefront-app && shopify app dev` first (code and `.env.local` changed). The dev store has 12 live products (no cleanser, no anti-age serum), so the routines are thinner than on the real catalogue.
+
+1. **The cart question lives one turn.** **Check:** get « Souhaitez-vous que j'ajoute … ? », answer something else, then « oui » to a later question: nothing is added (`trace.model_skipped` is not `cart_add`).
+2. **« est-elle … ? ».** **Check:** ask about the hand cream, then « est-elle recommandée pour les peaux sensibles ? »: no Crème Nuit card; the reply uses the hand cream's sheet values (« Adapté »).
+3. **Cards.** **Check:** a product shown once is not shown again on a later reply, nor once in the cart, nor on an offer answer; « montrez-la-moi » shows it; a routine shows all its cards.
+4. **The LED mask's FAQ.** **Check:** « mon masque ne se recharge pas » and « combien de séances ? » are answered from its FAQ (3 to 4 sessions of 10 minutes); `trace.tools` has `get_product_policy` with `source: focus`. No 【placeholder】 in the reply (they are still unfilled in the FAQ).
+5. **Order status.** **Check:** « J'ai une question sur ma commande 7183 » gets its status (not shipped, within the dispatch time) with the contact form; one `data_access_events` row.
+6. **The foundation engine on the dev store.** **Check:** `trace.advice.playbook` is a foundation letter (B, E…), not `face_…`; imperfections with « Nettoyant et crème », « Une routine essentielle » gets the Flash Patch®; « trop cher » after a product gets a cheaper one, a coffret or a generic one before a treat; the reply says when it is generic.
+7. **English.** Never tried by the owner: the same turns in English.
+
 ## 56. Adding to the cart from the advisor: built, never clicked in a browser — 2026-10-13
 
 Needs the dev store (Supabase back) and `shopify app dev` restarted.

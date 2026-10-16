@@ -67,6 +67,12 @@ test('the importer rejects what the dropdowns do not allow, and reads a blank as
   assert.equal(one({ functional_type: 'Masque', treat: 'Oui' }).products.find((p) => p.handle === 'test-x').treat, false);
   assert.equal(one({ functional_type: 'Électrocosmétique' }).products.find((p) => p.handle === 'test-x').functional_type, 'device');
   assert.equal(one({ functional_type: 'Démaquillant' }).products.find((p) => p.handle === 'test-x').functional_type, 'makeup_remover');
+  assert.equal(one({ sensitive: 'Idéal' }).products.find((p) => p.handle === 'test-x').sensitive, 'ideal');
+  assert.deepEqual(fieldsOf(one({ sensitive: 'Non adapté' })), ['sensitive']);
+  assert.equal(one({ functional_type: 'Patch' }).products.find((p) => p.handle === 'test-x').functional_type, 'patch');
+  // Shopify's handles are not only ASCII; a space, a slash or a capital is still refused.
+  assert.ok(one({ handle: 'patch-flash-patch®' }).products.some((p) => p.handle === 'patch-flash-patch®'));
+  for (const handle of ['patch flash', 'patch/flash', 'Patch-Flash']) assert.deepEqual(one({ handle }).errors.map((e) => e.field), ['handle']);
   const blank = one({ skin_oily: '', texture: '', men: '' });
   const rec = blank.products.find((p) => p.handle === 'test-x');
   assert.equal(rec.skin.oily, null);

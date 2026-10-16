@@ -47,6 +47,7 @@
     "eval:resolution": "node scripts/eval-product-resolution.mjs",
     "eval:advisory": "node scripts/eval-advisory.mjs",
     "advisor:load": "node scripts/advisor/load-advisor-config.mjs",
+    "advisor:import": "node scripts/advisor/import-knowledge.mjs",
     "advisor:repurchase": "node scripts/advisor/measure-repurchase.mjs",
     "advisor:try-flow": "node scripts/advisor/try-routine-flow.mjs",
     "advisor:score": "node scripts/advisor/score-routines.mjs",

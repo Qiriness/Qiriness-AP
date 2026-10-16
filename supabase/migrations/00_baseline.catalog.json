@@ -104,6 +104,34 @@
     "advice_collections_shopify_unique: UNIQUE (shop_id, shopify_collection_id)"
    ]
   },
+  "public.advisor_knowledge": {
+   "rls": true,
+   "force_rls": false,
+   "acl": {
+    "service_role": "Dadmrtwx"
+   },
+   "columns": [
+    "id uuid not null default gen_random_uuid()",
+    "shop_id uuid not null",
+    "version integer not null",
+    "status text not null default 'active'::text",
+    "source text not null",
+    "products jsonb not null",
+    "routines jsonb not null",
+    "warnings jsonb not null default '[]'::jsonb",
+    "created_at timestamp with time zone not null default now()",
+    "updated_at timestamp with time zone not null default now()"
+   ],
+   "constraints": [
+    "advisor_knowledge_pkey: PRIMARY KEY (id)",
+    "advisor_knowledge_products_check: CHECK ((jsonb_typeof(products) = 'array'::text))",
+    "advisor_knowledge_routines_check: CHECK ((jsonb_typeof(routines) = 'object'::text))",
+    "advisor_knowledge_shop_id_fkey: FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE",
+    "advisor_knowledge_status_check: CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))",
+    "advisor_knowledge_unique: UNIQUE (shop_id, version)",
+    "advisor_knowledge_version_check: CHECK ((version > 0))"
+   ]
+  },
   "public.advisor_mappings": {
    "rls": true,
    "force_rls": false,
@@ -2886,6 +2914,7 @@
   "CREATE INDEX tickets_shop_secondary_category_idx ON public.tickets USING btree (shop_id, secondary_category)",
   "CREATE INDEX tickets_shop_status_idx ON public.tickets USING btree (shop_id, status)",
   "CREATE INDEX tickets_shop_updated_at_idx ON public.tickets USING btree (shop_id, updated_at)",
+  "CREATE UNIQUE INDEX advisor_knowledge_one_active ON public.advisor_knowledge USING btree (shop_id) WHERE (status = 'active'::text)",
   "CREATE UNIQUE INDEX company_policies_shop_key_unique ON public.company_policies USING btree (shop_id, policy_key)",
   "CREATE UNIQUE INDEX company_policy_links_answer_unique ON public.company_policy_links USING btree (policy_id, answer_id) WHERE (answer_id IS NOT NULL)",
   "CREATE UNIQUE INDEX company_policy_links_situation_unique ON public.company_policy_links USING btree (policy_id, situation_key) WHERE (situation_key IS NOT NULL)",
@@ -3951,6 +3980,7 @@
  },
  "triggers": [
   "CREATE TRIGGER advice_collections_set_updated_at BEFORE UPDATE ON public.advice_collections FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
+  "CREATE TRIGGER advisor_knowledge_set_updated_at BEFORE UPDATE ON public.advisor_knowledge FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
   "CREATE TRIGGER advisor_mappings_set_updated_at BEFORE UPDATE ON public.advisor_mappings FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
   "CREATE TRIGGER advisor_merchandising_set_updated_at BEFORE UPDATE ON public.advisor_merchandising FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
   "CREATE TRIGGER advisor_playbooks_set_updated_at BEFORE UPDATE ON public.advisor_playbooks FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
@@ -4395,6 +4425,7 @@
   "table public.ad_campaigns: One row per ad account and campaign (Meta Ads, Google Ads): name, status, objective or channel type, as last read by the sync.",
   "table public.ad_days: Paid media per ad account, day (the ad account's clock) and publisher, in the account's currency. Conversions and their value are the platform's own attribution. The last 28 days are rewritten each sync, because attribution settles late.",
   "table public.advice_collections: Shopify collections as a curation surface for product advice: every collection the shop has, plus whether support may answer from it, which axis it is, and the products it holds. Membership is refreshed for active collections only.",
+  "table public.advisor_knowledge: The storefront advisor's product knowledge and assembled routines, one version per npm run advisor:load; one active per shop. Products by handle. Read by the storefront advisor only.",
   "table public.advisor_mappings: How playbooks resolve against the catalogue without product ids: families, slots, concerns, skin types, textures, areas -> collections, tags, care types, name words; plus chip labels. One row per entry; key _ for a whole section.",
   "table public.advisor_merchandising: The brand's priority products for advice, by product handle, collection or family, optionally per concern/slot and dates. Applied after suitability, within a tie window: reorders suitable products, never makes an unsuitable one recommended.",
   "table public.advisor_playbooks: The brand's advisory routine playbooks, as authored (data/advisor/<brand>.json via npm run advisor:load). Read by the storefront advisor only. Products are never named by id here.",

@@ -183,8 +183,11 @@ export function followUpFor({ flow, lang, builder, answer, advice, showsProducts
     next.cart = { pending: items.map((x) => ({ id: x.product_id, variant_id: x.variant_id ?? null })), asked: [...next.cart.asked, ...items.map((x) => x.product_id)] };
     return say('cart', items.length > 1 ? t.cartRoutine : t.cartOne(items[0].name), { choices: [{ label: t.cartYes, value: 'flow:cart:yes' }, { label: t.cartNo, value: 'flow:cart:no' }] });
   };
-  // The cart question is answered either way: nothing is pending any more.
-  if (cart) next.cart = { ...next.cart, pending: [] };
+  // The cart question is the last message's question only: answered or passed
+  // over, nothing is pending any more. Left pending, a « oui » four turns later
+  // to the model's own question added the retinol cream the customer had just
+  // excluded (dev store, 2026-10-16). askCart below sets a new one.
+  next.cart = { ...next.cart, pending: [] };
 
   if (runningLow) return say('running_low', t.runningLow(runningLow.name), { productIds: [runningLow.product_id] });
   if (answer === 'no' && treat && !next.treat_offered) {

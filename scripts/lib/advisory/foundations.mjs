@@ -63,10 +63,12 @@ const OPPOSITE_TEXTURE = { rich: 'light', light: 'rich' };
 export const WEIGHTS = {
   primary: 1, primaryAmongOthers: 0.6, foundationConcern: 0.4, secondary: 0.3, secondaryCap: 0.6,
   skinIdeal: 0.3, skinSuitable: 0.1, texture: 0.3, textureMismatch: -0.3, preferredRange: 0.4, premiumRange: 0.6,
-  caution: -0.2, unjustifiedPremium: -1, men: 0.8, customerRange: 0.15,
+  sensitiveIdeal: 0.3, caution: -0.2, unjustifiedPremium: -1, men: 0.8, customerRange: 0.15,
   /** With a budget, a product this close to the best fit and cheaper takes its place. */
   budgetWindow: 0.15,
 };
+/** « Trop cher »: an alternative costs at most this share of the product they found too expensive. */
+export const CHEAPER_RATIO = 0.9;
 
 /**
  * @param {{ routines: object, catalogue: { products: object[] }, knowledge: Map<string, object>, allowed: object, question: Function }} deps
@@ -128,8 +130,10 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     }
     const votes = new Map();
     for (const concern of face) for (const f of routines.foundations) if (f.primary_concerns.includes(concern)) votes.set(f.key, (votes.get(f.key) ?? 0) + 1);
-    // A dry skin is Hydration only when nothing else is the main need.
-    if (!votes.size && c.skin === 'dry') return { key: 'A', impliedConcern: 'dryness' };
+    // A skin type picks the foundation that names it (dry → Hydration, oily → Oily skin)
+    // only when nothing else is the main need; it stands for that foundation's concern.
+    const bySkin = !votes.size && c.skin ? routines.foundations.find((f) => f.skin_types?.[c.skin]) : null;
+    if (bySkin) return { key: bySkin.key, impliedConcern: bySkin.skin_types[c.skin] };
     if (!votes.size) return { missing: true };
     const order = routines.foundation_priority ?? [];
     const best = [...votes.entries()].sort((a, b) => b[1] - a[1] || order.indexOf(a[0]) - order.indexOf(b[0]))[0][0];
@@ -150,6 +154,12 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     return scope === 'spa' ? [...complete, ...f.steps.filter((s) => s.frequency === 'occasional')] : complete;
   }
 
+  /** An ingredient they said they avoid (« sans rétinol »), in its name, actives, description or « contains ». */
+  function excluded(x, c) {
+    const text = norm(`${x.name} ${x.product.keyIngredients ?? ''} ${x.product.description ?? ''} ${(x.k.contains ?? []).join(' ')}`);
+    return c.exclusions.some((e) => ingredientWords(e).some((w) => hasPhrase(text, w)));
+  }
+
   function eligible(x, step, f, c, used) {
     const k = x.k;
     if (used.has(x.id) || k.status === 'do_not_advise' || !x.product.inStock) return false;
@@ -158,8 +168,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     if (k.men && !c.men) return false;
     if (c.skin && k.skin?.[c.skin] === 'unsuitable') return false;
     if ((c.sensitive || f.tolerance_first) && k.sensitive === 'avoid') return false;
-    const text = norm(`${x.name} ${x.product.keyIngredients ?? ''} ${x.product.description ?? ''} ${(k.contains ?? []).join(' ')}`);
-    if (c.exclusions.some((e) => ingredientWords(e).some((w) => hasPhrase(text, w)))) return false;
+    if (excluded(x, c)) return false;
     const targets = [k.primary_concern, ...k.other_concerns];
     if (step.targets === 'primary' && f.primary_concerns.length && !targets.some((t) => f.primary_concerns.includes(t) || t === c.primary)) return false;
     if (step.targets === 'module' && !targets.some((t) => step.when.includes(t))) return false;
@@ -187,7 +196,8 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     if (c.premium && k.range && k.range === f.premium_variant) { s += WEIGHTS.premiumRange; reasons.push(`${FIT.PREFERRED_FAMILY}:${k.range}`); }
     if (k.premium && !c.premium) s += WEIGHTS.unjustifiedPremium;
     if ((c.sensitive || f.tolerance_first) && k.sensitive === 'caution') s += WEIGHTS.caution;
-    if (c.sensitive && k.sensitive === 'suitable') reasons.push(FIT.SENSITIVE_SKIN_MATCH);
+    if (c.sensitive && k.sensitive === 'ideal') { s += WEIGHTS.sensitiveIdeal; reasons.push(FIT.SENSITIVE_SKIN_MATCH); }
+    else if (c.sensitive && k.sensitive === 'suitable') reasons.push(FIT.SENSITIVE_SKIN_MATCH);
     if (c.men && k.men) s += WEIGHTS.men;
     if (k.range && ranges.has(k.range)) { s += WEIGHTS.customerRange; reasons.push(`${FIT.CUSTOMER_RANGE}:${k.range}`); }
     return { s: Math.round(s * 1000) / 1000, reasons };
@@ -286,6 +296,31 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         scores: { suitability: top.s, routine_fit: 0, total: top.s },
       });
     }
+    // A REQUIRED STEP WITH NO PRODUCT IS REPLACED by the foundation's next
+    // optional step that has one, without asking (owner, 2026-10-16: imperfections
+    // with a cleanser and a cream owned got « nothing to add »; the patch was there).
+    const empty = skipped.filter((s) => s.reason === SKIPPED.NO_ELIGIBLE_PRODUCT && !s.optional).length;
+    if (empty && scope !== 'targeted') {
+      let replaced = 0;
+      for (const step of f.steps.filter((s) => !s.required && !plan.includes(s))) {
+        if (replaced >= empty) break;
+        if (c.owned.includes(step.type) || mine.some((x) => fillsStep(x.k, step.type))) continue;
+        const ranked = products.filter((x) => eligible(x, step, f, c, used)).map((x) => ({ x, ...score(x, step, f, c, ranges) }))
+          .sort((a, b) => b.s - a.s || (a.x.product.priceFrom ?? 0) - (b.x.product.priceFrom ?? 0) || a.x.name.localeCompare(b.x.name));
+        if (!ranked.length) continue;
+        const [top, ...rest] = ranked;
+        used.add(top.x.id);
+        replaced += 1;
+        steps.push({
+          slot: `${step.type}_${step.order}`, kind: KIND[step.type] ?? step.type, type: step.type, optional: true,
+          product_id: top.x.id, handle: top.x.handle,
+          alternatives: rest.slice(0, 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })),
+          reason_codes: [...top.reasons, FIT.REPLACES_MISSING_STEP],
+          merchandised: null,
+          scores: { suitability: top.s, routine_fit: 0, total: top.s },
+        });
+      }
+    }
     for (const x of wanted) if (!placed.some((p) => p.product_id === x.id)) placed.push({ product_id: x.id, handle: x.handle, status: PINNED.NO_STEP });
     const budget = c.budgetMax ? withinBudget(steps, skipped, plan, c.budgetMax) : null;
     // OUR TOP CHOICES for one need, outside the builder (owner): the best product
@@ -327,10 +362,15 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   }
 
   /**
-   * « Trop cher » just after one product (owner): the cheapest product of the
-   * same type, cheaper than it, that passes the same hard rules and still
-   * targets their concern (or the concerns that product targeted). Null when
-   * there is none: the treat comes instead.
+   * « Trop cher » just after one product (owner, 2026-10-13; widened 2026-10-16).
+   * In order, each cheaper than it by CHEAPER_RATIO at least and never premium
+   * unless their concern justifies it (a premium cream €1.60 cheaper was offered
+   * for « trop cher » on 2026-10-16):
+   *   1. the same type, passing the same hard rules, for their main need;
+   *   2. a coffret or kit for that need (owner: « it should be able to offer a kit »);
+   *   3. the same type, suitable for them but not for that need: a generic one
+   *      (owner: « if there are no options… suggest a generic one »), said as such.
+   * Null when none: the treat comes instead.
    */
   function cheaperThan(previousId, profile) {
     const prev = byId.get(previousId);
@@ -339,18 +379,24 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     const choice = chooseFoundation(c);
     // The main need: theirs, else what the product they found too expensive was for.
     const need = c.primary ?? prev.k.primary_concern;
-    const concerns = c.concerns.length ? c.concerns : [need];
     const f = foundations.get(choice.key) ?? { key: 'cheaper', primary_concerns: [need], steps: [] };
     c.primary = need;
     const step = { type: prev.k.functional_type, targets: null };
-    const pool = products
-      .filter((x) => x.id !== prev.id && eligible(x, step, f, c, new Set()) && (x.product.priceFrom ?? Infinity) < (prev.product.priceFrom ?? 0))
-      .filter((x) => [x.k.primary_concern, ...x.k.other_concerns].includes(need))
-      .map((x) => ({ x, ...score(x, step, f, c, new Set()) }))
-      .sort((a, b) => b.s - a.s || a.x.product.priceFrom - b.x.product.priceFrom);
+    const ceiling = (prev.product.priceFrom ?? 0) * CHEAPER_RATIO;
+    const cheaper = (x) => x.id !== prev.id && (x.product.priceFrom ?? Infinity) <= ceiling && (!x.k.premium || c.premium);
+    const forNeed = (x) => [x.k.primary_concern, ...x.k.other_concerns].includes(need);
+    const ranked = (pool, s) => pool.map((x) => ({ x, ...score(x, s, f, c, new Set()) })).sort((a, b) => b.s - a.s || a.x.product.priceFrom - b.x.product.priceFrom);
+    const sameType = products.filter((x) => cheaper(x) && eligible(x, step, f, c, new Set()));
+    const bundles = products.filter((x) => cheaper(x) && isBundle(x.k) && forNeed(x) && x.product.inStock && x.k.status !== 'do_not_advise'
+      && (x.k.area ?? 'face') === (prev.k.area ?? 'face') && (!x.k.men || c.men) && !excluded(x, c));
+    const [pool, code, type] = [
+      [ranked(sameType.filter(forNeed), step), 'cheaper_alternative', step.type],
+      [ranked(bundles, { type: 'kit' }), 'cheaper_bundle', 'kit'],
+      [ranked(sameType.filter((x) => !forNeed(x)), step), 'cheaper_generic', step.type],
+    ].find(([p]) => p.length) ?? [[]];
     if (!pool.length) return null;
     const [top, ...rest] = pool;
-    return [{ slot: `${step.type}_cheaper`, kind: KIND[step.type] ?? step.type, type: step.type, optional: false, product_id: top.x.id, handle: top.x.handle, alternatives: rest.slice(0, 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })), reason_codes: ['cheaper_alternative', ...top.reasons], merchandised: null, scores: { suitability: top.s, routine_fit: 0, total: top.s } }];
+    return [{ slot: `${type}_cheaper`, kind: KIND[type] ?? type, type, optional: false, product_id: top.x.id, handle: top.x.handle, alternatives: rest.slice(0, 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })), reason_codes: [code, ...top.reasons], merchandised: null, scores: { suitability: top.s, routine_fit: 0, total: top.s } }];
   }
 
   /** A « petit plaisir » for their concern, instead of a routine (owner): within the ceiling when there is one. */

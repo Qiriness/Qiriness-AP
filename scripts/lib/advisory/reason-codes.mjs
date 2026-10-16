@@ -36,7 +36,9 @@ export const FIT = {
   /** The product the customer came in with (or is running low on): the routine is built around it. */
   CUSTOMER_INTEREST: 'customer_interest',
   /** They have a product of this type, but their concern needs a specific one for this step (owner's rule). */
-  CONCERN_NEEDS_SPECIFIC_PRODUCT: 'concern_needs_specific_product'
+  CONCERN_NEEDS_SPECIFIC_PRODUCT: 'concern_needs_specific_product',
+  /** A required step had no product: this optional step takes its place (owner, 2026-10-16). */
+  REPLACES_MISSING_STEP: 'replaces_missing_step'
 };
 
 /** Why a step of the playbook was not filled. */

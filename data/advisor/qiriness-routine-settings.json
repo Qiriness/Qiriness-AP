@@ -1,0 +1,59 @@
+{
+  "_about": "Qiriness's routine settings the knowledge spreadsheet does not carry. `npm run advisor:load` assembles them with the spreadsheet's Routines and Rules tabs (data/advisor/qiriness-knowledge.json) into the routines the foundation engine runs (scripts/lib/advisory/assemble-routines.mjs). Brand data, edited here; the spreadsheet stays the master for foundations, steps, modules, concerns and products. PROPOSED values are ours until Qiriness confirms them.",
+
+  "concern_map": {
+    "_about": "The customer's words (the lexicon's concern keys) → Qiriness's 20 standard concerns (the Rules tab's keys). Same map as the test bench, whose concerns are the template's.",
+    "dehydration": "dehydration", "tightness": "dehydration", "lack_of_comfort": "discomfort", "discomfort": "discomfort", "dryness": "dryness", "flaking": "dryness",
+    "early_signs_of_ageing": "fine_lines", "wrinkles": "wrinkles", "deep_wrinkles": "wrinkles", "global_signs_of_ageing": "wrinkles", "mature_skin": "wrinkles", "demanding_mature_skin": "wrinkles", "regeneration": "wrinkles",
+    "firmness": "loss_of_firmness", "loss_of_firmness": "loss_of_firmness", "loss_of_tone": "loss_of_firmness", "facial_contours": "loss_of_firmness", "advanced_loss_of_firmness": "loss_of_firmness",
+    "loss_of_density": "loss_of_elasticity", "significant_loss_of_density": "loss_of_elasticity",
+    "dullness": "dullness", "lack_of_radiance": "dullness", "tired_skin": "signs_of_fatigue",
+    "dark_spots": "dark_spots", "pigmentation": "dark_spots", "uneven_tone": "uneven_tone", "lack_of_uniformity": "uneven_tone",
+    "sensitivity": "reactivity", "reactive_skin": "reactivity", "reactive": "reactivity", "redness": "redness",
+    "imperfections": "blemishes", "clogged_pores": "enlarged_pores", "excess_sebum": "excess_sebum", "shine": "excess_sebum",
+    "dark_circles": "dark_circles", "puffiness": "puffiness", "tired_eyes": "dark_circles", "fatigue": "dark_circles",
+    "early_signs": "eye_wrinkles", "eye_wrinkles": "eye_wrinkles", "mature_eye_area": "eye_wrinkles", "advanced_eye_wrinkles": "eye_wrinkles"
+  },
+
+  "premium_concerns": ["deep_wrinkles", "significant_loss_of_density", "advanced_loss_of_firmness", "demanding_mature_skin", "regeneration"],
+
+  "foundation_priority": ["C", "F", "E", "B", "G", "A", "D"],
+  "_foundation_priority_note": "PROPOSED (plan § 3.1): several concerns, none chosen with a button, the tie goes to the first. Qiriness to confirm.",
+
+  "foundations": {
+    "_about": "Per foundation key (the Routines tab's letters). `targets`: the step types that must treat the foundation's concern (« never pad »: such a step stays empty rather than take a product that does not); PROPOSED from the bench. `skin_types`: a skin type that picks this foundation when no concern is given (owner, 2026-10-14). `texture`: every cream of this foundation. `tolerance_first`: « Déconseillé » for sensitive skin is never used. `only_on_explicit_request`: the basic routine.",
+    "A": { "targets": ["serum"], "skin_types": { "dry": "dryness" } },
+    "B": { "targets": ["cleanser", "lotion"], "texture": "light" },
+    "C": { "targets": ["cream", "serum"], "tolerance_first": true, "rule": "every product suits sensitive skin (« Adapté » or « Avec précaution »), never « Déconseillé »" },
+    "D": { "targets": ["serum"] },
+    "E": { "targets": ["serum"], "premium_when": "deep wrinkles or the customer asks for the most advanced care; never because of age alone" },
+    "F": { "targets": ["serum"] },
+    "G": { "targets": ["cleanser", "exfoliant"], "skin_types": { "oily": "excess_sebum" }, "texture": "light" },
+    "H": { "only_on_explicit_request": true }
+  },
+
+  "modules": {
+    "_about": "Per module type (the Routines tab's modules). `when` adds to the tab's own concerns: the SPF module's are only in its note (« Taches ou teint irrégulier »).",
+    "eye": { "key": "eyes", "standalone": true },
+    "spf": { "key": "spf", "standalone": true, "when": ["dark_spots", "uneven_tone"] },
+    "sheet_mask": { "key": "occasional", "standalone": true, "when_size": "spa" }
+  },
+
+  "questions": {
+    "_rule": "the question whose answer changes the routine most first; skin traits before naming a concern; never age first (§ 3.3)",
+    "order": ["concern", "skin_type", "sensitivity", "current_routine", "size"],
+    "chips": {
+      "skin_type": { "fr": ["Plutôt sèche", "Équilibrée", "Grasse sur la zone T", "Grasse partout", "Je ne sais pas"], "en": ["Rather dry", "Balanced", "Oily in the T-zone", "Oily all over", "I don't know"] },
+      "sensitivity": { "fr": ["Elle réagit facilement", "Rarement"], "en": ["It reacts easily", "Rarely"] },
+      "size": { "fr": ["Essentielle (2–3 produits)", "Complète (4–5)", "Rituel spa", "J'ai déjà des produits"], "en": ["Essential (2–3 products)", "Complete (4–5)", "Spa ritual", "I already have products"] }
+    }
+  },
+
+  "treats": {
+    "_rule": "commercial offers, separate from the advice: one at most per conversation (§ 3.4). The products are the spreadsheet's « Petit plaisir » ones.",
+    "max_price": 25,
+    "treat_routines": [
+      { "key": "soiree_spa", "name_fr": "Soirée spa", "name_en": "Spa evening", "types": ["exfoliant", "mask", "mask:eyes"], "kit": "spa-maison-kit-rituel-hydratant" }
+    ]
+  }
+}

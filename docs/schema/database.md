@@ -168,6 +168,7 @@ Migration 80, named in `ADVISOR_T` / `ADVISOR_RPC`. Written by `npm run advisor:
 | `advisor_playbooks` | the brand's routine playbooks, one row each (`key`, `position`, `status`, `definition` jsonb as authored). FK `shops` |
 | `advisor_mappings` | `kind` + `key` → `definition`: families, slots, concerns, skin types, textures, areas, targets, labels (+ single sections under `_`). Makes playbooks executable without product ids |
 | `advisor_merchandising` | priority entries: product / collection / family, tier, optional concern / slot, dates |
+| `advisor_knowledge` | one row per `npm run advisor:load`, numbered (`version`), one `active` per shop: `products` (the knowledge spreadsheet's Products tab as the rules keep it, by handle) and `routines` (foundations, modules, concern map… assembled from its Routines and Rules tabs and `<brand>-routine-settings.json`), plus the load's `warnings`. With it, the storefront advisor runs the foundation engine (`advisor-knowledge.mjs`) |
 | `advisory_events` | channel-aware advice analytics: `channel` (storefront_chat, email reserved), `conversation_ref` (session id; ticket id later), `event_type`, `playbook_key`, `product_ids`, `payload` (codes and counts only). No FK, like 76 |
 | `advisory_events_purge` | service_role only: the events retention delete |
 

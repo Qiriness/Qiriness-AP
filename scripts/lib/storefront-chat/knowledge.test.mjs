@@ -8,6 +8,7 @@ import { countryForTurn } from './knowledge-topics.mjs';
 import { buildCatalogue } from './product-repository.mjs';
 import { buildResolutionIndex, resolveProducts } from './product-resolver.mjs';
 import { createLlmAgent } from './llm-agent.mjs';
+import { refsFromHistory } from './conversation-refs.mjs';
 import { parseChatRequest } from './request-schema.mjs';
 import { KNOWLEDGE_CASES } from './knowledge-cases.mjs';
 
@@ -284,17 +285,42 @@ test('common policy question takes one model call with facts preloaded; trace co
   assert.doesNotMatch(JSON.stringify(reply.trace), /Quels délais/);
 });
 
-test('product guidance is lazy in the agent and its source id reaches the trace', async () => {
+test('a product in focus has its approved guidance read before the model, and its source id reaches the trace', async () => {
+  // Owner, 2026-10-16: left to get_product_policy, the model never called it (the LED mask).
   let calls = 0; let reads = 0;
   const agent = createLlmAgent({ catalogue: CATALOGUE, knowledge: makeKnowledge(), readProductPolicies: async (id) => { reads += 1; assert.equal(id, 'mask'); return GUIDANCE; }, client: { completeWithTools: async (input) => {
     calls += 1;
-    if (calls === 1) { assert.equal(reads, 0); return toolCall('get_product_policy', { product_id: 'mask', topic: 'warranty', query: 'Quelle est la garantie du masque ?' }); }
-    assert.equal(JSON.parse(input.messages.find((m) => m.role === 'tool').content).matches[0].id, 'mask-guide:warranty');
+    assert.match(input.messages.find((m) => m.role === 'system')?.content ?? '', /^Approved guidance for Appareil visage - Masque Lumière/);
+    assert.match(JSON.stringify(input.messages), /mask-guide:warranty/);
     return answer;
   } } });
   const reply = await agent.respond({ message: 'Quelle est la garantie du Masque Lumière ?' });
-  assert.equal(reads, 1); assert.equal(calls, 2);
-  assert.deepEqual(reply.trace.tools[0].ids, ['mask-guide:warranty']);
+  assert.equal(reads, 1); assert.equal(calls, 1);
+  assert.deepEqual(reply.trace.tools[0], { name: 'get_product_policy', source: 'focus', product_id: 'mask', status: 'found', ids: ['mask-guide:warranty'] });
+});
+
+test('misspelt, with no product named: the product just discussed still has its FAQ read (dev store, 2026-10-16)', async () => {
+  // « vous recommendez combien se seance » after the LED mask: no FAQ question matches, so every entry goes.
+  let seen = '';
+  const agent = createLlmAgent({ catalogue: CATALOGUE, knowledge: makeKnowledge(), readProductPolicies: async () => GUIDANCE, client: { completeWithTools: async (input) => { seen = JSON.stringify(input.messages); return answer; } } });
+  const history = [{ role: 'user', content: 'le Masque Lumière', context: {} }, { role: 'assistant', content: 'Le Masque Lumière…', context: { refs: { recommended: [], mentioned: ['mask'] } } }];
+  const reply = await agent.respond({ message: 'vous recommendez combien se seance', history, refs: refsFromHistory(history) });
+  assert.match(seen, /product_faq_digest/);
+  assert.match(seen, /mask-guide:eyes/);
+  assert.equal(reply.trace.tools[0].source, 'focus');
+});
+
+test('get_product brings the product’s approved guidance with its facts', async () => {
+  let calls = 0;
+  const agent = createLlmAgent({ catalogue: CATALOGUE, knowledge: makeKnowledge(), readProductPolicies: async () => GUIDANCE, client: { completeWithTools: async (input) => {
+    calls += 1;
+    if (calls === 1) return toolCall('get_product', { id: 'mask' });
+    assert.equal(JSON.parse(input.messages.find((m) => m.role === 'tool').content).approved_guidance.product_id, 'mask');
+    return answer;
+  } } });
+  // Two products named: neither is « in focus », so only get_product reads it.
+  await agent.respond({ message: 'la Caresse Brume ou le Masque Lumière ?' });
+  assert.equal(calls, 2);
 });
 
 test('FAQ-linked policy is resolved in the same round and obsolete FAQ prose stays absent', async () => {

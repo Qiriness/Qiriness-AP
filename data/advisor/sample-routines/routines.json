@@ -70,10 +70,11 @@
     "F",
     "E",
     "B",
+    "G",
     "A",
     "D"
   ],
-  "_foundation_priority_note": "Several concerns, none chosen with a button: each votes for its foundation and the tie goes to the first in this list. Sensitive skin first (tolerance), then spots, ageing, blemishes, hydration, radiance (radiance most often a secondary effect). PROPOSED: Qiriness to confirm.",
+  "_foundation_priority_note": "Several concerns, none chosen with a button: each votes for its foundation and the tie goes to the first in this list. Sensitive skin first (tolerance), then spots, ageing, blemishes, hydration, radiance (radiance most often a secondary effect). PROPOSED: Qiriness to confirm. G (oily skin) after B: blemishes with shine stay Imperfections.",
   "eye_concerns": [
     "dark_circles",
     "puffiness",
@@ -128,7 +129,10 @@
           "frequency": "occasional",
           "required": false
         }
-      ]
+      ],
+      "skin_types": {
+        "dry": "dryness"
+      }
     },
     {
       "key": "B",
@@ -136,8 +140,6 @@
       "name_en": "Blemishes",
       "primary_concerns": [
         "blemishes",
-        "enlarged_pores",
-        "excess_sebum",
         "uneven_texture"
       ],
       "preferred_range": "Pure (test)",
@@ -375,6 +377,55 @@
     },
     {
       "key": "G",
+      "name_fr": "Peaux grasses",
+      "name_en": "Oily skin",
+      "primary_concerns": [
+        "excess_sebum",
+        "enlarged_pores"
+      ],
+      "skin_types": {
+        "oily": "excess_sebum"
+      },
+      "preferred_range": "Pure (test)",
+      "texture": "light",
+      "steps": [
+        {
+          "order": 1,
+          "type": "cleanser",
+          "frequency": "daily",
+          "required": true,
+          "targets": "primary"
+        },
+        {
+          "order": 2,
+          "type": "lotion",
+          "frequency": "daily",
+          "required": true,
+          "targets": "primary"
+        },
+        {
+          "order": 3,
+          "type": "cream",
+          "frequency": "daily",
+          "required": true,
+          "note": "a light, mattifying cream"
+        },
+        {
+          "order": 4,
+          "type": "exfoliant",
+          "frequency": "occasional",
+          "required": false
+        },
+        {
+          "order": 5,
+          "type": "mask",
+          "frequency": "occasional",
+          "required": false
+        }
+      ]
+    },
+    {
+      "key": "H",
       "name_fr": "Routine de base",
       "name_en": "Basic routine",
       "primary_concerns": [],
@@ -547,7 +598,7 @@
     "men": "a preference, not a routine: men's products ranked first in each step, others still possible",
     "budget": "a small budget (« petit budget », « trop cher »): just after ONE product, the cheapest product of the same type that still targets their concern; else a « petit plaisir » for their concern instead of a routine, since treats are cheaper (owner, 2026-10-13); a ceiling (« moins de 60 € »): the routine cut to fit, optional steps first, the concern's step last, and a treat under the ceiling when even that step is over",
     "exclusions": "an ingredient the customer avoids is never in any step",
-    "basic_routine": "foundation G only when asked for (« juste une routine de base »); « je ne sais pas ce qu'il me faut » gets one useful question instead",
+    "basic_routine": "foundation H only when asked for (« juste une routine de base »); « je ne sais pas ce qu'il me faut » gets one useful question instead",
     "top_choices": "outside the routine builder, a need gets our top choices: the best fit and its two alternatives, each with why (owner, 2026-10-13)"
   },
   "questions": {
@@ -656,6 +707,7 @@
     "E": "E",
     "F": "F",
     "G": "G",
+    "H": "H",
     "eyes": "eyes",
     "gift": "gift",
     "spa": "spa",

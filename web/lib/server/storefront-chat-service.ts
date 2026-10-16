@@ -48,6 +48,7 @@ import { createOrderStatusReader } from "../../../scripts/lib/storefront-chat/or
 import { recordDataAccessEvent } from "../../../scripts/lib/compliance-audit.mjs";
 import { loadAdvisoryConfig } from "../../../scripts/lib/advisory/advisory-repository.mjs";
 import { createAdvisor } from "../../../scripts/lib/advisory/recommend.mjs";
+import { loadAdvisorKnowledge } from "../../../scripts/lib/advisory/advisor-knowledge.mjs";
 import {
   DEFAULT_STOREFRONT_MODEL,
   DEFAULT_TIMEOUT_MS,
@@ -262,6 +263,11 @@ async function productPolicyReader(
  * loaded, or a config that does not validate: null, and the advisor advises
  * from search as before.
  *
+ * With the shop's active knowledge (`advisor_knowledge`: the spreadsheet's
+ * products and the routines assembled from it; owner made it live on
+ * 2026-10-16), the foundation engine runs instead, and the agent gets the same
+ * product knowledge. No knowledge, or a failed read: the playbooks, as before.
+ *
  * DEV ONLY — under a dev catalogue the dev products sit in no curated
  * collection, so a playbook's slots and families (« serums-visage », the
  * « Temps Sublime » range) would match nothing. The engine reads each dev
@@ -287,7 +293,14 @@ async function buildAdvisor(
         collections: dashboard.collections,
       };
     }
-    return createAdvisor(raw, advisorCatalogue);
+    const loaded = await loadAdvisorKnowledge(reader as never, shopId).catch((error: unknown) => {
+      console.warn("[storefront chat] knowledge unavailable, playbooks run", error instanceof Error ? error.message : error);
+      return null;
+    });
+    return {
+      advisor: createAdvisor(raw, advisorCatalogue, loaded ? { knowledge: loaded.knowledge, routines: loaded.routines } : {}),
+      productKnowledge: loaded?.knowledge ?? null,
+    };
   } catch (error) {
     console.warn("[storefront chat] advisor unavailable", error instanceof Error ? error.message : error);
     return null;
@@ -314,6 +327,7 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
         toolsOn ? loadKnowledge(reader, shop.id).catch(() => { console.warn("[storefront chat] knowledge load failed"); return null; }) : null,
       ])
     : [{}, null, null];
+  const consultation = toolsOn && shop ? await buildAdvisor(reader, shop.id, catalogue as never, devCatalogue) : null;
   const llm = createOpenAIClient({
     apiKey: process.env.OPENAI_API_KEY,
     fetchImpl: storefrontFetch(positiveInt(process.env.STOREFRONT_CHAT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)),
@@ -337,7 +351,8 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
     // Dev only: the dev store lacks the catalogue, so cards link to the store
     // that has it. Unset in production, where links stay on the widget's store.
     productBaseUrl: process.env.STOREFRONT_CHAT_PRODUCT_BASE_URL || null,
-    advisor: toolsOn && shop ? await buildAdvisor(reader, shop.id, catalogue as never, devCatalogue) : null,
+    advisor: consultation?.advisor ?? null,
+    productKnowledge: consultation?.productKnowledge ?? null,
     // One order's status by its number (order-status-repository.mjs), on the
     // shop whose orders are synced. Off unless STOREFRONT_CHAT_ORDER_STATUS=on.
     readOrder: toolsOn && process.env.STOREFRONT_CHAT_ORDER_STATUS === "on" ? orderReader(db) : null,
