@@ -129,6 +129,12 @@ test('contact cannot open the revenue-led panels or download the sales report', 
   assert.equal(canAccessPath('contact', '/api/insights/topic-map'), true);
 });
 
+test('contact can open Social media (reopened 2026-10-16)', () => {
+  for (const role of ['developer', 'management', 'contact']) assert.equal(canSeePanel(role, 'social'), true, role);
+  assert.equal(canAccessPath('contact', '/insights/social'), true);
+  assert.equal(canAccessPath('contact', '/api/insights/social/report'), true);
+});
+
 test('every role may open the other panels, and the rest of the app', () => {
   for (const role of ROLES) {
     for (const panel of ['fulfilment', 'support', 'customers', 'agent']) {

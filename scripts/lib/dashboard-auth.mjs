@@ -52,6 +52,9 @@ export const ROLE_CLAIM = 'dashboard_role';
  * unlocks revenue data too, so setting or removing it is closed as well.
  * Choosing an agent's model (Settings → Agent settings, 2026-09-30) moves what
  * the desk spends, so the contact team sees the models but cannot change them.
+ * Social media was closed with Marketing and reopened to the contact team
+ * (2026-10-16, the owner's rule) — paid mode included; connecting an account
+ * still goes through Settings → Integrations, which stays closed.
  * Developer and Management are identical for now; they
  * are separate roles so they can diverge without a migration.
  */
@@ -62,8 +65,6 @@ const DENIED = Object.freeze({
     '/insights/overview',
     '/insights/sales',
     '/insights/marketing',
-    // Ad spend and attributed revenue, beside Marketing for the same reason.
-    '/insights/social',
     '/api/insights/report',
     '/home',
     '/api/chat',
