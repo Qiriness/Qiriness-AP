@@ -135,6 +135,17 @@ test('contact can open Social media (reopened 2026-10-16)', () => {
   assert.equal(canAccessPath('contact', '/api/insights/social/report'), true);
 });
 
+test('contact can connect, sync and disconnect social accounts (2026-10-16)', () => {
+  for (const path of [
+    '/api/settings/integrations/meta/start',
+    '/api/settings/integrations/google_ads/callback',
+    '/api/settings/integrations/meta/sync',
+    '/api/settings/integrations/meta',
+    '/api/settings/integrations/social',
+    '/api/settings/integrations/social/accounts/abc'
+  ]) assert.equal(canAccessPath('contact', path), true, path);
+});
+
 test('every role may open the other panels, and the rest of the app', () => {
   for (const role of ROLES) {
     for (const panel of ['fulfilment', 'support', 'customers', 'agent']) {
@@ -163,6 +174,7 @@ test('the integrations key is closed to contact and open to the other two', () =
   assert.equal(canManageIntegrations('contact'), false);
   assert.equal(canManageIntegrations('management'), true);
   assert.equal(canManageIntegrations('developer'), true);
+  assert.equal(canAccessPath('contact', '/api/settings/integrations/klaviyo/anything'), false);
   // The rest of Settings stays open to every role.
   assert.equal(canAccessPath('contact', '/settings'), true);
 });

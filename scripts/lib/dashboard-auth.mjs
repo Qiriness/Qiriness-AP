@@ -53,8 +53,9 @@ export const ROLE_CLAIM = 'dashboard_role';
  * Choosing an agent's model (Settings → Agent settings, 2026-09-30) moves what
  * the desk spends, so the contact team sees the models but cannot change them.
  * Social media was closed with Marketing and reopened to the contact team
- * (2026-10-16, the owner's rule) — paid mode included; connecting an account
- * still goes through Settings → Integrations, which stays closed.
+ * (2026-10-16, the owner's rule) — paid mode included — and so is connecting,
+ * syncing and disconnecting social accounts from its Connections dialog. The
+ * Settings → Integrations tab stays closed: it carries the Klaviyo key.
  * Developer and Management are identical for now; they
  * are separate roles so they can diverge without a migration.
  */
@@ -68,7 +69,8 @@ const DENIED = Object.freeze({
     '/api/insights/report',
     '/home',
     '/api/chat',
-    '/api/settings/integrations',
+    // Only the Klaviyo key: connecting social accounts is open (2026-10-16).
+    '/api/settings/integrations/klaviyo',
     '/api/settings/agents'
   ]
 });
@@ -80,7 +82,7 @@ export function canUseManagementChat(role) {
 
 /** May this role see and change the Klaviyo key? What Settings asks before drawing the tab. */
 export function canManageIntegrations(role) {
-  return canAccessPath(role, '/api/settings/integrations');
+  return canAccessPath(role, '/api/settings/integrations/klaviyo');
 }
 
 /** May this role choose the model an agent runs on? What Agent settings asks before drawing the picker. */
