@@ -21,7 +21,8 @@
  *   { offer: null | 'offered' | 'accepted' | 'declined',
  *     anchor: { id, source: 'page' | 'request' | 'suggested' } | null,
  *     treat_offered: boolean,
- *     cart: { pending: [{ id, variant_id | null }], asked: [id] } }   the add-to-cart question
+ *     cart: { pending: [{ id, variant_id | null }], asked: [id] },   the add-to-cart question
+ *     routine_ref: uuid | null }                                    the routine just built (advisor_routines)
  *
  * ADD TO CART (owner, 2026-10-13): after a recommended routine (in place of the
  * treat, which then follows the answer) or after a single product once the
@@ -79,7 +80,7 @@ const NO = /^\s*(non|nan|pas (maintenant|pour l'instant|besoin)|sans fa[cç]on|n
 const STILL_LOOKING = /\b(je cherche encore|je regarde encore|pas encore|plus tard|je reflechis|je réfléchis|still looking|just looking|not yet|maybe later|later)\b/iu;
 
 export function emptyFlow() {
-  return { offer: null, anchor: null, treat_offered: false, cart: { pending: [], asked: [] } };
+  return { offer: null, anchor: null, treat_offered: false, cart: { pending: [], asked: [] }, routine_ref: null };
 }
 
 /** From the message log: re-checked like the rest of the state. */
@@ -89,7 +90,9 @@ export function cleanFlow(saved) {
     .filter((x) => x && ID.test(x.id ?? '') && (x.variant_id === null || GID_VARIANT.test(x.variant_id ?? '')))
     .slice(0, 8).map((x) => ({ id: x.id, variant_id: x.variant_id }));
   const asked = (Array.isArray(saved?.cart?.asked) ? saved.cart.asked : []).filter((id) => ID.test(id ?? '')).slice(-20);
-  return { offer: OFFERS.includes(saved?.offer) ? saved.offer : null, anchor, treat_offered: saved?.treat_offered === true, cart: { pending, asked } };
+  // The routine just built (advisor_routines.ref): « Oui, ajouter » marks it added to the cart.
+  const routineRef = typeof saved?.routine_ref === 'string' && ID.test(saved.routine_ref) ? saved.routine_ref : null;
+  return { offer: OFFERS.includes(saved?.offer) ? saved.offer : null, anchor, treat_offered: saved?.treat_offered === true, cart: { pending, asked }, routine_ref: routineRef };
 }
 
 /** The answer to the cart question: a button, or typed words while it is pending. */

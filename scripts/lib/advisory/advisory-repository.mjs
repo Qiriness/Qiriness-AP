@@ -18,7 +18,9 @@ export const ADVISOR_T = {
   MERCHANDISING: 'advisor_merchandising',
   EVENTS: 'advisory_events',
   /** Product knowledge and assembled routines, one version per load (advisor-knowledge.mjs). */
-  KNOWLEDGE: 'advisor_knowledge'
+  KNOWLEDGE: 'advisor_knowledge',
+  /** The personalised routines built, anonymous, for statistics (routine-record.mjs, migration 98). */
+  ROUTINES: 'advisor_routines'
 };
 
 /** Sections stored entry by entry. */

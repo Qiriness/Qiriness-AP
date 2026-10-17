@@ -42,6 +42,27 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 59. The eye routine, button questions without the model, advisor_routines: applied and loaded, not yet in the widget — 2026-10-17
+
+Migration 98 is applied and knowledge version 3 is loaded. Before checking: redeploy the widget (`cd storefront-app && shopify app dev`): « Ajouter la routine au panier »'s routine beacon is in the new widget only. The dev store needs the eye products (the Éclat Parfait lotion, gold patches, Élixir Regard Éclat, the three eye creams, the biphase remover).
+
+1. **Six buttons, no model.** **Check:** « Construire ma routine » → the six main concerns; each button answer's reply is the settings' sentence and `trace.model_skipped = builder_question` on the assistant row, `model` tokens null.
+2. **The eye routine.** **Check:** « Cernes et poches » → « Avez-vous une autre préoccupation autour des yeux ? » (3 buttons) → age → moment. 45+, « Rides ou ridules », day: Lotion Tonique Hydratante Éclat Parfait, gold patches, Élixir Regard Éclat, Regard d'Exception. 25–34, « Taches »: the cream is Caresse Regard Énergie.
+3. **Age always asked.** **Check:** « Déshydratation » → skin type (no « Je ne sais pas ») → age → moment.
+4. **The routine kept.** **Check:** after the routine, one `advisor_routines` row with the answers and products and no session; « Ajouter la routine au panier » (or « Oui, ajouter ») sets `added_to_cart_at` once.
+5. **English.** **Check:** the same flow in English (labels and sentences from the settings).
+
+## 58. The day / night routine: tested on the real sheet and catalogue offline, not yet in the widget — 2026-10-16
+
+Knowledge version 2 is loaded. **The dev store has 2 of the 30 products the routines use** (the Temps Sublime night cream, the Éclat Parfait serum): add the cleansers, lotions, make-up removers, serums, eye care and creams first (`npm run dev-store:sync`), then restart `cd storefront-app && shopify app dev`. Until then the skin type and age questions are skipped (they change nothing) and a routine is one product.
+
+1. **The questions.** **Check:** « Construire ma routine » → the main concern (5 buttons), the skin type (with « Sensible »), the age for « Rides » / « Premières rides » only, then « Routine du jour / de nuit / Jour et nuit » with a price each. « J'ai 32 ans » is not asked again.
+2. **The day routine.** **Check:** anti-age, dry, 35–44, day: four cards in order (lotion, Temps Sublime serum, Temps Sublime eye cream, rich cream); `trace.advice.steps` slots `day_1`…`day_4`.
+3. **Day and night.** **Check:** the same with « Jour et nuit »: six cards; the reply presents the morning then the evening and says the lotion and the eye cream are used in the evening too.
+4. **The ranges by age.** **Check:** under 25 Active Énergie, 45+ Exception with « Regard d'Exception »; hydration gets the « Sérum Élixir Regard Éclat » for the eyes.
+5. **Sensitive skin.** **Check:** « Sensible » gives the « Pain Nettoyant Visage Doux » in the day; no « Déconseillé » product.
+6. **English.** **Check:** the same flow in English: the labels « Under 25 », « Day routine »…; « I'm 52, wrinkles, I want a night routine » asks only the skin type, then gives the night routine with Exception.
+
 ## 57. The first dev-store test's fixes and the live spreadsheet: tested offline, not yet in the widget — 2026-10-16
 
 From the owner's notes (`data/advisor/qiriness-advisor-conversation-notes-v1.xlsx`). Restart `cd storefront-app && shopify app dev` first (code and `.env.local` changed). The dev store has 12 live products (no cleanser, no anti-age serum), so the routines are thinner than on the real catalogue.

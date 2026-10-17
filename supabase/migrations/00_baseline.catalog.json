@@ -208,6 +208,40 @@
     "advisor_playbooks_unique: UNIQUE (shop_id, key)"
    ]
   },
+  "public.advisor_routines": {
+   "rls": true,
+   "force_rls": false,
+   "acl": {
+    "service_role": "Dadmrtwx"
+   },
+   "columns": [
+    "id bigint not null identity a",
+    "ref uuid not null",
+    "shop_domain text not null",
+    "channel text not null",
+    "locale text",
+    "main_concern text",
+    "primary_concern text",
+    "secondary_concerns text[] not null default '{}'::text[]",
+    "skin_type text",
+    "eye_concern text",
+    "age_band text",
+    "routine_time text not null",
+    "answer_sources jsonb not null default '{}'::jsonb",
+    "product_handles text[] not null default '{}'::text[]",
+    "total_price numeric(10,2)",
+    "currency text",
+    "added_to_cart_at timestamp with time zone",
+    "created_at timestamp with time zone not null default now()"
+   ],
+   "constraints": [
+    "advisor_routines_channel_check: CHECK ((channel = ANY (ARRAY['storefront_chat'::text, 'email'::text])))",
+    "advisor_routines_pkey: PRIMARY KEY (id)",
+    "advisor_routines_ref_unique: UNIQUE (ref)",
+    "advisor_routines_sources_check: CHECK ((jsonb_typeof(answer_sources) = 'object'::text))",
+    "advisor_routines_time_check: CHECK ((routine_time = ANY (ARRAY['day'::text, 'night'::text, 'both'::text])))"
+   ]
+  },
   "public.advisory_events": {
    "rls": true,
    "force_rls": false,
@@ -2742,6 +2776,7 @@
   "CREATE INDEX ad_days_shop_day_idx ON public.ad_days USING btree (shop_id, day)",
   "CREATE INDEX advice_collections_active_idx ON public.advice_collections USING btree (shop_id, is_active) WHERE (deleted_at IS NULL)",
   "CREATE INDEX advice_collections_product_ids_gin_idx ON public.advice_collections USING gin (product_ids)",
+  "CREATE INDEX advisor_routines_shop_idx ON public.advisor_routines USING btree (shop_domain, created_at DESC)",
   "CREATE INDEX advisory_events_conversation_idx ON public.advisory_events USING btree (conversation_ref, created_at)",
   "CREATE INDEX advisory_events_shop_idx ON public.advisory_events USING btree (shop_domain, created_at DESC)",
   "CREATE INDEX advisory_events_type_idx ON public.advisory_events USING btree (event_type, created_at DESC)",
@@ -4429,6 +4464,7 @@
   "table public.advisor_mappings: How playbooks resolve against the catalogue without product ids: families, slots, concerns, skin types, textures, areas -> collections, tags, care types, name words; plus chip labels. One row per entry; key _ for a whole section.",
   "table public.advisor_merchandising: The brand's priority products for advice, by product handle, collection or family, optionally per concern/slot and dates. Applied after suitability, within a tie window: reorders suitable products, never makes an unsuitable one recommended.",
   "table public.advisor_playbooks: The brand's advisory routine playbooks, as authored (data/advisor/<brand>.json via npm run advisor:load). Read by the storefront advisor only. Products are never named by id here.",
+  "table public.advisor_routines: One row per personalised routine the storefront advisor built: its number (id), the builder's answers as codes, the products and total, when it was added to the cart. Anonymous: no customer, no session, no words.",
   "table public.advisory_events: Advisory analytics events, channel-aware (storefront_chat now, email reserved). Codes, counts and ids only; never the customer's words. Purged with advisory_events_purge.",
   "table public.agent_models: The model each agent runs on, when chosen in Settings. Overrides the worker's AGENT_*_MODEL and the dashboard's CHAT_MODEL; no row means the env var decides.",
   "table public.agent_test_runs: One rehearsal of the agent pipeline against a message an operator typed, from the Agent Setup test chat. References no ticket, message, investigation or draft because a rehearsal writes none of them -- the passes run against in-memory stores, so the queue and every Insights view are untouched by a test. Nothing downstream reads these rows: they are an operator's notebook, plus the ideal-answer capture that is the invented-situation half of ticket_draft_edits.",

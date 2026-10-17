@@ -2,7 +2,7 @@ import {
   parseAllowedShops,
   verifyAppProxySignature,
 } from "../../../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
-import { recordProductClick } from "@/lib/server/storefront-chat-service";
+import { recordProductClick, recordRoutineAdded } from "@/lib/server/storefront-chat-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -17,8 +17,10 @@ const MAX_BODY_BYTES = 1024;
  *
  * The same guards as /api/storefront/chat: app proxy signature, shop
  * allow-list, both failing closed. The body is `{ sessionId, productId, type? }`,
- * both uuids; the session must belong to the signed shop. Always 204 for a
- * well-formed request: a click beacon has nobody to show an error to.
+ * both uuids; the session must belong to the signed shop. Or `{ routineRef,
+ * type: "routine_added_to_cart" }`: « Ajouter la routine au panier » marks that
+ * routine (advisor_routines) of the signed shop. Always 204 for a well-formed
+ * request: a click beacon has nobody to show an error to.
  */
 export async function POST(request: Request) {
   const secret = process.env.STOREFRONT_APP_CLIENT_SECRET ?? "";
@@ -30,11 +32,20 @@ export async function POST(request: Request) {
 
   const raw = await request.text();
   if (Buffer.byteLength(raw, "utf8") > MAX_BODY_BYTES) return new Response(null, { status: 413 });
-  let body: { sessionId?: unknown; productId?: unknown; type?: unknown };
+  let body: { sessionId?: unknown; productId?: unknown; routineRef?: unknown; type?: unknown };
   try {
     body = JSON.parse(raw);
   } catch {
     return new Response(null, { status: 400 });
+  }
+  if (body.type === "routine_added_to_cart") {
+    if (typeof body.routineRef !== "string" || !UUID.test(body.routineRef)) return new Response(null, { status: 400 });
+    try {
+      await recordRoutineAdded(proof.shop, body.routineRef.toLowerCase());
+    } catch (error) {
+      console.warn("[storefront event] routine not recorded", error instanceof Error ? error.message : error);
+    }
+    return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
   }
   if (typeof body.sessionId !== "string" || !UUID.test(body.sessionId) || typeof body.productId !== "string" || !UUID.test(body.productId)) {
     return new Response(null, { status: 400 });

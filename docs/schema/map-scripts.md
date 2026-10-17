@@ -189,16 +189,21 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # dropdowns, standard concerns, kits) · replenishment
 |       |                                # (measured/stated interval, daily care only) ·
 |       |                                # foundations (the § 3.1–3.4 engine: foundations,
-|       |                                # sizes, modules, owned types, gift, spa; used when a
-|       |                                # shop has routines + product knowledge) ·
+|       |                                # sizes, modules, owned types, gift, spa; with
+|       |                                # routine_steps, the day / night routine in the
+|       |                                # builder; used when a shop has routines + product
+|       |                                # knowledge; day-night.test on the real sheet) ·
 |       |                                # routine-cases (npm run advisor:score) ·
-|       |                                # routine-knowledge (the Routines and Rules tabs →
-|       |                                # foundations, steps, modules, concerns; the two
-|       |                                # tabs cross-checked) · assemble-routines (the
+|       |                                # routine-knowledge (the Routines tab → day and night
+|       |                                # steps, modules; the Rules tab → concerns, main
+|       |                                # concerns, ages, moments; cross-checked) · assemble-routines (the
 |       |                                # sheet + the brand's routine settings → the
 |       |                                # routines the engine runs) · advisor-knowledge
 |       |                                # (build, row, load: advisor_knowledge, one active
-|       |                                # version per shop, read by the storefront service)
+|       |                                # version per shop, read by the storefront service) ·
+|       |                                # routine-record (a finished routine → the anonymous
+|       |                                # advisor_routines row; builder-questions.test in
+|       |                                # storefront-chat drives it through the agent)
 |       |-- company.mjs                  # who the company is: shops.shop_name + the
 |       |                                # company_description / logistics_provider_name
 |       |                                # parameters; loadCompany, serviceClientOf. Every

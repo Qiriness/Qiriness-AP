@@ -65,6 +65,7 @@ import {
   supabaseRpc,
   supabaseSelect,
   supabaseSelectAll,
+  supabaseUpdate,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { getShop } from "./shop";
 
@@ -118,6 +119,8 @@ export interface StorefrontFollowUp {
 export interface StorefrontCartItems {
   add: { product_id: string; variant_id: string }[];
   needs_size: string[];
+  /** The routine these products are (advisor_routines.ref): the widget reports it added. */
+  routine_ref?: string;
 }
 
 /** The contact form link under the reply: a path on the shop's site (the `contact_form_path` parameter). */
@@ -474,6 +477,8 @@ export async function handleStorefrontChat(
   ], { returning: 'minimal' });
 
   recordAdvisoryEvents(db, shopDomain, "events" in reply && Array.isArray(reply.events) ? reply.events : []);
+  if ("routine" in reply && reply.routine) recordRoutine(db, shopDomain, reply.routine as object);
+  if ("routineAdded" in reply && typeof reply.routineAdded === "string") markRoutineAdded(db, shopDomain, reply.routineAdded);
 
   const choices = ("choices" in reply && Array.isArray(reply.choices) ? reply.choices : []) as StorefrontChoice[];
   const contact = ("contact" in reply && reply.contact ? reply.contact : null) as StorefrontContact | null;
@@ -491,6 +496,28 @@ export function recordAdvisoryEvents(db: ReturnType<typeof client>, shopDomain: 
   supabaseInsert(db, ADVISOR_T.EVENTS, events.map((e) => ({ ...e, shop_domain: shopDomain }))).catch((error: unknown) => {
     console.warn("[storefront chat] advisory events not recorded", error instanceof Error ? error.message : error);
   });
+}
+
+/**
+ * A personalised routine the builder finished (advisor_routines): anonymous, for
+ * statistics. Written after the reply and never waited for, like the events.
+ */
+export function recordRoutine(db: ReturnType<typeof client>, shopDomain: string, routine: object) {
+  supabaseInsert(db, ADVISOR_T.ROUTINES, [{ ...routine, shop_domain: shopDomain }], { returning: "minimal" }).catch((error: unknown) => {
+    console.warn("[storefront chat] routine not recorded", error instanceof Error ? error.message : error);
+  });
+}
+
+/** The routine added to the cart: « Oui, ajouter », or the widget's « Ajouter la routine au panier ». The first time only. */
+export function markRoutineAdded(db: ReturnType<typeof client>, shopDomain: string, ref: string) {
+  return supabaseUpdate(db, ADVISOR_T.ROUTINES, { ref, shop_domain: shopDomain, added_to_cart_at: { operator: "is", value: "null" } }, { added_to_cart_at: new Date().toISOString() }, { returning: "minimal" }).catch((error: unknown) => {
+    console.warn("[storefront chat] routine cart not recorded", error instanceof Error ? error.message : error);
+  });
+}
+
+/** The widget's « Ajouter la routine au panier », through the signed event route. */
+export async function recordRoutineAdded(shopDomain: string, ref: string) {
+  await markRoutineAdded(client(), shopDomain, ref);
 }
 
 /** A card click from the widget, through the signed event route. */

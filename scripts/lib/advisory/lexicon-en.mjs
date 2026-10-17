@@ -109,6 +109,13 @@ export default {
     targeted: /\b((one|a single|just one) (product|treatment)|targeted (product|treatment|care))\b/
   },
 
+  // The day routine, the night routine or both (owner, 2026-10-16).
+  routineTime: {
+    both: /\b(morning and (evening|night)|evening and morning|day and night|night and day|both routines)\b/,
+    day: /\b((morning|day|daytime|am) (skin ?care )?routine|routine for the morning)\b/,
+    night: /\b((evening|night|nighttime|night time|bedtime|pm) (skin ?care )?routine|routine for the (evening|night)|before bed)\b/
+  },
+
   // What they ask for beyond a routine for a need (plan § 3.1, § 3.4).
   requests: {
     basic_routine: /\b(basic (skin ?care )?routine|just the basics|the basics)\b/,

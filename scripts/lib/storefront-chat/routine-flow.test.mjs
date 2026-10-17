@@ -37,7 +37,7 @@ test('the offer follows products, once, never in the builder; its anchor is the 
   const offered = followUpFor({ ...base, flow: emptyFlow(), anchor: { id: ID(4), source: 'suggested' } });
   assert.equal(offered.followUp.kind, 'offer');
   assert.deepEqual(offered.followUp.choices, [{ label: 'Oui, avec plaisir', value: 'flow:routine:yes' }, { label: 'Non merci', value: 'flow:routine:no' }]);
-  assert.deepEqual(offered.flow, { offer: 'offered', anchor: { id: ID(4), source: 'suggested' }, treat_offered: false, cart: { pending: [], asked: [] } });
+  assert.deepEqual(offered.flow, { offer: 'offered', anchor: { id: ID(4), source: 'suggested' }, treat_offered: false, cart: { pending: [], asked: [] }, routine_ref: null });
   assert.equal(followUpFor({ ...base, flow: offered.flow }).followUp, null);
   assert.equal(followUpFor({ ...base, flow: emptyFlow(), builder: true }).followUp, null);
   assert.equal(followUpFor({ ...base, flow: emptyFlow(), showsProducts: false }).followUp, null);
@@ -66,7 +66,10 @@ test('in the builder the purchase question wins over the treat; « il m\'en rest
 
 test('flow state from the log is re-checked', () => {
   assert.deepEqual(cleanFlow({ offer: 'maybe', anchor: { id: 'x', source: 'page' }, treat_offered: 'yes' }), emptyFlow());
-  assert.deepEqual(cleanFlow({ offer: 'declined', anchor: { id: ID(1), source: 'page' } }), { offer: 'declined', anchor: { id: ID(1), source: 'page' }, treat_offered: false, cart: { pending: [], asked: [] } });
+  assert.deepEqual(cleanFlow({ offer: 'declined', anchor: { id: ID(1), source: 'page' } }), { offer: 'declined', anchor: { id: ID(1), source: 'page' }, treat_offered: false, cart: { pending: [], asked: [] }, routine_ref: null });
+  // The routine's ref survives the log; anything else is dropped.
+  assert.equal(cleanFlow({ routine_ref: ID(7) }).routine_ref, ID(7));
+  assert.equal(cleanFlow({ routine_ref: 'DROP TABLE' }).routine_ref, null);
   // A pending cart keeps only real ids and variant gids.
   assert.deepEqual(cleanFlow({ cart: { pending: [{ id: ID(1), variant_id: 'gid://shopify/ProductVariant/5' }, { id: 'x', variant_id: null }, { id: ID(2), variant_id: 'evil' }], asked: [ID(1), 'x'] } }).cart, { pending: [{ id: ID(1), variant_id: 'gid://shopify/ProductVariant/5' }], asked: [ID(1)] });
 });

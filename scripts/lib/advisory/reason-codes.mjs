@@ -38,7 +38,15 @@ export const FIT = {
   /** They have a product of this type, but their concern needs a specific one for this step (owner's rule). */
   CONCERN_NEEDS_SPECIFIC_PRODUCT: 'concern_needs_specific_product',
   /** A required step had no product: this optional step takes its place (owner, 2026-10-16). */
-  REPLACES_MISSING_STEP: 'replaces_missing_step'
+  REPLACES_MISSING_STEP: 'replaces_missing_step',
+  /** The range their age gives (`age_range:45_plus`): Exception, Temps Sublime, Active Énergie (owner, 2026-10-16). */
+  AGE_RANGE: 'age_range',
+  /** Made for this moment of the routine (`made_for_time:night`): a night cream (owner, 2026-10-16). */
+  MADE_FOR_TIME: 'made_for_time',
+  /** The step's own product (Routines tab « Produit »): always this one (owner, 2026-10-17: the eye routine). */
+  STEP_PRODUCT: 'step_product',
+  /** No product met the step's criteria: its « Produit » instead (the standard eye cream). */
+  STEP_FALLBACK: 'step_fallback'
 };
 
 /** Why a step of the playbook was not filled. */
@@ -48,7 +56,9 @@ export const SKIPPED = {
   ALREADY_OWNED: 'already_owned',
   /** Left out to keep the routine within the customer's budget. */
   OVER_BUDGET: 'over_budget',
-  NO_ELIGIBLE_PRODUCT: 'no_eligible_product'
+  NO_ELIGIBLE_PRODUCT: 'no_eligible_product',
+  /** Day and night: this night step's product is already in the day routine (`product_id`), used morning and evening. */
+  ALSO_IN_DAY_ROUTINE: 'also_in_day_routine'
 };
 
 /** Why a product to build the routine around was not placed (`pinned` in the advice). */

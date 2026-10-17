@@ -64,6 +64,7 @@ const ROUTINE_STEP_ORDER = ['night_cream', 'eye_care', 'cleanser', 'serum', 'lot
 const DESIRED_ORDER = ['serum', 'night_cream', 'eye_care', 'cleanser', 'mask', 'moisturiser'];
 const SCOPE_ORDER = ['complete', 'complete_existing', 'essential', 'targeted'];
 const REQUEST_ORDER = ['basic_routine', 'gift', 'spa'];
+const ROUTINE_TIME_ORDER = ['both', 'day', 'night'];
 
 /** One pattern from every table's entry: (?:fr)|(?:en). */
 function union(pick, flags = '') {
@@ -88,6 +89,7 @@ const L = {
   wants: union((l) => l.wants),
   desired: keyed('desired', DESIRED_ORDER),
   scope: keyed('scope', SCOPE_ORDER),
+  routineTime: keyed('routineTime', ROUTINE_TIME_ORDER),
   requests: keyed('requests', REQUEST_ORDER),
   budgetSmall: union((l) => l.budgetSmall),
   moreOptions: union((l) => l.moreOptions),
@@ -105,7 +107,7 @@ const ALL_PATTERNS = [
   L.eyes, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.routineBuilder, L.dontKnow,
   ...L.concerns.map(([re]) => re), ...L.skinTypes.map(([, re]) => re), ...L.sensitivity.map(([, re]) => re),
   ...L.routineSteps.map(([, re]) => re), ...L.desired.map(([, re]) => re), ...L.scope.map(([, re]) => re),
-  ...L.requests.map(([, re]) => re), L.budgetSmall, L.moreOptions, ...L.budgetAmount,
+  ...L.routineTime.map(([, re]) => re), ...L.requests.map(([, re]) => re), L.budgetSmall, L.moreOptions, ...L.budgetAmount,
   ...L.exclusions, ...L.routineClauses, ...L.age, ...L.ageWords.map(([re]) => re)
 ];
 const NEUTRAL = new Set(LANGUAGES.flatMap((l) => [...l.markers, ...l.fillers]));
@@ -201,6 +203,8 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
 
   const scope = L.scope.find(([, re]) => re.test(text));
   if (scope) add('routine_scope', scope[0], 'high');
+  const routineTime = L.routineTime.find(([, re]) => re.test(text));
+  if (routineTime) add('routine_time', routineTime[0], 'high');
 
   const request = L.requests.find(([, re]) => re.test(text));
   if (request) add('request', request[0], 'high');
@@ -210,8 +214,11 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
   if (amount && Number(amount[1]) >= 5) add('budget_max', String(Number(amount[1])), 'high');
 
   const age = L.age.map((re) => text.match(re)).find(Boolean);
-  const band = age ? ageBand(Number(age[1])) : ageBand(L.ageWords.find(([re]) => re.test(text))?.[1]);
+  const years = age ? Number(age[1]) : L.ageWords.find(([re]) => re.test(text))?.[1];
+  const band = ageBand(years);
   if (band) add('age_band', band, 'high');
+  // The years too: a brand's own age ranges (its routines) read them.
+  if (band) add('age', String(years), 'high');
 
   const found = [];
   for (const [re, faceConcern, eyeConcern] of L.concerns) {

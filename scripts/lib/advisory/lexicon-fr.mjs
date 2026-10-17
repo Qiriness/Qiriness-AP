@@ -108,6 +108,13 @@ export default {
     targeted: /\b(un seul (produit|soin)|juste un (produit|soin)|un soin cible|un produit cible)\b/
   },
 
+  // The day routine, the night routine or both (owner, 2026-10-16).
+  routineTime: {
+    both: /\b(matin et soir|soir et matin|jour et nuit|nuit et jour|les deux routines)\b/,
+    day: /\b(routine (du |de |de la )?(jour|matin|journee)|routine matinale|routine pour le matin|soins? du matin)\b/,
+    night: /\b(routine (du |de )?(soir|nuit)|routine pour le soir|soins? du soir|avant de (me coucher|dormir))\b/
+  },
+
   // What they ask for beyond a routine for a need (plan § 3.1, § 3.4).
   requests: {
     basic_routine: /\b(routine (de base|basique|toute simple)|les bases|juste les basiques)\b/,

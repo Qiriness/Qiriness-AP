@@ -17,11 +17,17 @@ export const FIELDS = {
   sensitivity: { multi: false },
   primary_concern: { multi: false },
   secondary_concerns: { multi: true },
+  /** The eye routine's other concern around the eyes, or `none` (owner, 2026-10-17). */
+  eye_concern: { multi: false },
   current_routine: { multi: true },
   desired_care_type: { multi: false },
   routine_scope: { multi: false },
   sex_target: { multi: false },
   age_band: { multi: false },
+  /** Their age in years, when they said it (« j'ai 32 ans »): the brand's age ranges read it. */
+  age: { multi: false },
+  /** The day routine, the night routine or both (owner, 2026-10-16). */
+  routine_time: { multi: false },
   preferences: { multi: true },
   known_exclusions: { multi: true },
   // What they ask for beyond a routine for a need (plan § 3.1, § 3.4): a basic
@@ -39,12 +45,15 @@ export const CONFIDENCE = ['high', 'medium', 'low'];
 
 const FIXED_VALUES = {
   body_area: ['face', 'eyes', 'body', 'lips', 'hands'],
-  skin_type: ['very_dry', 'dry', 'normal', 'combination', 'oily', 'unknown'],
+  // Sensitive is a skin type too (owner, 2026-10-16), besides the sensitivity field.
+  skin_type: ['very_dry', 'dry', 'normal', 'combination', 'oily', 'sensitive', 'unknown'],
   skin_behaviour: ['tightness', 'shine', 'dehydration', 'dullness', 'reactive', 'flaking'],
   sensitivity: ['none', 'sensitive', 'reactive', 'unknown'],
   routine_scope: ['targeted', 'essential', 'complete', 'complete_existing', 'spa', 'unknown'],
   sex_target: ['men', 'women'],
+  // A brand with its own age ranges (its routines) replaces these (recommend.mjs).
   age_band: ['under_30', '30_44', '45_59', '60_plus', 'unknown'],
+  routine_time: ['day', 'night', 'both', 'unknown'],
   request: ['basic_routine', 'gift', 'spa'],
   budget: ['small']
 };
@@ -61,6 +70,7 @@ export function allowedValues(vocabulary) {
     ...FIXED_VALUES,
     primary_concern: concerns,
     secondary_concerns: vocabulary.concernKeys,
+    eye_concern: [...vocabulary.concernKeys, 'none'],
     current_routine: [...vocabulary.slotKinds, 'none'],
     desired_care_type: vocabulary.slotKinds
   };
@@ -70,6 +80,7 @@ export function isValidUpdate(update, allowed) {
   if (!update || !FIELDS[update.field]) return false;
   if (update.field === 'preferences' || update.field === 'known_exclusions') return typeof update.value === 'string' && FREE_TEXT.test(update.value);
   if (update.field === 'budget_max') return typeof update.value === 'string' && /^[1-9]\d{0,4}$/.test(update.value);
+  if (update.field === 'age') return typeof update.value === 'string' && /^\d{2,3}$/.test(update.value) && Number(update.value) >= 12 && Number(update.value) <= 110;
   return (allowed[update.field] ?? []).includes(update.value);
 }
 

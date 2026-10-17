@@ -142,6 +142,16 @@
     } catch (e) { /* a lost click is a lost data point, nothing more */ }
   }
 
+  /* « Ajouter la routine au panier »: the routine's ref to the same /event route. */
+  function reportRoutineAdded(endpoint, routineRef) {
+    try {
+      var url = String(endpoint).replace(/\/chat$/, '/event');
+      var body = JSON.stringify({ routineRef: routineRef, type: 'routine_added_to_cart' });
+      if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return;
+      fetch(url, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: body }).catch(function () {});
+    } catch (e) { /* a lost data point, nothing more */ }
+  }
+
   function createProxyTransport(config) {
     var cartModule = null;
     // A FOLLOW-UP CARRIES THE CART. « why did the 30 percent off not apply? »
@@ -215,6 +225,8 @@
   /* A card click, reported to the advisor (advisory_events): set by the proxy transport only. */
   var onCardClick = null;
   var onCardAdd = null;
+  /* A routine added whole (advisor_routines): its ref only, never who added it. */
+  var onRoutineAdd = null;
 
   /*
    * « Ajouter au panier »: the shop's own cart (Shopify's /cart/add.js, same
@@ -283,6 +295,7 @@
         button.textContent = strings.added || 'Ajouté';
         button.className = 'sa-card__add sa-routine-add sa-card__add--done';
         if (onCardAdd) items.forEach(function (x) { if (typeof x.product_id === 'string') onCardAdd(x.product_id); });
+        if (onRoutineAdd && typeof routineCart.routine_ref === 'string') onRoutineAdd(routineCart.routine_ref);
       }).catch(function () {
         button.textContent = strings.addFailed || 'Réessayer';
         button.disabled = false;
@@ -411,6 +424,7 @@
     if (config.transport === 'proxy' && config.endpoint) {
       onCardClick = function (productId) { reportClick(config.endpoint, state.sessionId, productId); };
       onCardAdd = function (productId) { reportClick(config.endpoint, state.sessionId, productId, 'added_to_cart'); };
+      onRoutineAdd = function (routineRef) { reportRoutineAdded(config.endpoint, routineRef); };
     }
     var mobile = window.matchMedia ? window.matchMedia(MOBILE_QUERY) : { matches: false };
 

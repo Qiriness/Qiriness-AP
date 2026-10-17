@@ -46,6 +46,7 @@ import { GET_PAST_PURCHASES } from './skills/routine-builder.mjs';
 import { CART_CHOICE, FLOW_CHOICE, anchorFor, beforeAdvice, cartDoneText, cartToAdd, emptyFlow, followUpFor, followUpNote } from './routine-flow.mjs';
 import { cleanPurchaseState, customerRanges, describePurchases, mayBeRunningLow, emptyPurchaseState, mentionsPastPurchase, parsePurchaseChoice, purchaseChoices, purchaseItems, purchaseToAsk, recordAnswer } from './purchase-turn.mjs';
 import { READER_TIMEOUT_MS, mentionsSkin, readProfile, shouldRead } from './profile-reader.mjs';
+import { isBuiltRoutine, routineRecord } from '../advisory/routine-record.mjs';
 
 export const DEFAULT_STOREFRONT_MODEL = 'gpt-6-luna';
 /** One model request. */
@@ -213,7 +214,9 @@ export function createLlmAgent({
       const flowStart = advisor ? beforeAdvice(advisorState?.flow ?? emptyFlow(), { choice, message }) : { flow: emptyFlow(), answer: null, cart: null, startBuilder: false };
       // What the cart question proposed, before this turn's answer clears it.
       const cartPending = flowStart.flow.cart?.pending ?? [];
-      let flow = flowStart.flow;
+      // The cart question answered: the routine it was about is settled (added, or not).
+      const routineAdded = flowStart.cart === 'yes' ? flowStart.flow.routine_ref : null;
+      let flow = flowStart.cart ? { ...flowStart.flow, routine_ref: null } : flowStart.flow;
       let resolution = resolutionIndex
         ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || purchaseAnswer || flowChoice ? null : choice })
         : null;
@@ -318,6 +321,7 @@ export function createLlmAgent({
       // question, the card of what they are running low on, or a treat. Its
       // words and buttons are the code's; the model is only told it comes.
       let followUp = null;
+      let routine = null;
       const flowBefore = flow;
       if (advisorTurn) {
         const builder = advisorTurn.mode === 'routine_builder';
@@ -358,6 +362,12 @@ export function createLlmAgent({
         });
         flow = decided.flow;
         followUp = decided.followUp;
+        // A ROUTINE BUILT (owner, 2026-10-17): kept anonymously for statistics (advisor_routines);
+        // the conversation carries its ref so « Oui, ajouter » marks the same row.
+        if (isBuiltRoutine(finalAdvice, advisorTurn.mode)) {
+          routine = routineRecord({ advice: finalAdvice, profile: advisorTurn.profile, channel: 'storefront_chat', locale: lang, currency });
+          flow = { ...flow, routine_ref: routine.ref };
+        }
         // The purchase question is asked in the follow-up, and only there.
         if (followUp?.kind !== 'purchase' && purchaseAsk) {
           purchaseState = { ...purchaseState, asked: purchaseState.asked.filter((id) => id !== purchaseAsk.product_id) };
@@ -484,6 +494,7 @@ export function createLlmAgent({
           resolution: null,
           refs: { recommended: [], mentioned: [] },
           cart: toAdd,
+          ...(routineAdded ? { routineAdded } : {}),
           ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUp.choices } } : {}),
           ...(advisorTurn ? { advisor: advisorState_(advisorTurn.nextState()), events: [] } : {})
         };
@@ -501,6 +512,30 @@ export function createLlmAgent({
           usage: usage.inputTokens || usage.outputTokens ? usage : null,
           trace,
           resolution: resolution ? { status: resolution.status, ids: [...resolvedIds], pending: resolution.pending ?? null } : null,
+          refs: { recommended: [], mentioned: [...resolvedIds] },
+          ...(routine ? { routine } : {}),
+          advisor: advisorState_(advisorTurn.nextState()),
+          events: conversationRef ? advisorTurn.events({ conversationRef, firstTurn: !history.length }) : []
+        };
+      }
+
+      // THE BUILDER'S NEXT QUESTION, FROM THE CODE (owner, 2026-10-17: « no need
+      // for model calls in between the questions »). A button answer, « Oui » to
+      // the routine offer or the routine quick action gets the next question in
+      // its own sentence (routine settings `questions.text`) with its buttons. A
+      // typed answer still goes to the model, which may need to answer it.
+      const builderQuestion = advisorTurn?.mode === 'routine_builder' ? advisorTurn.advice?.next_question : null;
+      if (builderQuestion?.text && (profileChoice || flowStart.startBuilder || action === 'build_routine') && !followUp && !resolution?.clarification) {
+        trace.model_skipped = 'builder_question';
+        return {
+          text: builderQuestion.text,
+          replyLanguage: displayLanguage(language, locale),
+          products: [],
+          choices: advisorTurn.choices(),
+          model,
+          usage: usage.inputTokens || usage.outputTokens ? usage : null,
+          trace,
+          resolution: null,
           refs: { recommended: [], mentioned: [...resolvedIds] },
           advisor: advisorState_(advisorTurn.nextState()),
           events: conversationRef ? advisorTurn.events({ conversationRef, firstTurn: !history.length }) : []
@@ -657,6 +692,11 @@ export function createLlmAgent({
           // Our top choices are the cards, whatever the model listed (it showed one of three in the batch).
           const top = finalAdvice.steps.flatMap((s) => [s.handle, ...s.alternatives.map((x) => x.handle)]);
           products = toCards([...products.map((p) => ({ handle: top.find((h) => p.url.endsWith(`/${encodeURIComponent(h)}`)) ?? '', rationale: p.rationale })).filter((x) => x.handle), ...top.map((handle) => ({ handle, rationale: '' }))], offered, catalogue, money, linkBase);
+        } else if (finalAdvice?.status === 'recommended' && finalAdvice.steps.length > 1) {
+          // A routine's cards are its steps, all of them, in order: a day routine is four products,
+          // day and night up to seven (owner, 2026-10-16). The model's reasons are kept.
+          const why = new Map((parsed.products ?? []).map((p) => [p?.handle, p?.rationale]));
+          products = toCards(finalAdvice.steps.map((s) => ({ handle: s.handle, rationale: why.get(s.handle) ?? '' })), offered, catalogue, money, linkBase, finalAdvice.steps.length);
         } else if (!products.length && finalAdvice?.status === 'recommended') {
           // Top choices show as cards too (best first), not only the step's product.
           products = toCards(finalAdvice.steps.flatMap((s) => [{ handle: s.handle, rationale: '' }, ...(s.top_choices ? s.alternatives.map((x) => ({ handle: x.handle, rationale: '' })) : [])]), offered, catalogue, money, linkBase);
@@ -676,6 +716,11 @@ export function createLlmAgent({
         if (!followUp && advisorTurn?.mode === 'routine_builder' && advisorTurn.advice?.status === 'recommended' && advice?.status !== 'recommended') {
           const late = followUpFor({ flow, lang: displayLanguage(language, locale), builder: true, answer: null, advice: advisorTurn.advice, showsProducts: false, anchor: null, purchaseAsk: null, runningLow: null, treat: null, purchaseChoices: () => [], cartable: cartableFor(advisorTurn.advice, false), cart: null });
           if (late.followUp?.kind === 'cart') { followUp = late.followUp; flow = late.flow; }
+        }
+        // …and kept, like one built before the model.
+        if (!routine && isBuiltRoutine(finalAdvice, advisorTurn?.mode)) {
+          routine = routineRecord({ advice: finalAdvice, profile: advisorTurn.profile, channel: 'storefront_chat', locale: displayLanguage(language, locale), currency });
+          flow = { ...flow, routine_ref: routine.ref };
         }
         // The conversation's memory keeps every product the reply is about, shown or not.
         const cardIds = products.map((c) => c.id);
@@ -716,7 +761,9 @@ export function createLlmAgent({
           refs: { recommended: cardIds, mentioned: [...new Set([...resolvedIds, ...cardIds])] },
           ...(contact ? { contact } : {}),
           // « Ajouter la routine au panier »: a routine of several products, one button under it.
-          ...(routineCartFor(finalAdvice) ? { routineCart: routineCartFor(finalAdvice) } : {}),
+          ...(routineCartFor(finalAdvice) ? { routineCart: { ...routineCartFor(finalAdvice), ...(routine ? { routine_ref: routine.ref } : {}) } } : {}),
+          // The routine built this turn, for advisor_routines (anonymous: no session, no words).
+          ...(routine ? { routine } : {}),
           ...(orderLookups ? { orderLookups } : {}),
           // The app's own second message (routine-flow.mjs): its text, cards and buttons.
           ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUpChoices } } : {}),
@@ -787,7 +834,7 @@ export function newCardsOnly(cards, { shownBefore = [], inCart = [], otherTopic 
   return cards.filter((c) => !old.has(c.id));
 }
 
-export function toCards(suggested, offered, catalogue, money, linkBase = '') {
+export function toCards(suggested, offered, catalogue, money, linkBase = '', max = MAX_CARDS) {
   if (!catalogue) return [];
   const seen = new Set();
   const cards = [];
@@ -809,7 +856,7 @@ export function toCards(suggested, offered, catalogue, money, linkBase = '') {
       // several, the size is the customer's choice, on the product page.
       ...(variantId ? { variantId } : {})
     });
-    if (cards.length === MAX_CARDS) break;
+    if (cards.length === max) break;
   }
   return cards;
 }

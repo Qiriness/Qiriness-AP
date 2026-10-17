@@ -366,7 +366,7 @@
   "labels": {
     "fr": {
       "body_area": { "face": "Visage", "eyes": "Contour des yeux", "body": "Corps" },
-      "skin_type": { "very_dry": "Très sèche", "dry": "Sèche", "normal": "Équilibrée", "combination": "Mixte", "oily": "Grasse", "unknown": "Je ne sais pas" },
+      "skin_type": { "very_dry": "Très sèche", "dry": "Sèche", "normal": "Équilibrée", "combination": "Mixte", "oily": "Grasse", "sensitive": "Sensible", "unknown": "Je ne sais pas" },
       "sensitivity": { "sensitive": "Oui, sensible", "none": "Non" },
       "routine_scope": { "targeted": "Un soin ciblé", "essential": "Une routine essentielle", "complete": "Une routine complète", "complete_existing": "Compléter ma routine" },
       "current_routine": { "none": "Aucune routine", "moisturiser": "Une crème", "cleanser+moisturiser": "Nettoyant et crème", "cleanser+serum+moisturiser": "Nettoyant, sérum et crème" },
@@ -387,7 +387,7 @@
     },
     "en": {
       "body_area": { "face": "Face", "eyes": "Eye area", "body": "Body" },
-      "skin_type": { "very_dry": "Very dry", "dry": "Dry", "normal": "Balanced", "combination": "Combination", "oily": "Oily", "unknown": "I don't know" },
+      "skin_type": { "very_dry": "Very dry", "dry": "Dry", "normal": "Balanced", "combination": "Combination", "oily": "Oily", "sensitive": "Sensitive", "unknown": "I don't know" },
       "sensitivity": { "sensitive": "Yes, sensitive", "none": "No" },
       "routine_scope": { "targeted": "One targeted product", "essential": "An essential routine", "complete": "A complete routine", "complete_existing": "Complete my routine" },
       "current_routine": { "none": "No routine", "moisturiser": "A cream", "cleanser+moisturiser": "Cleanser and cream", "cleanser+serum+moisturiser": "Cleanser, serum and cream" },

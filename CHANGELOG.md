@@ -10,6 +10,28 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The eye routine, every question asked, the routines kept (2026-10-17)
+
+Owner: « Replace Teint terne with Tache et Teint Terne, Add Cernes et Poches. Remove je ne sais pas, and … dont skip question 3 »; « we need to save the data from these answers … dont save customer name ».
+
+- **Spreadsheet** (`qiriness-knowledge-template.xlsx`, master): Rules tab, main concern **Y « Cernes et poches »** (« Selon l'âge »), and « Cernes », « Poches », « Rides du contour des yeux » now lead to it; Routines tab, two columns (« Préoccupation principale », « Produit ») and the eye routine's eight steps. The import also brought the owner's pending edits of the morning (B Imperfections now ranged « Éclat Parfait », confirmed intended; six products' concerns and skin columns). The eye routine's cleanser is the « Lotion Tonique Hydratante Éclat Parfait »; its eye question has three buttons, no « Aucune autre » (owner).
+- **Parsers** (`routine-knowledge.mjs`, `assemble-routines.mjs`): a main concern's own steps (`own_steps` → `foundations[Y].routine_steps`), the « Produit » criterion and column, warnings for a product the Products tab does not approve. **Settings**: Y (`area: eyes`, sensitive, its question order), `ask_all`, question 1's buttons, the eye concern's options and labels, each question's sentence FR/EN.
+- **Engine** (`foundations.mjs`): the eye routine (its steps, sensitive, no skin type, its other eye concern), fixed products and the fallback eye cream, every question asked, no « Je ne sais pas » for the skin type, the buttons and sentences from the settings. **Profile**: `eye_concern`.
+- **Chat**: a button answer gets the next question from the code, no model call (`builder_question`); a finished routine returns an anonymous record and carries its ref; « Oui, ajouter » and « Ajouter la routine au panier » mark it added.
+- **`advisor_routines`** (migration 98, **applied to production**, baseline regenerated, `db:check:baseline --production` identical): the routine number, the answers as codes, products, total, `added_to_cart_at`. Service writes it after the reply; `/api/storefront/event` takes `{ routineRef, type: routine_added_to_cart }`; the widget beacons it.
+- Tests 3737/3737 (new: `builder-questions.test.mjs`, eye routine cases in `day-night.test.mjs` and `advisor-knowledge.test.mjs`); `advisor:score` 54/54; web tsc clean. **Knowledge version 3 loaded** (version 2 archived): 93 products, 6 foundations. Widget not yet redeployed (owner).
+
+## The day / night routine (2026-10-16)
+
+Owner: « we ask major concern, then we ask skin type… Then we ask for age. Instead of complete routine we ask routine jour, nuit or both ».
+
+- **The spreadsheet** (`qiriness-knowledge-template.xlsx`): the Routines tab is now the day and night steps (types, area, « Choisi par », « Vide si aucun produit pour la préoccupation ») plus the modules; the Rules tab gains the main concerns (A, B, D, E, F with their range or « Selon l'âge »), the age ranges (→ Active Énergie, Temps Sublime, Exception) and the moments; C, G, H and the sizes are gone, the oily concerns go to B, the sensitive ones to the sensitive skin type. The owner had already retyped the eye products (« Sérum » / « Crème », area « Yeux ») and set the vitamin C booster to « À valider ».
+- **Parsers and assembly** (`routine-knowledge.mjs`, `assemble-routines.mjs`): the new tabs, checked; `routine_steps`, `age_ranges`, `routine_times`, `sensitive_concerns` in the routines. Settings: C, G, H and the `targets` removed; questions concern, skin type, age, moment.
+- **Engine** (`foundations.mjs`, `timed`): the builder runs the day, the night or both from those steps; the profile has `routine_time`, `age` (years) and a `sensitive` skin type; the brand's age ranges are the allowed `age_band` values; the lexicon reads « routine du soir », "night routine", « matin et soir », an age (FR/EN). The age is asked for anti-age only.
+- **Chat:** a routine shows every step's card (no cap of 3); the advice gives each step its `time`; the prompt and the builder skill present the morning then the evening and ask the age only as the engine's question.
+- **Measured on the real catalogue** (93 live products): anti-age, dry skin, 35–44, day and night: dry-skin lotion, Temps Sublime retinol serum, Temps Sublime eye cream, Temps Sublime rich cream; at night the almond milk and the Temps Sublime night cream (€420.65). 45+ normal skin: Exception serum, Regard d'Exception, Caresse d'Exception (both: 5 products). Hydration skips the age. Imperfections has no serum (none targets it). Out of stock today: the Éclat Parfait serum (Éclat falls to Active Énergie in the day) and the mixed-skin gel.
+- **Knowledge version 2 loaded** (version 1 archived). Tests 3717/3717 (new: `day-night.test.mjs` on the real sheet); `advisor:score` 54/54 (the bench keeps the sizes); `eval:resolution` 123/123; `eval:storefront-knowledge` 15/15; web tsc clean. Not yet seen in the widget: the dev store has 2 of the 30 routine products.
+
 ## The knowledge spreadsheet is live; « trop cher » and empty steps (2026-10-16)
 
 Owner: « you can make the spreadsheet live »; « if there are no options… suggest a generic one »; routines may show cards shown before.

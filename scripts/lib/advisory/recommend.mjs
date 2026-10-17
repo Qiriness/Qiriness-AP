@@ -334,8 +334,10 @@ export function createAdvisor(rawConfig, catalogue, { knowledge = null, routines
     }
   };
   if (!routines || !knowledge) return playbookAdvisor;
-  const foundation = createFoundationAdvisor({ routines, catalogue, knowledge, allowed, question });
-  return { ...playbookAdvisor, engine: 'foundations', advise: foundation.advise, treat: foundation.treat };
+  // The brand's own age ranges (its Rules tab) are the age values a chip or the reader may set.
+  const brandAllowed = routines.age_ranges?.length ? { ...allowed, age_band: [...routines.age_ranges.map((a) => a.key), 'unknown'] } : allowed;
+  const foundation = createFoundationAdvisor({ routines, catalogue, knowledge, allowed: brandAllowed, question });
+  return { ...playbookAdvisor, allowed: brandAllowed, engine: 'foundations', advise: foundation.advise, treat: foundation.treat };
 }
 
 function playbookSummary(selection, scope = null) {

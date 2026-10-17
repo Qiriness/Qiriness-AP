@@ -79,7 +79,7 @@ function readerPrompt(allowed, lastQuestion) {
     'List concerns most important first: the first primary_concern is the main complaint; further concerns go in secondary_concerns.',
     `Allowed values — body_area: ${allowed.body_area.join(', ')}; skin_type: ${allowed.skin_type.join(', ')}; sensitivity: ${allowed.sensitivity.join(', ')}; ` +
       `primary_concern / secondary_concerns: ${allowed.secondary_concerns.join(', ')}; current_routine: ${allowed.current_routine.join(', ')}; desired_care_type: ${allowed.desired_care_type.join(', ')}; ` +
-      `routine_scope: ${allowed.routine_scope.join(', ')}; sex_target: men only when the message explicitly asks for men's care; age_band: ${allowed.age_band.join(', ')}; known_exclusions: an ingredient word.`,
+      `routine_scope: ${allowed.routine_scope.join(', ')}; sex_target: men only when the message explicitly asks for men's care; age_band: ${allowed.age_band.join(', ')}; age: their age in years, digits, only when they say it; routine_time: ${allowed.routine_time.join(', ')} (a day / morning routine, a night / evening routine, or both); known_exclusions: an ingredient word.`,
     ...(lastQuestion ? [`The advisor has just asked about: ${lastQuestion}. A short answer answers that.`] : []),
     'Return an empty list when the message says nothing about the skin.'
   ].join('\n');

@@ -35,7 +35,7 @@ export function adviseToolDefinition(advisor, { builder = false } = {}) {
           : 'Run the beauty consultation engine for a targeted need: it records what the customer said about their skin, concerns or preferences, then returns either ONE next question (with chip options) or the brand\'s top choices for that need. Use it when the customer asks for advice and the advice in VISIT CONTEXT is missing or outdated. ') +
         `Allowed values — body_area: ${a.body_area.join(', ')}; skin_type: ${a.skin_type.join(', ')}; sensitivity: ${a.sensitivity.join(', ')}; ` +
         `primary_concern / secondary_concerns: ${a.secondary_concerns.join(', ')}; current_routine: ${a.current_routine.join(', ')}; desired_care_type: ${a.desired_care_type.join(', ')}; ` +
-        `routine_scope: ${a.routine_scope.join(', ')}; sex_target: men only when the customer explicitly asks for men's care; age_band: ${a.age_band.join(', ')}; known_exclusions: an ingredient word.`,
+        `routine_scope: ${a.routine_scope.join(', ')}; sex_target: men only when the customer explicitly asks for men's care; age_band: ${a.age_band.join(', ')}; age: their age in years, digits, only when they say it; eye_concern: their answer to the eye routine's « another concern around the eyes? », a concern value or none; routine_time: ${a.routine_time.join(', ')} (a day / morning routine, a night / evening routine, or both); known_exclusions: an ingredient word.`,
       strict: true,
       parameters: {
         type: 'object',
@@ -94,6 +94,11 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   }
   // A chip's label arrives as the message too: the chip wins, the words add nothing new.
   if (!picked) updates.push(...lex.updates);
+  // The eye question answered in words (« plutôt des rides »): the concern is its answer too.
+  if (!picked && before.last_question === 'eye_concern') {
+    const said = lex.updates.find((u) => u.field === 'primary_concern' || u.field === 'secondary_concerns');
+    if (said) updates.push({ field: 'eye_concern', value: said.value, source: said.source, confidence: said.confidence ?? 'medium' });
+  }
   // Asking for a routine supersedes « one product of this type »: the routine
   // offer after « pour hydrater mon visage » built one cream (live run, 2026-10-13).
   const base = builderAsked ? withoutSingleProduct(before.profile) : before.profile;
@@ -235,6 +240,8 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
       playbook: a.playbook,
       steps: a.steps.map((s) => ({
         step: s.slot,
+        // The day routine (morning) or the night routine (evening).
+        ...(s.part ? { time: s.part } : {}),
         optional: s.optional || undefined,
         product: slim(byId.get(s.product_id), money),
         ...(s.customer_interest ? { customer_interest: true } : {}),
@@ -244,7 +251,13 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
         alternatives: s.alternatives.map((x) => (s.top_choices ? { ...slim(byId.get(x.product_id), money) } : { handle: x.handle, name: byId.get(x.product_id)?.name ?? null }))
       })),
       // already_owned: a product they said they still use fills it; the model says to keep theirs.
-      skipped_steps: a.skipped.map((s) => ({ step: s.slot, reason: s.reason, ...(s.product_id && s.reason !== 'over_budget' ? { customer_product: byId.get(s.product_id)?.name ?? null } : {}) })),
+      skipped_steps: a.skipped.map((s) => ({
+        step: s.slot,
+        ...(s.part ? { time: s.part } : {}),
+        reason: s.reason,
+        // also_in_day_routine: the day routine's product, used in the evening too.
+        ...(s.product_id && s.reason === 'also_in_day_routine' ? { product: byId.get(s.product_id)?.name ?? null } : s.product_id && s.reason !== 'over_budget' ? { customer_product: byId.get(s.product_id)?.name ?? null } : {})
+      })),
       // The routine's price, and what a budget left out: quoted from here, never computed by the model.
       ...(typeof a.total_price === 'number' ? { total_price: money(a.total_price) } : {}),
       ...(a.cheaper_than ? { cheaper_than: byId.get(a.cheaper_than)?.name ?? null } : {}),

@@ -61,10 +61,18 @@ if (latent.length) {
   for (const e of latent) console.log(`    row ${rowOf.get(e.handle) ?? '?'}  ${e.handle}  ${e.field} = ${e.value}`);
 }
 
-console.log(`\nRoutines  ${routines.foundations.length} foundations, ${routines.modules.length} modules`);
-for (const f of routines.foundations) console.log(`  ${f.key} ${f.name_fr.padEnd(18)} ${f.steps.map((s) => `${s.type ?? '?'}${s.required ? '' : '?'}`).join(' · ')}`);
+console.log(`\nRoutines  day ${routines.steps.day.length} steps, night ${routines.steps.night.length}, ${routines.modules.length} modules`);
+const stepLine = (part, s) => `  ${part.padEnd(5)} ${s.order} ${s.types.join(' or ').padEnd(18)} ${s.area.padEnd(5)} by ${s.chosen_by.join(', ')}${s.product ? ` · ${s.product}` : ''}${s.concern_required ? ' (empty if nothing for the concern)' : ''}`;
+for (const part of ['day', 'night']) for (const s of routines.steps[part]) console.log(stepLine(part, s));
+for (const [main, parts] of Object.entries(routines.own_steps)) {
+  console.log(`  main concern ${main}'s own steps:`);
+  for (const part of ['day', 'night']) for (const s of parts[part]) console.log(stepLine(part, s));
+}
 for (const m of routines.modules) console.log(`  module ${m.name_fr}: ${m.type ?? '?'}${m.when.length ? ` (${m.when.join(', ')})` : ''}`);
 console.log(`\nRules     ${rules.concerns.length} concerns; cream texture ${Object.entries(rules.skin_type_texture).map(([k, v]) => `${k} → ${v}`).join(', ')}`);
+for (const f of routines.foundations) console.log(`  ${f.key} ${f.name_fr.padEnd(16)} ${(f.range_by_age ? 'range by age' : f.preferred_ranges[0] ?? 'no range').padEnd(14)} ${f.primary_concerns.join(', ')}`);
+console.log(`  sensitive skin: ${rules.concerns.filter((c) => c.skin === 'sensitive').map((c) => c.key).join(', ') || '—'}`);
+console.log(`  ages: ${rules.age_ranges.map((a) => `${a.key} → ${a.range}`).join(', ') || '—'}; moments: ${rules.routine_times.map((t) => t.key).join(', ') || '—'}`);
 
 const errors = [...routines.errors.map((e) => ({ tab: 'Routines', ...e })), ...rules.errors.map((e) => ({ tab: 'Rules', ...e }))];
 if (errors.length) console.log(`\nErrors (${errors.length})`);

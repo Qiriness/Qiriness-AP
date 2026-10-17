@@ -124,7 +124,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |                                  # is unset). POST -> storefront-chat-service.
 |   |       |                                  # docs/storefront-chatbot.md
 |   |       |-- storefront/event/route.ts    # PUBLIC (same guards as chat). POST a
-|   |       |                                  # card click -> advisory_events
+|   |       |                                  # card click -> advisory_events; a routine
+|   |       |                                  # added whole -> advisor_routines
 |   |       |-- knowledge/                   # shopify-sources · articles · articles/[id]
 |   |       |                                 # · articles/[id]/resync · format (« Format as
 |   |       |                                 # FAQ », stateless, writes nothing)

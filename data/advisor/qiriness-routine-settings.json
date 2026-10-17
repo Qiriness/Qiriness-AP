@@ -1,8 +1,8 @@
 {
-  "_about": "Qiriness's routine settings the knowledge spreadsheet does not carry. `npm run advisor:load` assembles them with the spreadsheet's Routines and Rules tabs (data/advisor/qiriness-knowledge.json) into the routines the foundation engine runs (scripts/lib/advisory/assemble-routines.mjs). Brand data, edited here; the spreadsheet stays the master for foundations, steps, modules, concerns and products. PROPOSED values are ours until Qiriness confirms them.",
+  "_about": "Qiriness's routine settings the knowledge spreadsheet does not carry. `npm run advisor:load` assembles them with the spreadsheet's Routines and Rules tabs (data/advisor/qiriness-knowledge.json) into the routines the engine runs (scripts/lib/advisory/assemble-routines.mjs). Brand data, edited here; the spreadsheet stays the master for the day and night steps, the main concerns, the ages, the concerns and the products. PROPOSED values are ours until Qiriness confirms them.",
 
   "concern_map": {
-    "_about": "The customer's words (the lexicon's concern keys) → Qiriness's 20 standard concerns (the Rules tab's keys). Same map as the test bench, whose concerns are the template's.",
+    "_about": "The customer's words (the lexicon's concern keys) → Qiriness's standard concerns (the Rules tab's keys). Same map as the test bench, whose concerns are the template's.",
     "dehydration": "dehydration", "tightness": "dehydration", "lack_of_comfort": "discomfort", "discomfort": "discomfort", "dryness": "dryness", "flaking": "dryness",
     "early_signs_of_ageing": "fine_lines", "wrinkles": "wrinkles", "deep_wrinkles": "wrinkles", "global_signs_of_ageing": "wrinkles", "mature_skin": "wrinkles", "demanding_mature_skin": "wrinkles", "regeneration": "wrinkles",
     "firmness": "loss_of_firmness", "loss_of_firmness": "loss_of_firmness", "loss_of_tone": "loss_of_firmness", "facial_contours": "loss_of_firmness", "advanced_loss_of_firmness": "loss_of_firmness",
@@ -17,35 +17,58 @@
 
   "premium_concerns": ["deep_wrinkles", "significant_loss_of_density", "advanced_loss_of_firmness", "demanding_mature_skin", "regeneration"],
 
-  "foundation_priority": ["C", "F", "E", "B", "G", "A", "D"],
-  "_foundation_priority_note": "PROPOSED (plan § 3.1): several concerns, none chosen with a button, the tie goes to the first. Qiriness to confirm.",
+  "foundation_priority": ["F", "E", "B", "A", "D", "Y"],
+  "_foundation_priority_note": "PROPOSED (plan § 3.1): several concerns, none chosen with a button, the tie goes to the first. Sensitive skin (C), oily skin (G) and the basic routine (H) are gone (owner, 2026-10-16): sensitive and oily are skin types now. Qiriness to confirm.",
 
   "foundations": {
-    "_about": "Per foundation key (the Routines tab's letters). `targets`: the step types that must treat the foundation's concern (« never pad »: such a step stays empty rather than take a product that does not); PROPOSED from the bench. `skin_types`: a skin type that picks this foundation when no concern is given (owner, 2026-10-14). `texture`: every cream of this foundation. `tolerance_first`: « Déconseillé » for sensitive skin is never used. `only_on_explicit_request`: the basic routine.",
-    "A": { "targets": ["serum"], "skin_types": { "dry": "dryness" } },
-    "B": { "targets": ["cleanser", "lotion"], "texture": "light" },
-    "C": { "targets": ["cream", "serum"], "tolerance_first": true, "rule": "every product suits sensitive skin (« Adapté » or « Avec précaution »), never « Déconseillé »" },
-    "D": { "targets": ["serum"] },
-    "E": { "targets": ["serum"], "premium_when": "deep wrinkles or the customer asks for the most advanced care; never because of age alone" },
-    "F": { "targets": ["serum"] },
-    "G": { "targets": ["cleanser", "exfoliant"], "skin_types": { "oily": "excess_sebum" }, "texture": "light" },
-    "H": { "only_on_explicit_request": true }
+    "_about": "Per main concern (the Rules tab's letters). `skin_types`: a skin type that picks this main concern when no concern is given (owner, 2026-10-14). The steps and how each product is chosen are the Routines tab (owner, 2026-10-16): no required or optional step, no `targets` any more.",
+    "A": { "skin_types": { "dry": "dryness" } },
+    "Y": { "_about": "The eye routine (owner, 2026-10-17): its own steps on the Routines tab; the eyes are a sensitive area; no skin type, its other eye concern instead.", "area": "eyes", "sensitive": true, "questions": ["concern", "eye_concern", "age", "routine_time"] }
   },
 
   "modules": {
-    "_about": "Per module type (the Routines tab's modules). `when` adds to the tab's own concerns: the SPF module's are only in its note (« Taches ou teint irrégulier »).",
+    "_about": "Per module type (the Routines tab's modules, kept for later: asked on their own, never added to the day or night routine). `when` adds to the tab's own concerns: the SPF module's are only in its note (« Taches ou teint irrégulier »).",
     "eye": { "key": "eyes", "standalone": true },
     "spf": { "key": "spf", "standalone": true, "when": ["dark_spots", "uneven_tone"] },
     "sheet_mask": { "key": "occasional", "standalone": true, "when_size": "spa" }
   },
 
   "questions": {
-    "_rule": "the question whose answer changes the routine most first; skin traits before naming a concern; never age first (§ 3.3)",
-    "order": ["concern", "skin_type", "sensitivity", "current_routine", "size"],
-    "chips": {
-      "skin_type": { "fr": ["Plutôt sèche", "Équilibrée", "Grasse sur la zone T", "Grasse partout", "Je ne sais pas"], "en": ["Rather dry", "Balanced", "Oily in the T-zone", "Oily all over", "I don't know"] },
-      "sensitivity": { "fr": ["Elle réagit facilement", "Rarement"], "en": ["It reacts easily", "Rarely"] },
-      "size": { "fr": ["Essentielle (2–3 produits)", "Complète (4–5)", "Rituel spa", "J'ai déjà des produits"], "en": ["Essential (2–3 products)", "Complete (4–5)", "Spa ritual", "I already have products"] }
+    "_rule": "main concern, skin type, age, then day / night / both (owner, 2026-10-16); the eye routine asks its other eye concern instead of the skin type (its own `questions`, under foundations). Every question is asked, even when its answer does not change the routine (owner, 2026-10-17: the answers are kept for statistics). The age and moment chips are labelled by their Rules tab rows, the skin types by the config's labels. A question's sentence is `text`: a button answer gets the next question without a model call.",
+    "order": ["concern", "skin_type", "age", "routine_time"],
+    "ask_all": true,
+    "concern_buttons": {
+      "_about": "Question 1, one button per main concern in the Rules tab's order. `value`: the concern(s) the button records (« a+b »: the first is the main concern, the next ones secondary); without one, the main concern's first concern.",
+      "A": { "fr": "Déshydratation", "en": "Dehydration" },
+      "B": { "fr": "Imperfections", "en": "Blemishes" },
+      "D": { "fr": "Taches et teint terne", "en": "Dark spots and dull complexion", "value": "dark_spots+dullness" },
+      "E": { "fr": "Rides", "en": "Wrinkles" },
+      "F": { "fr": "Premières rides", "en": "First wrinkles" },
+      "Y": { "fr": "Cernes et poches", "en": "Dark circles and puffiness" }
+    },
+    "eye_concern": {
+      "_about": "The eye routine's question 2: another concern around the eyes (owner, 2026-10-17: one of the three, no « none » button).",
+      "options": ["eye_wrinkles", "dehydration", "dark_spots"],
+      "labels": {
+        "fr": { "eye_wrinkles": "Rides ou ridules", "dehydration": "Déshydratation", "dark_spots": "Taches" },
+        "en": { "eye_wrinkles": "Wrinkles or fine lines", "dehydration": "Dehydration", "dark_spots": "Dark spots" }
+      }
+    },
+    "text": {
+      "fr": {
+        "primary_concern": "Quelle est votre préoccupation principale ?",
+        "skin_type": "Quel est votre type de peau ?",
+        "eye_concern": "Avez-vous une autre préoccupation autour des yeux ?",
+        "age_band": "Quelle est votre tranche d'âge ?",
+        "routine_time": "Souhaitez-vous une routine pour le jour, pour la nuit, ou les deux ?"
+      },
+      "en": {
+        "primary_concern": "What is your main skin concern?",
+        "skin_type": "What is your skin type?",
+        "eye_concern": "Do you have any other concern around your eyes?",
+        "age_band": "What is your age range?",
+        "routine_time": "Would you like a day routine, a night routine, or both?"
+      }
     }
   },
 

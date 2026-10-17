@@ -151,7 +151,8 @@ export const ADVISOR_T = {
   MAPPINGS: 'advisor_mappings',
   MERCHANDISING: 'advisor_merchandising',
   EVENTS: 'advisory_events',
-  KNOWLEDGE: 'advisor_knowledge'
+  KNOWLEDGE: 'advisor_knowledge',
+  ROUTINES: 'advisor_routines'
 };
 
 export const ADVISOR_RPC = {
