@@ -48,6 +48,7 @@ import {
 } from './resolution/order-resolution-runner.mjs';
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
 import { createChangeGate, latestUpdateReader } from './lib/change-gate.mjs';
+import { nextPollWait } from './lib/poll-wait.mjs';
 import { createChangeRouterStore, runChangeRouter } from './casework/change-router-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
@@ -973,8 +974,8 @@ async function main() {
   // counts only while sending is on: otherwise its jobs wait untouched and
   // would wake every check.
   const wakeKinds = ['sync_mailbox', 'sync_social', ...(config.outboundSendEnabled ? ['send_outbound'] : [])];
-  const waitForNextPoll = async (isStopping) => {
-    const deadline = Date.now() + config.pollIntervalMs;
+  const waitForNextPoll = async (waitMs, isStopping) => {
+    const deadline = Date.now() + waitMs;
     while (!isStopping() && Date.now() < deadline) {
       await sleep(Math.max(1, Math.min(config.jobCheckIntervalMs, deadline - Date.now())), isStopping);
       if (isStopping()) return;
@@ -986,7 +987,7 @@ async function main() {
     }
   };
 
-  logger.info('ingest.start', { shopId, intervalMs: config.pollIntervalMs, draftOnly: config.draftOnly });
+  logger.info('ingest.start', { shopId, intervalMs: config.pollIntervalMs, idleMaxMs: config.idlePollMaxMs, draftOnly: config.draftOnly });
 
   let stopping = false;
   const stop = (signal) => {
@@ -997,17 +998,27 @@ async function main() {
   process.on('SIGINT', () => stop('SIGINT'));
   process.on('SIGTERM', () => stop('SIGTERM'));
 
+  // Idle polls back off (lib/poll-wait.mjs); anything moving, or a failure,
+  // brings the wait back to `pollIntervalMs`.
+  let waitMs = config.pollIntervalMs;
   while (!stopping) {
+    let failed = false;
     try {
       await pollWithJobs();
     } catch (error) {
+      failed = true;
       // Keep the loop alive across transient Graph/Supabase errors.
       // `error`, not `message`: the logger reserves `message` for the event name
       // and strips it from caller fields, so this detail was never reaching the
       // log at all (see lib/logger.mjs).
       logger.error('ingest.poll_failed', { error: error.message });
     }
-    await waitForNextPoll(() => stopping);
+    // Always, failed or not: the next poll must read the stamps afresh.
+    const moved = await changeGate.endPoll();
+    const nextMs = nextPollWait({ active: moved || failed, previousMs: waitMs, baseMs: config.pollIntervalMs, maxMs: config.idlePollMaxMs });
+    if (nextMs !== waitMs) logger.info('ingest.poll_wait', { shopId, waitMs: nextMs });
+    waitMs = nextMs;
+    await waitForNextPoll(waitMs, () => stopping);
   }
 
   logger.info('ingest.stopped', {});

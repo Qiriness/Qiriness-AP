@@ -33,11 +33,19 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // the forwarding pass to avoid handing a colleague their own mail back.
     internalEmailDomains: splitCsv(env.INTERNAL_EMAIL_DOMAINS),
     pollIntervalMs: Number(env.INGEST_POLL_INTERVAL_MS) || 60000,
+    // The longest wait between timed polls while nothing moves: each idle poll
+    // doubles the wait from `pollIntervalMs` up to this (lib/poll-wait.mjs).
+    // Only with the Graph webhook: without it the timed poll is the only way
+    // mail arrives, so it never backs off.
+    idlePollMaxMs: env.MAIL_WEBHOOK_URL
+      ? Number(env.INGEST_IDLE_POLL_MAX_MS) || 600000
+      : Number(env.INGEST_POLL_INTERVAL_MS) || 60000,
     // Between polls the worker looks this often for a due mail job (a change
     // notification's `sync_mailbox`, an approved reply's `send_outbound`) and
     // polls at once if there is one. The timed poll still runs regardless: it
-    // is the reconciliation, the job only shortens the wait.
-    jobCheckIntervalMs: Number(env.JOB_CHECK_INTERVAL_MS) || 5000,
+    // is the reconciliation, the job only shortens the wait. 15 s, not 5: at 5
+    // this one tiny read was ~15.5k PostgREST requests a day (2026-10-17).
+    jobCheckIntervalMs: Number(env.JOB_CHECK_INTERVAL_MS) || 15000,
     // Attempts before a mail job goes `dead` and is left for a person.
     mailJobMaxAttempts: Number(env.MAIL_JOB_MAX_ATTEMPTS) || 5,
     // The environment the `sync_social` jobs read the Meta / Google app

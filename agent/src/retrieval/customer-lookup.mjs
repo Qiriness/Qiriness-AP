@@ -179,7 +179,9 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
      * customers, 4–6 times a day (measured 2026-10-11), almost always to read
      * back the same index. The question is one indexed row
      * (`customers_shop_updated_at_idx`), and a sync, a deletion or a new
-     * customer all move `updated_at`.
+     * customer all move `updated_at`. Plain `desc`: with `nullslast` the index
+     * cannot be walked backwards and every customer was read and sorted,
+     * ~49k blocks and 1.6 s a call (2026-10-17); see `latestUpdateReader`.
      *
      * The stamp is read BEFORE the rebuild, so a customer written during the
      * scan moves it again and the next call rebuilds once more.
@@ -188,7 +190,7 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
       let stamp;
       try {
         const [row] = await supabaseSelect(supabase, 'customers', { shop_id: shopId }, 'updated_at', {
-          order: 'updated_at.desc.nullslast',
+          order: 'updated_at.desc',
           limit: 1
         });
         stamp = row?.updated_at ?? '';

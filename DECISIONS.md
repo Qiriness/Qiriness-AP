@@ -17,7 +17,7 @@ grep -rn "^### <heading>" docs/decisions/
 | Section | File | Entries | ~Tokens |
 | --- | --- | ---: | ---: |
 | Taxonomy | `docs/decisions/taxonomy.md` | 3 | 1,109 |
-| Ingestion | `docs/decisions/ingestion.md` | 14 | 5,012 |
+| Ingestion | `docs/decisions/ingestion.md` | 15 | 5,500 |
 | Spam gate | `docs/decisions/spam-gate.md` | 4 | 1,353 |
 | Categorisation | `docs/decisions/categorisation.md` | 5 | 918 |
 | Customer resolution | `docs/decisions/customer-resolution.md` | 2 | 941 |

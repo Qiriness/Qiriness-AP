@@ -10,6 +10,16 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Egress and log ingest: idle polls back off, stamp reads use the index (2026-10-17)
+
+Owner: « 110 mB egress for the 17th … Log ingest 84 mb today and 164 mb yesterday, this is still too high ».
+
+- **Measured** (`pg_stat_statements` over 28.2 h, all earlier egress fixes on `main`): ~105k PostgREST requests a day, almost all returning 1 row. An idle poll made ~57 of them every ~65 s (~75k/day), and the due-job check every 5 s made ~15.5k. Log ingest tracks the request count (~1.5 kB a request).
+- **Idle polls back off** (`agent/src/lib/poll-wait.mjs`): 60 s doubling to 10 min while no gated table moves, back to 60 s on any change or failure, and only when `MAIL_WEBHOOK_URL` is set. The due-job check went from 5 s to 15 s. Projected ~25–30k requests a day.
+- **Change-gate stamps are read once per poll** (`changeGate.endPoll()`): tickets 5 → 1, orders 2 → 1.
+- **The stamp reads use the index:** `updated_at.desc`, not `desc.nullslast`, in `change-gate.mjs` and `customer-lookup.mjs`. Customers went from 49,486 blocks / 1.6 s to 4 blocks; tickets and orders from ~740 and ~1,050 to 4. Guard: `scripts/lib/stamp-order-uses-index.test.mjs`.
+- Tests: agent 2151/2151, plus the new tests. A sealed run (fake writes) waited 10 → 20 → 40 s with ~47 reads per idle poll. **Not deployed**; re-measure a day after deploy against a fresh snapshot (`scripts/.tmp-egress-snap.mjs`).
+
 ## The eye routine, every question asked, the routines kept (2026-10-17)
 
 Owner: « Replace Teint terne with Tache et Teint Terne, Add Cernes et Poches. Remove je ne sais pas, and … dont skip question 3 »; « we need to save the data from these answers … dont save customer name ».

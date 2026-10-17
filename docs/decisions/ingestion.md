@@ -87,6 +87,20 @@ So a notification does exactly one thing: it queues a `sync_mailbox` job for its
 - **Case processing is not a job.** The `needs_*` flags already fire only for mail we did not hold, and every LLM pass runs after ingestion has committed. A `PROCESS_MESSAGE` job beside them would be a second source of truth for the same fact (decided 2026-09-28).
 - **The columns keep their Graph names.** `graph_message_id` / `graph_conversation_id` are the unique keys of a populated table read by ~20 modules and the views. The MailProvider contract documents them as the provider's message and thread ids; a Gmail adapter fills them with Gmail's (decided 2026-09-28).
 
+### Idle polls back off; the webhook carries the latency (2026-10-17)
+
+Once the webhook was live (53 `sync_mailbox` wakes on 2026-10-16), the 60 s timed poll above became the reconciliation and nothing more. It was still most of the database traffic. Measured with `pg_stat_statements` over 28 h, ~105k PostgREST requests a day:
+- an idle poll made ~57 requests × ~1,320 polls = **~75k**;
+- the due-job check, every 5 s, made **~15.5k**.
+
+Supabase logs every request (~1.5 kB each: 164 MB of log ingest that day), and even a response with an empty body sends headers. So at this point the number of requests was the cost, not their size.
+
+- **The wait doubles after each idle poll, from `INGEST_POLL_INTERVAL_MS` (60 s) up to `INGEST_IDLE_POLL_MAX_MS` (10 min), and drops back after any poll where something moved** (`agent/src/lib/poll-wait.mjs`). "Moved" means a table the change gate reads (`tickets`, `orders`, the forwarding tables) has a new newest `updated_at`, or the poll failed (`changeGate.endPoll()`). New mail, a pass's own writes and a dashboard edit all move `tickets`, so follow-on work still runs at 60 s. Measured over 24 h, `tickets` moved in 8 distinct minutes and `orders` in 9, so the worker spends most of the day at the cap.
+- **Only with `MAIL_WEBHOOK_URL`.** Without it, the timed poll is the only way mail arrives, and the cap stays at the base interval.
+- **The due-job check went from 5 s to 15 s** (`JOB_CHECK_INTERVAL_MS`). It runs whatever the wait, so a notification or an approved reply still wakes the worker within 15 s.
+- **What waits longer:** things that move with time alone. A snooze waking or an auto-close can now run up to 10 min late, against hours or days of granularity. If a subscription silently stops delivering, mail waits up to 10 min instead of 60 s. A renewal failure is still logged at error level (§ above).
+- **A sealed run** (fake writes, empty Graph, 10 s base, 40 s cap) waited 10 → 20 → 40 s. Each idle poll was ~47 reads and ~40 kB.
+
 ### Direction: the Inbox is not only inbound
 
 The team's replies land back in it. A message whose sender is the support mailbox is recorded `outbound`. Measured on real mail, 123 of 348 messages; before this they were stored as customer mail and sat at the end of 43% of threads, exactly where the categoriser looks for how the customer currently feels.
