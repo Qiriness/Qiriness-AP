@@ -9,10 +9,15 @@
     "loss_of_density": "loss_of_elasticity", "significant_loss_of_density": "loss_of_elasticity",
     "dullness": "dullness", "lack_of_radiance": "dullness", "tired_skin": "signs_of_fatigue",
     "dark_spots": "dark_spots", "pigmentation": "dark_spots", "uneven_tone": "uneven_tone", "lack_of_uniformity": "uneven_tone",
-    "sensitivity": "reactivity", "reactive_skin": "reactivity", "reactive": "reactivity", "redness": "redness",
+    "sensitivity": "reactivity", "reactive_skin": "reactivity", "reactive": "reactivity", "redness": "redness", "irritation": "reactivity",
     "imperfections": "blemishes", "clogged_pores": "enlarged_pores", "excess_sebum": "excess_sebum", "shine": "excess_sebum",
     "dark_circles": "dark_circles", "puffiness": "puffiness", "tired_eyes": "dark_circles", "fatigue": "dark_circles",
     "early_signs": "eye_wrinkles", "eye_wrinkles": "eye_wrinkles", "mature_eye_area": "eye_wrinkles", "advanced_eye_wrinkles": "eye_wrinkles"
+  },
+
+  "concern_also": {
+    "_about": "The customer's words (concern_map's keys) that also count as another standard concern (owner, 2026-10-19: « rougeur, irritation should trigger imperfections as well as peaux sensibles »). Their own concern keeps the sensitive skin; the added one is the main concern the routine and the products answer. « Peau sensible » alone adds nothing.",
+    "redness": ["blemishes"], "irritation": ["blemishes"]
   },
 
   "premium_concerns": ["deep_wrinkles", "significant_loss_of_density", "advanced_loss_of_firmness", "demanding_mature_skin", "regeneration"],

@@ -10,6 +10,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The advisor: an eye care before the roller for « poches » (2026-10-19)
+
+Owner: « autre category should not be prioritised over an actual soin ». « J'ai les poches sous les yeux » got the Roller Yeux alone. The roller's type in the knowledge spreadsheet is now « Accessoire » (one cell, G93, edited in the workbook's XML so nothing else changed; `npm run advisor:import` re-wrote the JSON, one line). `foundations.mjs`: when nothing is made for an eye concern, the single eye product is the Routines tab's eye step choice (no range known: the Sérum Élixir Regard Éclat), and the accessory for that concern comes second. The v4 test « poches → the roller » is now this rule (`areas.test.mjs`, FR and EN); « taches autour des yeux » still gets none. npm test 3798/3798; eval:resolution 123/123, eval:advisory 43/49 and advisor:score 20/54, all unchanged; `advisor:load --dry-run` clean. Needs `npm run advisor:load`.
+
+## The advisor: redness and irritation give the blemish routine for a sensitive skin (2026-10-19)
+
+Owner: « rougeur, irritation should trigger imperfections as well as peaux sensibles ». « J'ai des rougeurs persistantes sur les joues » had been asked for another concern, with no advice. New setting `concern_also` (`qiriness-routine-settings.json`, passed through by `assemble-routines.mjs`, read in `foundations.mjs`): « rougeurs » and « irritation » also count as `blemishes`, the main concern, and keep the sensitive skin. « Irritation » is a new lexicon concern (FR/EN), in `qiriness.json`'s vocabulary and mapped to `reactivity`. Test in `areas.test.mjs`, on the real sheet, FR and EN: the B routine, nothing « Déconseillé », gentler than the plain blemish routine; « peau sensible » alone unchanged. npm test 3798/3798; eval:resolution 123/123, eval:advisory 43/49 and advisor:score 20/54, all unchanged. Needs `npm run advisor:load`.
+
 ## The advisor: a profile button is never a product name; « moins » is not « mains » (2026-10-19)
 
 On the dev store the builder's « Moins de 25 ans » button came back with « Coffret | Crème | Masque » in place of the moment question. The resolver had typo-corrected « moins » to « mains » and asked which hand product. That « which one? » blocked the builder's own question, and its buttons replaced « Jour | Soir | Les deux » (trace of 2026-10-19 20:37, product ids resolved in the DB). Now a profile chip skips the resolver (`llm-agent.mjs`), and « moins », « plus » and « less » are never typo-corrected (`COMMON_WORDS`, `conversation-refs.mjs`). Tests: `product-resolver.test.mjs` and `conversation-guards.test.mjs`, one each, both failing before the fix. npm test 3797/3797; eval:resolution 123/123, eval:advisory 43/49 and advisor:score 20/54, all unchanged.

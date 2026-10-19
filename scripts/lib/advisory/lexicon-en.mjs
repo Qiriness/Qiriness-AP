@@ -48,6 +48,7 @@ export default {
     dark_spots: /\b((acne|spot|pimple|blemish|breakout) (marks?|scars?)|(marks?|scars?) left by (old |past |my )?(spots?|pimples?|acne|blemishes|breakouts?)|post ?acne( marks?)?|(dark|age|sun|brown|pigment) spots?|hyperpigmentation|pigmentation|melasma)\b/,
     uneven_tone: /\b(uneven (skin )?(tone|complexion)|blotchy)\b/,
     redness: /\b(redness|red skin|red patches|rosacea|couperose|flushing)\b/,
+    irritation: /\b(irritation|irritated|irritates?|irritable)\b/,
     lack_of_radiance: /\b(lack of radiance|lacks radiance|no radiance|lack of glow|no glow)\b/,
     dullness: /\b(dull( skin| complexion)?|dullness|lacklust(re|er)|radiance|glow)\b/,
     dark_circles: /\b(dark circles?|under ?eye circles?)\b/,

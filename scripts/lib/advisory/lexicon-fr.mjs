@@ -46,6 +46,7 @@ export default {
     dark_spots: /\b((marques?|traces?|taches?|cicatrices?)( (laissees?|laisses?) par)?( (d|des|de|mes|les|ses))?( anciens?| anciennes?| vieux| vieilles?)? (boutons?|acne|imperfections?)|post ?acne|taches?|hyperpigmentation|pigmentation|masque de grossesse|melasma)\b/,
     uneven_tone: /\b(teint (irregulier|inegal|brouille|pas uniforme|heterogene))\b/,
     redness: /\b(rougeurs?|couperose|rosacee|peau rouge)\b/,
+    irritation: /\b(irritations?|irrite\w*|peaux? irritees?)\b/,
     lack_of_radiance: /\b(manque d eclat|pas d eclat|sans eclat)\b/,
     dullness: /\b(teint terne|peau terne|terne|grise mine|mauvaise mine|bonne mine|eclat)\b/,
     dark_circles: /\b(cernes?)\b/,
@@ -77,7 +78,7 @@ export default {
   sensitivity: {
     none: /\b(pas|non|plutot pas) (du tout )?(sensible|reactive)s?\b|\bpas de sensibilite\b/,
     reactive: /\b(peaux? ((tres|plutot|assez|un peu) )?reactives?|reagit|reactive)\b/,
-    sensitive: /\b(sensibles?|sensibilite|intolerante?|irrite\w*)\b/
+    sensitive: /\b(sensibles?|sensibilite|intolerante?|irrit\w*)\b/
   },
 
   /** Each has an `item` group: the ingredient, as typed. */

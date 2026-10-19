@@ -85,6 +85,8 @@ export function assembleRoutines({ routines, rules, products, settings }) {
 
   const concernMap = withoutNotes(settings.concern_map);
   for (const [word, concern] of Object.entries(concernMap)) if (!concernKeys.has(concern)) warnings.push(`concern_map: « ${word} » → « ${concern} », not a standard concern`);
+  const concernAlso = Object.fromEntries(Object.entries(withoutNotes(settings.concern_also)).map(([word, list]) => [word, [list].flat()]));
+  for (const [word, list] of Object.entries(concernAlso)) for (const c of list) if (!concernKeys.has(c)) warnings.push(`concern_also: « ${word} » → « ${c} », not a standard concern`);
   const priority = settings.foundation_priority ?? [];
   for (const key of priority) if (!foundations.some((f) => f.key === key)) warnings.push(`foundation_priority: ${key} is not a main concern`);
   for (const f of foundations) if (f.primary_concerns.length && !priority.includes(f.key)) warnings.push(`foundation_priority: ${f.key} is missing`);
@@ -93,6 +95,7 @@ export function assembleRoutines({ routines, rules, products, settings }) {
     routines: {
       _about: 'Assembled by npm run advisor:load from the knowledge spreadsheet and the brand routine settings (assemble-routines.mjs). Do not edit: change the sources.',
       concern_map: concernMap,
+      concern_also: concernAlso,
       premium_concerns: settings.premium_concerns ?? [],
       foundation_priority: priority,
       // The eye module's concerns, and an eye routine's (a main concern with `area: eyes` in the settings).

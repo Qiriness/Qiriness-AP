@@ -118,6 +118,8 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   const byHandle = new Map(products.map((x) => [x.handle, x]));
   const foundations = new Map(routines.foundations.map((f) => [f.key, f]));
   const concernOf = (key) => routines.concern_map?.[key] ?? key;
+  // Words that also count as another concern (« rougeurs » → blemishes, and still a sensitive skin).
+  const alsoOf = (key) => routines.concern_also?.[key] ?? [];
   const eyeConcerns = new Set(routines.eye_concerns ?? []);
   const sizeLabels = routines.questions?.chips?.size ?? {};
   // The day / night routine (the brand's Routines tab), when the routines carry it.
@@ -142,12 +144,12 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     const secondaryRaw = valueOf(profile, 'secondary_concerns') ?? [];
     const behaviours = valueOf(profile, 'skin_behaviour') ?? [];
     const raw = [primaryRaw, ...secondaryRaw, ...behaviours].filter(Boolean);
-    const all = [...new Set(raw.map(concernOf))];
+    const all = [...new Set([...raw.flatMap((x) => alsoOf(x)), ...raw.map(concernOf)])];
     const skin = valueOf(profile, 'skin_type');
     return {
       primaryChosen: profile.primary_concern?.source === 'quick_choice' ? concernOf(primaryRaw) : null,
       primarySource: profile.primary_concern?.source ?? null,
-      primary: primaryRaw ? concernOf(primaryRaw) : null,
+      primary: primaryRaw ? alsoOf(primaryRaw)[0] ?? concernOf(primaryRaw) : null,
       concerns: all,
       // The eye routine's other eye concern: counted once the eye routine is chosen, never a vote for another.
       eye: valueOf(profile, 'eye_concern'),
@@ -376,6 +378,19 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       }
       const pin = wanted.find((x) => fillsStep(x.k, step.type) && !used.has(x.id));
       const reachable = targetedPool(step, f, c, used, scope);
+      // The eyes alone and no eye care made for their concern (« poches »: only the roller, an accessory;
+      // owner, 2026-10-19: « autre category should not be prioritised over an actual soin »): the eye care
+      // the day / night routine's eye step chooses, which needs no concern (the range's, else a generic one).
+      // An eye concern only: « des taches sur le contour des yeux » still gets none, said honestly.
+      const eyeStep = eyesAlone && !reachable.length && eyeConcerns.has(c.primary) ?routineSteps?.day?.find((s) => s.area === 'eyes' && !s.concern_required) : null;
+      const eyeCare = eyeStep
+        ? products.filter((x) => eligible(x, { ...step, types: eyeStep.types, targets: null }, f, c, used)).map((x) => ({ x, ...timedKey(x, eyeStep, 'day', f, c, range), s: 0, reasons: [] })).sort(byKey)
+        : [];
+      // The accessory made for it (the roller) after the soin, never before.
+      if (eyeCare.length) {
+        const accessories = products.filter((x) => (x.k.area ?? 'face') === 'eyes' && NOT_ALONE.has(x.k.functional_type) && x.k.primary_concern === c.primary && suitable(x, c) && !used.has(x.id));
+        eyeCare.splice(1, 0, ...accessories.map((x) => ({ x, codes: [`${FIT.PRIMARY_CONCERN}:${c.primary}`], s: 0 })));
+      }
       // One product for a need: the products that treat their concern first, when there are any
       // (« un produit pour les taches » ranked an anti-fatigue serum first, on its range's concerns).
       const treating = scope === 'targeted' && c.primary && !eyesAlone ? reachable.filter((x) => [x.k.primary_concern, ...x.k.other_concerns].includes(c.primary)) : [];
@@ -383,7 +398,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       // A man: his range first among the suitable products (owner: « ranked first, others still
       // possible »); a sensitive-skin cleanser outscored the men's one in the customer batch.
       const menFirst = (x) => (c.men && x.k.men ? 1 : 0);
-      const ranked = pool.map((x) => ({ x, ...score(x, step, f, c, ranges, pool.skinRelaxed) }))
+      const ranked = eyeCare.length ? eyeCare.map((r) => ({ ...r, reasons: r.codes })) : pool.map((x) => ({ x, ...score(x, step, f, c, ranges, pool.skinRelaxed) }))
         .sort((a, b) => menFirst(b.x) - menFirst(a.x) || b.s - a.s || (a.x.product.priceFrom ?? 0) - (b.x.product.priceFrom ?? 0) || a.x.name.localeCompare(b.x.name));
       if (pin) {
         const at = ranked.findIndex((r) => r.x.id === pin.id);

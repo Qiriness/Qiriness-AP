@@ -2,6 +2,14 @@
 
 ## Storefront advisor
 
+### An accessory is never the eye care; « poches » gets the eye step's own choice (2026-10-19)
+
+Owner: « autre category should not be prioritised over an actual soin », on « J'ai les poches sous les yeux » answered with the Roller Yeux alone. The roller was the sheet's only « Yeux » product, so it filled the eye step, and the only one made for puffiness. Its type is now « Accessoire » (Products tab G93, the JSON re-imported), so it fills no step. With nothing made for an eye concern (cernes, poches, rides du contour des yeux), the single eye product is the one the Routines tab's eye step would choose, which needs no concern: the range's eye care, else the generic one (« sinon le Sérum Élixir Regard Éclat »). The accessory made for that concern comes after it, as its first alternative, never before. A face concern asked about the eyes (« des taches autour des yeux ») still gets none, said honestly (§ the owner's notes v4). Supersedes « poches → the roller » of the notes v4.
+
+### Redness and irritation are blemishes on a sensitive skin (2026-10-19)
+
+Owner: « rougeur, irritation should trigger imperfections as well as peaux sensibles ». Since 2026-10-16 redness and reactivity are no main concern (the sensitive skin is a skin type), so « J'ai des rougeurs persistantes » got « quelle autre préoccupation ? » and no advice. Now the settings' `concern_also` makes a customer's word count as another standard concern too: `redness` and `irritation` add `blemishes` (B Imperfections), which becomes the main concern, while their own concern (Rules tab: « Type de peau sensible ») keeps the skin sensitive, so the products are never « Déconseillé » and lean to the gentle ones (the gentle cleanser and lotion instead of the purifying ones). « Irritation » is its own lexicon concern (FR « irritée », « irritations »; EN "irritated", "irritation"), mapped to `reactivity`. « Peau sensible » alone adds nothing and still asks its concern. Brand data: another brand leaves `concern_also` empty.
+
 ### The owner's notes v4: the offer waits, caution turns, the hands and body, the eyes (2026-10-19)
 
 The owner tested 21 conversations on the dev store (`data/advisor/qiriness-advisor-conversation-notes-v4.xlsx`). Owner's choices: a man gets the same routine with men's products where one exists (already so: `timedKey` ranks them first); the body gets its products now and a body routine later; brand knowledge goes on the to-do list. Each rule is gated as narrowly as it could be; eval:advisory, advisor:score and eval:resolution are unchanged by it.

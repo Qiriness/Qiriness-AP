@@ -122,10 +122,6 @@ test('a face concern asked about the eyes gets eye products for it; none is said
   assert.equal(guessed.next_question.options[0].value, 'dark_circles');
 });
 
-test('puffiness under the eyes: the roller, FR and EN', () => {
-  assert.equal(advise("J'ai les poches sous les yeux très visibles le matin. Quel soin me conseillez-vous ?").steps[0].handle, 'roller-yeux-rafraichissant-et-decongestionnant');
-  assert.equal(advise('I have very puffy eyes in the morning').steps[0].handle, 'roller-yeux-rafraichissant-et-decongestionnant');
-});
 
 test('the marks old spots leave are dark spots (the Éclat Parfait products); « boutons » alone stays blemishes', () => {
   for (const message of ["J'ai des marques laissées par d'anciens boutons. Comment améliorer leur apparence ?", "J'ai des cicatrices d'acné", 'I have marks left by old spots', 'acne scars']) {
@@ -155,4 +151,37 @@ test('a type asked for while the concern is still open: examples of that type, o
 test('a medical situation, a treatment, an allergy or a reaction is read, FR and EN; a product request or redness is not', () => {
   for (const m of ["Je prends un traitement dermatologique contre l'acné", "J'ai un grain de beauté qui a changé de couleur", 'Je suis allergique au parfum', 'ma peau brûle avec des plaques rouges', 'Je suis enceinte', "I'm on an acne treatment", 'I have a mole that changed', "I'm allergic to fragrance", 'red patches and burning', 'I am pregnant']) assert.ok(mentionsCaution(m), m);
   for (const m of ['Avez-vous un traitement anti-acné ?', "J'ai des rougeurs sur les joues", 'peau sensible et réactive', 'Do you have an acne cream?', 'I have redness on my cheeks', 'un masque de grossesse']) assert.ok(!mentionsCaution(m), m);
+});
+
+test('« rougeurs » and « irritation » are blemishes on a sensitive skin; « peau sensible » alone still asks its concern, FR and EN', () => {
+  // Owner, 2026-10-19: « rougeur, irritation should trigger imperfections as well as peaux sensibles ».
+  const answered = { skin_type: q('combination'), age_band: q('under_25'), routine_time: q('both') };
+  const routine = (m) => advisor.advise({ profile: said(m, answered), mode: 'routine_builder' });
+  const plain = routine("J'ai des imperfections");
+  for (const m of ["J'ai des rougeurs persistantes sur les joues", 'Ma peau est souvent irritée', "J'ai des irritations", 'I have persistent redness on my cheeks', 'My skin gets irritated easily']) {
+    const a = routine(m);
+    assert.equal(a.status, 'recommended', m);
+    assert.equal(a.playbook.key, 'B', m);
+    // The sensitive skin still decides: never « Déconseillé », and gentler than the plain blemish routine.
+    assert.ok(a.steps.every((s) => KNOWLEDGE.get(s.handle).sensitive !== 'avoid'), m);
+    assert.notDeepEqual(a.steps.map((s) => s.handle), plain.steps.map((s) => s.handle), m);
+    assert.equal(advise(m).status, 'recommended', `${m} (outside the builder)`);
+  }
+  assert.equal(advise("J'ai la peau sensible").next_question?.field, 'primary_concern');
+});
+
+test('puffiness under the eyes: an actual eye care first, the roller (an accessory) after it, FR and EN', () => {
+  // Owner's notes v4: « poches sous les yeux, we definitly have a product for this »; then, 2026-10-19: « autre
+  // category should not be prioritised over an actual soin ». Nothing but the roller is made for puffiness: the
+  // Routines tab's eye step chooses, no range known, the generic one (« sinon le Sérum Élixir Regard Éclat »).
+  for (const m of ["J'ai les poches sous les yeux très visibles le matin. Quel soin me conseillez-vous ?", 'I have very puffy eyes in the morning, what do you recommend?']) {
+    const a = advise(m);
+    assert.equal(a.status, 'recommended', m);
+    assert.equal(a.steps[0].handle, 'serum-anti-age-elixir-regard-eclat', m);
+    assert.equal(a.steps[0].alternatives[0].handle, 'roller-yeux-rafraichissant-et-decongestionnant', m);
+  }
+  assert.equal(KNOWLEDGE.get('roller-yeux-rafraichissant-et-decongestionnant').functional_type, 'tool');
+  // A concern an eye care is made for keeps its own pick, with no accessory.
+  assert.deepEqual(shown(advise("J'ai des cernes")), ['serum-anti-age-elixir-regard-eclat']);
+  assert.ok(advise("J'ai des rides autour des yeux").steps.every((s) => KNOWLEDGE.get(s.handle).primary_concern === 'eye_wrinkles'));
 });

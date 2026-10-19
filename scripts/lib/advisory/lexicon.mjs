@@ -44,6 +44,7 @@ const CONCERN_ORDER = [
   ['dark_spots', null],
   ['uneven_tone', null],
   ['redness', null],
+  ['irritation', null],
   ['lack_of_radiance', null],
   ['dullness', null],
   ['dark_circles', 'dark_circles'],

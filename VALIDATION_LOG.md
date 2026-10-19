@@ -50,7 +50,7 @@ Server-side only (no theme deploy). `qiriness-routine-settings.json` gained `que
 2. **No offer after a referral or nothing.** **Check:** the mole (note 15), the acne treatment (16), the allergy (17), the burn (18), spots on the hands (7) → no offer, and no card on 15, 16, 18.
 3. **Concern buttons.** **Check:** « Est-ce que je peux utiliser ma crème visage sur mes mains ? » and the masks question (12) → no concern buttons.
 4. **Hands, lips, body.** **Check:** « mains très sèches » → the Caresse Mains Velours cream first; « lèvres sèches » → Lip Beauty; « peau du corps très sèche » and « coudes et genoux… rituel » → Body Wrap, Lait Qi, shower oil, and no skin-type question, no offer.
-5. **Eyes.** **Check (after `advisor:load`):** « contour des yeux » → Cernes · Poches · Rides du contour des yeux · Déshydratation; « Rides du contour des yeux » → eye creams only. « poches sous les yeux » → the roller.
+5. **Eyes.** **Check (after `advisor:load`):** « contour des yeux » → Cernes · Poches · Rides du contour des yeux · Déshydratation; « Rides du contour des yeux » → eye creams only. « poches sous les yeux » → the Sérum Élixir Regard Éclat, the roller only after it (2026-10-19: the roller is an « Accessoire »).
 6. **Marks.** **Check:** « marques laissées par d'anciens boutons » → the Éclat Parfait serum, lotion and cream.
 7. **Contact.** **Check:** « je veux parler à une vraie personne » never says the chat is passed on; « livré mais pas reçu » and « produit différent » end with « N'oubliez pas d'indiquer votre numéro de commande dans le formulaire. »
 8. **English.** **Check:** 1, 4 and 7 in English.
