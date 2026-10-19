@@ -10,6 +10,10 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The advisor: a profile button is never a product name; « moins » is not « mains » (2026-10-19)
+
+On the dev store the builder's « Moins de 25 ans » button came back with « Coffret | Crème | Masque » in place of the moment question. The resolver had typo-corrected « moins » to « mains » and asked which hand product. That « which one? » blocked the builder's own question, and its buttons replaced « Jour | Soir | Les deux » (trace of 2026-10-19 20:37, product ids resolved in the DB). Now a profile chip skips the resolver (`llm-agent.mjs`), and « moins », « plus » and « less » are never typo-corrected (`COMMON_WORDS`, `conversation-refs.mjs`). Tests: `product-resolver.test.mjs` and `conversation-guards.test.mjs`, one each, both failing before the fix. npm test 3797/3797; eval:resolution 123/123, eval:advisory 43/49 and advisor:score 20/54, all unchanged.
+
 ## The advisor, owner's notes v4: the offer waits, caution turns, the hands and body, the eyes, the contact form (2026-10-19)
 
 Owner: 21 conversations tested on the dev store (`data/advisor/qiriness-advisor-conversation-notes-v4.xlsx`). Rules and reasons: DECISIONS.md § « The owner's notes v4 ».

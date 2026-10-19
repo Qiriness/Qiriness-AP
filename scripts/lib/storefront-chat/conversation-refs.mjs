@@ -50,6 +50,8 @@ export const STOPWORD_LIKE = new Set([
  */
 export const COMMON_WORDS = new Set([
   ...STOPWORD_LIKE, ...ANCHOR_WORDS,
+  // Never typos of a catalogue word: « moins » (stemmed « moin ») is one letter from « mains ».
+  'moins', 'moin', 'plus', 'less',
   'vous', 'avez', 'nous', 'leur', 'leurs', 'elles', 'mais', 'donc', 'alors', 'aussi', 'comme', 'quand', 'faire', 'peux', 'peut', 'veux', 'sont', 'etre', 'avoir', 'cette',
   'your', 'yours', 'what', 'have', 'will', 'would', 'could', 'should', 'about', 'there', 'their', 'them', 'they', 'when', 'where', 'which', 'with', 'this', 'that',
   'than', 'then', 'into', 'just', 'some', 'many', 'much', 'more', 'most', 'also', 'only', 'other', 'good', 'need', 'want', 'like', 'make', 'used', 'using'

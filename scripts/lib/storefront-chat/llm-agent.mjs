@@ -244,7 +244,9 @@ export function createLlmAgent({
       // The cart question answered: the routine it was about is settled (added, or not).
       const routineAdded = flowStart.cart === 'yes' ? flowStart.flow.routine_ref : null;
       let flow = flowStart.cart ? { ...flowStart.flow, routine_ref: null } : flowStart.flow;
-      let resolution = resolutionIndex
+      // A profile chip is our own label, never a product name: « Moins de 25 ans » had resolved to the hand
+      // products (« moins » one letter from « mains ») and their « which one? » replaced the routine question.
+      let resolution = resolutionIndex && !profileChoice
         ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || purchaseAnswer || flowChoice ? null : choice })
         : null;
       const resolvedIds = new Set(resolution?.products.map((p) => p.id) ?? []);

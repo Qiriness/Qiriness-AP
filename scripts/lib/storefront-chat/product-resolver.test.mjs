@@ -235,3 +235,13 @@ test('the answer to « laquelle ? » keeps the product found beside it; labels t
   assert.equal(again.status, 'resolved');
   assert.deepEqual(ids(again), ['p2', 'p6']);
 });
+
+test('« moins » and « plus » are words, not typos of « mains »: « Moins de 25 ans » names no product', () => {
+  for (const message of ['Moins de 25 ans', 'Un soin moins cher', 'Less than 25']) {
+    const r = resolve(message);
+    assert.deepEqual(r.products, [], message);
+    assert.ok(!r.clarification, message);
+  }
+  // The real word still resolves.
+  assert.deepEqual(ids(resolve('la crème mains')), ['p9']);
+});

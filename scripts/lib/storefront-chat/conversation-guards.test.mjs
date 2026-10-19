@@ -131,3 +131,10 @@ test('the prompt: the contact form never sees the chat; a brand question is answ
   assert.match(system, /area_fallback/);
   assert.doesNotMatch(system, /CAUTION/);
 });
+
+test('a profile chip is our own label, never a product name: no « which one? » in place of the next question', async () => {
+  // « Moins de 25 ans » had resolved to the hand products (« moins » one letter from « mains »).
+  const r = await agentWith(scripted(answer('Souhaitez-vous une routine pour le jour, pour la nuit, ou les deux ?'))).respond({ message: page.name, choice: 'profile:age_band:under_25', context: { locale: 'fr' } });
+  assert.equal(r.resolution, null);
+  assert.ok(!r.choices.some((c) => c.value === page.id || c.label === page.name));
+});

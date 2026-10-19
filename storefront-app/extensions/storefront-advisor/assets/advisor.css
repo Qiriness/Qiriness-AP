@@ -649,8 +649,8 @@ a.sa-rcard__title:hover { text-decoration: underline; text-underline-offset: 3px
 .sa-rcard__aside { text-align: right; }
 .sa-rcard__price { margin: 0; font-size: 15px; }
 .sa-rcard__volume { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sa-muted); }
-.sa-rcard__include { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; letter-spacing: 0.1em; white-space: nowrap; text-transform: uppercase; cursor: pointer; }
-.sa-rcard__check { flex: none; width: 13px; height: 13px; margin: 0; accent-color: var(--sa-ink); }
+.sa-rcard__include { display: inline-flex; align-items: center; gap: 3px; font-size: 6px; letter-spacing: 0.1em; white-space: nowrap; text-transform: uppercase; cursor: pointer; }
+.sa-rcard__check { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--sa-ink); }
 .sa-rcard__owned { display: inline-block; max-width: 130px; font-size: 11px; line-height: 1.35; color: var(--sa-muted); }
 .sa-rcard__why { margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--sa-line); }
 .sa-rcard__why-text {
