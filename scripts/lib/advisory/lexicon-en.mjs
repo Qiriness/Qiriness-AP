@@ -98,7 +98,7 @@ export default {
   // "also", "as well": another concern beside the main one.
   additive: /\b(also|as well|too|in addition|additionally|on top of that)\b/,
   concernIs: /\b(my )?(main )?(concern|worry|problem|issue)s? (is|are)\b/,
-  wants: /\b(i m looking for|looking for|i need|i want|i d like|i would like|can you recommend|could you recommend|recommend me|do you have|which (serum|cream))\b/,
+  wants: /\b(i m looking for|looking for|i need|i want|i d love|have you got|is there|i d like|i would like|can you recommend|could you recommend|recommend me|do you have|which (serum|cream))\b/,
   desired: {
     serum: /\b(a|the|my) (serum|elixir)\b/,
     night_cream: /\b(a|the|my) night cream\b/,
@@ -141,6 +141,11 @@ export default {
   age: [/\b(?:i am|i m|im) (\d{2})\b/, /\b(\d{2}) (?:years? old|yo|y o)\b/],
   ageWords: [[/\b(twenties|20s)\b/, 25], [/\b(thirties|30s)\b/, 35], [/\b(forties|40s)\b/, 45], [/\b(fifties|50s)\b/, 55], [/\b(sixties|seventies|60s|70s)\b/, 65]],
 
+  // A routine talked about at all: the only messages where the model may open the builder itself.
+  routineWord: /\b(routines?|rituals?|regimen|regime|skin ?care plan|(from )?morning (and|to|till|until) (evening|night)|day and night|am and pm)\b/,
+  // A routine asked for (owner, 2026-10-19: « for English as well »): "I'd like a routine", "suggest a ritual".
+  // Never "my routine is…": a verb of asking comes first.
+  routineAsk: /\b(i want|i d like|i would like|i need|i m looking for|looking for|can you (suggest|recommend|give me|make me|do)|could you (suggest|recommend|give me|make me|do)|suggest|recommend|give me|do you have) (me )?(a |an |some )?((new|proper|good|simple|full|complete|whole|personali[sz]ed|daily|skin ?care|skincare|beauty|face)\s){0,3}(routine|ritual|regimen)\b/,
   routineBuilder: /\b((build|create|make|put together|design|set up|help me (build|create|make|put together)) (me )?(together )?(a |an |my |our )?((full|complete|whole|personali[sz]ed|daily|new|skin ?care) )*routine|routine builder|(redo|restart|retry|rebuild|start over( with)?|start again( with)?) (my |the |a )?(routine|quiz|questionnaire)|new routine)\b/,
   dontKnow: /\b(i don t know|i do not know|no idea|not sure|dunno|i m not sure)\b/
 };

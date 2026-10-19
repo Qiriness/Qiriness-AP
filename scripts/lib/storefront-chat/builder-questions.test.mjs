@@ -290,3 +290,34 @@ test('a comparison: the eye creams named by their range, and no routine offer wh
   assert.equal(partial.resolution.status, 'partial');
   assert.notEqual(partial.followUp?.choices?.[0]?.value, 'flow:routine:yes');
 });
+
+test('no routine offer under a « laquelle ? » the model asked through its own resolve_products (owner, 2026-10-19)', async () => {
+  const resolveCall = { toolCalls: [{ id: 'r1', name: 'resolve_products', args: { mentions: ['crème Temps Sublime'] }, argsError: null }], message: { role: 'assistant', tool_calls: [{ id: 'r1', type: 'function', function: { name: 'resolve_products', arguments: JSON.stringify({ mentions: ['crème Temps Sublime'] }) } }] }, content: null, usage: { prompt_tokens: 800, completion_tokens: 20 } };
+  const agent = createLlmAgent({ client: scripted(resolveCall, answer('Quelle crème Temps Sublime souhaitez-vous comparer ?')), company: { name: 'Qiriness' }, catalogue: CATALOGUE, advisor, productKnowledge: knowledgeIndex(built.products) });
+  const reply = await agent.respond({ message: 'comparer la creme contour des yeux temps sublime', context: { locale: 'fr' } });
+  assert.equal(reply.resolution.status, 'ambiguous');
+  assert.ok(reply.choices.length > 0, 'the options are the chips');
+  assert.notEqual(reply.followUp?.choices?.[0]?.value, 'flow:routine:yes');
+});
+
+test('the model opens the builder only when a routine is asked for, and then from the first question (owner, 2026-10-19)', async () => {
+  const useSkill = { toolCalls: [{ id: 's1', name: 'use_skill', args: { name: 'routine_builder' }, argsError: null }], message: { role: 'assistant', tool_calls: [{ id: 's1', type: 'function', function: { name: 'use_skill', arguments: JSON.stringify({ name: 'routine_builder' }) } }] }, content: null, usage: { prompt_tokens: 800, completion_tokens: 20 } };
+  // A finished routine, by buttons (no model call).
+  const builder = agentWith(scripted());
+  const turn = (message, choice, advisorState, extra = {}) => builder.respond({ message, choice, advisorState, context: { locale: 'en' }, conversationRef: 's', ...extra });
+  let state = (await turn('Build my routine', null, null, { action: 'build_routine' })).advisor;
+  for (const [m, c] of [['Wrinkles', 'profile:primary_concern:wrinkles'], ['Dry', 'profile:skin_type:dry'], ['25 to 34', 'profile:age_band:25_34'], ['Day', 'profile:routine_time:day']]) state = (await turn(m, c, state)).advisor;
+  assert.equal(state.mode, 'conversation');
+
+  // "What spa treatments would you recommend": no routine word, the model may not open it.
+  const spa = await agentWith(scripted(useSkill, answer('Our spa treatments are listed on the Spas page.'))).respond({ message: 'what spa treatments would you recommend', advisorState: state, context: { locale: 'en' }, conversationRef: 's' });
+  assert.equal(spa.trace.skill_refused, 'routine_builder');
+  assert.equal(spa.routineView ?? null, null);
+  assert.notEqual(spa.text, 'Here is your personalised routine, morning and evening.');
+  assert.equal(spa.advisor.mode, 'conversation');
+
+  // "Can you make me a new skincare regimen": it opens, and starts again from the first question.
+  const again = await agentWith(scripted(useSkill, answer('Of course.'))).respond({ message: 'can you put together a new skincare regimen for me', advisorState: state, context: { locale: 'en' }, conversationRef: 's' });
+  assert.equal(again.advisor.mode, 'routine_builder');
+  assert.equal(again.trace.advice.question, 'primary_concern');
+});

@@ -112,7 +112,7 @@ export function runTool(name, args, catalogue, { currency = 'EUR', locale = 'fr'
     if (!resolution?.index) return { result: { error: 'resolution is not available' }, handles: [] };
     const mentions = (Array.isArray(args?.mentions) ? args.mentions : []).filter((m) => typeof m === 'string').slice(0, 6).map((m) => m.slice(0, MAX_QUERY_CHARS));
     if (!mentions.length) return { result: { error: 'no mentions given' }, handles: [] };
-    const r = resolveProducts(mentions.join(', '), { index: resolution.index, refs: resolution.refs, pageProductId: resolution.pageProductId });
+    const r = resolveProducts(mentions.join(', '), { index: resolution.index, refs: resolution.refs, pageProductId: resolution.pageProductId, known: resolution.known?.() ?? [] });
     const { pending, ...contract } = r;
     const handleOf = (id) => catalogue.products.find((p) => p.id === id)?.handle;
     return {

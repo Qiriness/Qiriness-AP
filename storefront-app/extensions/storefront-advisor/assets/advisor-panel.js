@@ -65,7 +65,8 @@
     expand: ['M14 4h6v6', 'M20 4l-7 7', 'M10 20H4v-6', 'M4 20l7-7'],
     collapse: ['M20 10h-6V4', 'M14 10l7-7', 'M4 14h6v6', 'M10 14l-7 7'],
     newChat: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'],
-    send: ['M3.5 12h16', 'M14.5 7l5 5-5 5']
+    send: ['M3.5 12h16', 'M14.5 7l5 5-5 5'],
+    search: ['M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z', 'M20 20l-4.8-4.8']
   };
 
   function newSessionId() {
@@ -304,21 +305,24 @@
         if (src && media.parentNode) media.parentNode.replaceChild(el('img', { src: src, alt: '', loading: 'lazy', width: '240', height: '240' }), media);
       });
     }
+    // The image, the name and the magnifier in the corner all open the product page (owner,
+    // 2026-10-19: « the name should be a link… remove découvrir, add it as a search icon »).
+    // The image and the icon are extra ways in: one link in the tab order, the name's.
+    function toPage(attrs, children) {
+      return el('a', Object.assign({
+        href: link.href,
+        target: link.external ? '_blank' : null,
+        rel: link.external ? 'noopener noreferrer' : null,
+        onClick: function () { if (onCardClick && typeof product.id === 'string') onCardClick(product.id); }
+      }, attrs), children);
+    }
     return el('article', { className: 'sa-card' }, [
-      el('div', { className: 'sa-card__media' }, [media]),
+      el('div', { className: 'sa-card__media' }, [link ? toPage({ tabindex: '-1', 'aria-hidden': 'true' }, [media]) : media]),
+      link ? toPage({ className: 'sa-card__view', tabindex: '-1', 'aria-hidden': 'true', title: strings.discover }, [icon(ICONS.search)]) : null,
       el('div', { className: 'sa-card__body' }, [
-        el('h3', { className: 'sa-card__title', text: title }),
+        el('h3', { className: 'sa-card__title' }, [link ? toPage({ className: 'sa-card__link', text: title, 'aria-label': strings.discover + ' — ' + title }) : document.createTextNode(title)]),
         product.rationale ? el('p', { className: 'sa-card__rationale', text: String(product.rationale) }) : null,
         product.price ? el('p', { className: 'sa-card__price', text: String(product.price) }) : null,
-        link ? el('a', {
-          className: 'sa-card__cta',
-          href: link.href,
-          target: link.external ? '_blank' : null,
-          rel: link.external ? 'noopener noreferrer' : null,
-          text: strings.discover,
-          'aria-label': strings.discover + ' — ' + title,
-          onClick: function () { if (onCardClick && typeof product.id === 'string') onCardClick(product.id); }
-        }) : null,
         typeof product.variantId === 'string' ? AddButton(product, strings) : null
       ])
     ]);

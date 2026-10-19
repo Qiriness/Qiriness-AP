@@ -273,3 +273,13 @@ test('a routine the AI builds through advise during its turn still gets the cart
   assert.equal(reply.trace.follow_up, 'cart');
   assert.ok(reply.routineCart.add.length >= 2);
 });
+
+test('the treat after a routine names their concern, FR and EN (owner, 2026-10-19)', () => {
+  const treat = { product_id: ID(11) };
+  const say = (lang, concern) => followUpFor({ ...base, lang, flow: emptyFlow(), builder: true, advice: { status: 'recommended' }, treat, concern }).followUp.text;
+  assert.equal(say('fr', 'Imperfections'), 'Et pour un moment de douceur, parfait pour atténuer vos imperfections, ce petit plaisir pourrait vous plaire :');
+  assert.equal(say('fr', 'Déshydratation'), 'Et pour un moment de douceur, parfait pour atténuer votre déshydratation, ce petit plaisir pourrait vous plaire :');
+  assert.equal(say('en', 'Dark spots'), 'And for a little moment of pampering, perfect for easing your dark spots, you might like this treat:');
+  // No concern known: the plain sentence.
+  assert.equal(say('fr', null), 'Et pour un moment de douceur, ce petit plaisir pourrait vous plaire :');
+});

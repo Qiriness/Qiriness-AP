@@ -395,3 +395,17 @@ test('switching concern later: asked as a question, after an eye concern, then t
   assert.equal(answering.profile.primary_concern.value, 'wrinkles');
   assert.equal(answering.profile.skin_type.value, 'oily');
 });
+
+test('« je veux une crème pour les taches » / "I want a cream for dark spots": the type and the new main concern (owner, 2026-10-19)', () => {
+  const before = { primary_concern: q('wrinkles'), skin_type: q('dry') };
+  for (const message of ['je veux une creme pour les taches', 'avez-vous une crème pour les taches ?', 'I want a cream for dark spots', 'is there a cream for dark spots?']) {
+    const updates = extractProfile(message, { profile: before, lastAsked: null }).updates;
+    assert.ok(updates.some((u) => u.field === 'desired_care_type' && u.value === 'moisturiser'), message);
+    assert.ok(updates.some((u) => u.field === 'primary_concern' && u.value === 'dark_spots' && u.replace), message);
+  }
+});
+
+test('a routine or ritual asked for starts the builder, FR and EN; one described does not (owner, 2026-10-19)', () => {
+  for (const m of ['I would like a routine', 'can you suggest a skincare ritual', 'I need a new regimen', 'do you have a routine for dry skin', 'je veux une routine', 'proposez-moi un rituel', "j'aimerais une routine de soin complète", 'avez-vous une routine pour les rides ?']) assert.equal(extractProfile(m).routineBuilder, true, m);
+  for (const m of ['my routine is a cleanser and a cream', 'what is in my routine', 'ma routine actuelle est un nettoyant', 'what spa treatments would you recommend']) assert.equal(extractProfile(m).routineBuilder, false, m);
+});

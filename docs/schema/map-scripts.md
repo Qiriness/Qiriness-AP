@@ -127,7 +127,8 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # commercial name → type → description →
 |       |                                # conversation → page; vocabulary derived from
 |       |                                # titles + the knowledge's ranges; clarification,
-|       |                                # never a pick) ·
+|       |                                # never a pick; its pending keeps what was settled
+|       |                                # beside it + its labels) ·
 |       |                                # conversation-refs (« les deux », « ça »; the
 |       |                                # memory folded from context.refs/resolution) ·
 |       |                                # conversation-language (neutral replies retain session

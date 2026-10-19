@@ -97,7 +97,7 @@ export default {
   // « aussi », « en plus »: another concern beside the main one.
   additive: /\b(aussi|egalement|en plus|de plus|ainsi que|en outre)\b/,
   concernIs: /\b(ma |mes |mon )?(principale? )?(preo?c{1,2}upations?|souci|probleme) (principale? )?(c est|ce sont|est|sont|son|serait|ce serait)\b/,
-  wants: /\b(je cherche|je recherche|il me faut|je voudrais|j aimerais|je souhaite|besoin d|conseillez moi|recommandez moi|vous auriez|vous avez|quel(le)?s? (serait|serum|creme))\b/,
+  wants: /\b(je cherche|je recherche|il me faut|je veux|je voudrais|j ai besoin|avez vous|auriez vous|j aimerais|je souhaite|besoin d|conseillez moi|recommandez moi|vous auriez|vous avez|quel(le)?s? (serait|serum|creme))\b/,
   desired: {
     serum: /\b(un|une|le|la|mon|ma) (serum|elixir)\b/,
     night_cream: /\b(une|un|la|ma) creme de nuit\b/,
@@ -143,6 +143,11 @@ export default {
   ageWords: [[/\bvingtaine\b/, 25], [/\btrentaine\b/, 35], [/\bquarantaine\b/, 45], [/\bcinquantaine\b/, 55], [/\b(soixantaine|septantaine)\b/, 65]],
 
   // « refaire ma routine », « recommencer le questionnaire » (owner, 2026-10-18): the builder again, from its first question.
+  // A routine talked about at all: the only messages where the model may open the builder itself.
+  routineWord: /\b(routines?|rituels?|regime de soins?|programme de soins?|(du )?matin (et|au) (le )?soir|jour et nuit)\b/,
+  // A routine asked for (owner, 2026-10-19): « je veux une routine », « proposez-moi un rituel ».
+  // Never « ma routine actuelle… »: a verb of asking comes first.
+  routineAsk: /\b(je veux|je voudrais|j aimerais|je cherche|je recherche|il me faut|j ai besoin d|besoin d|proposez moi|propose moi|conseillez moi|suggerez moi|donnez moi|recommandez moi|vous pouvez me (proposer|conseiller|faire)|pouvez vous me (proposer|conseiller|faire)|avez vous) (un |une )?((nouvelle|nouveau|vraie|vrai|bonne|bon|petite|petit|complete|complet|personnalisee|personnalise|quotidienne|quotidien|de soin|de soins|beaute|visage)\s){0,3}(routine|rituel)\b/,
   routineBuilder: /\b((construire|creer|composer|elaborer|monter|etablir|faire|me faire|m aider a (construire|creer|faire)) (ensemble )?(avec moi )?(ma|une|mon|la) ((nouvelle|vraie|bonne|petite) )?routine|routine builder|mode routine|(refaire|recommencer|reprendre|relancer|reessayer|reconstruire) (a zero )?(ma |la |une |mon |le )?(routine|questionnaire|diagnostic)|nouvelle routine)\b/,
   dontKnow: /\b(je (ne )?sais pas|aucune idee|j en sais rien|pas sure?|je ne suis pas sure?)\b/
 };

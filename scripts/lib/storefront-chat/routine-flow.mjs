@@ -46,7 +46,8 @@ const TEXT = {
     no: 'Non merci',
     purchase: (name) => `Je vois que vous avez déjà acheté ${name}. Souhaitez-vous construire votre routine autour, vous en reste-t-il peu, ou préférez-vous vous concentrer sur votre préoccupation ?`,
     runningLow: (name) => `Vous pouvez retrouver ${name} ici, ou l'ajouter directement à votre panier.`,
-    treatAfterRoutine: 'Et pour un moment de douceur, ce petit plaisir pourrait vous plaire :',
+    // With their concern (owner, 2026-10-19): « parfait pour atténuer vos imperfections ».
+    treatAfterRoutine: (concern) => concern ? `Et pour un moment de douceur, parfait pour atténuer ${frPossessive(concern)} ${concern}, ce petit plaisir pourrait vous plaire :` : 'Et pour un moment de douceur, ce petit plaisir pourrait vous plaire :',
     treatAfterNo: "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :",
     cartOne: (name) => `Souhaitez-vous que j'ajoute ${name} à votre panier ?`,
     cartRoutine: 'Souhaitez-vous que j\'ajoute cette routine à votre panier ?',
@@ -67,7 +68,7 @@ const TEXT = {
     no: 'No thanks',
     purchase: (name) => `I can see you've bought ${name} before. Would you like to build your routine around it, are you running low on it, or would you rather focus on your concern?`,
     runningLow: (name) => `You'll find ${name} here, or you can add it straight to your cart.`,
-    treatAfterRoutine: 'And for a little moment of pampering, you might like this treat:',
+    treatAfterRoutine: (concern) => concern ? `And for a little moment of pampering, perfect for easing your ${concern}, you might like this treat:` : 'And for a little moment of pampering, you might like this treat:',
     treatAfterNo: 'Of course. If you fancy a little treat, you might like this one:',
     cartOne: (name) => `Would you like me to add ${name} to your cart?`,
     cartRoutine: 'Would you like me to add this routine to your cart?',
@@ -84,6 +85,10 @@ const TEXT = {
   },
 };
 const text = (lang) => TEXT[String(lang).slice(0, 2)] ?? TEXT.fr;
+// « vos rides », « votre déshydratation »: the concern's first word in the plural or not.
+const frPossessive = (concern) => (/[sx]$/i.test(concern.split(/\s+/)[0]) ? 'vos' : 'votre');
+/** A concern's name inside a sentence: « Teint terne » → « teint terne ». */
+const inSentence = (label) => (typeof label === 'string' && label.trim() ? label.trim().charAt(0).toLocaleLowerCase() + label.trim().slice(1) : null);
 
 // A typed answer to the offer, French and English. Only read while an offer is pending.
 const YES = /^\s*(oui|ouais|volontiers|avec plaisir|d'accord|ok(ay)?|bien s[uû]r|carr[ée]ment|go|yes|yeah|yep|sure|please|of course|let'?s (do it|go))\b(?!.*\b(pas|not|non|no)\b)/iu;
@@ -200,10 +205,11 @@ export function anchorFor({ pageProductId = null, resolvedIds = [], advice = nul
  *   cartable: { product_id: string, variant_id: string | null, name: string }[],   what « add to cart » would add (one product, or a routine)
  *   cart: 'yes' | 'no' | null                                    this turn's answer to the cart question
  *   discount: boolean                                            a finished routine with the shop's routine discount
+ *   concern: string | null                                       their main concern's name, in their language (the treat's sentence)
  * }} input
  * @returns {{ flow: object, followUp: { kind: string, text: string, choices: object[], productIds: string[] } | null }}
  */
-export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices, cartable = [], cart = null, discount = false }) {
+export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices, cartable = [], cart = null, discount = false, concern = null }) {
   const next = cleanFlow(flow);
   const t = text(lang);
   const say = (kind, words, { choices = [], productIds = [] } = {}) => ({ flow: next, followUp: { kind, text: words, choices, productIds } });
@@ -229,11 +235,11 @@ export function followUpFor({ flow, lang, builder, answer, advice, showsProducts
   if (builder && advice?.status === 'recommended' && cartable.length && !cart) return askCart(cartable);
   if (cart && treat && !next.treat_offered) {
     next.treat_offered = true;
-    return say('treat', t.treatAfterRoutine, { productIds: [treat.product_id] });
+    return say('treat', t.treatAfterRoutine(inSentence(concern)), { productIds: [treat.product_id] });
   }
   if (builder && advice?.status === 'recommended' && treat && !next.treat_offered) {
     next.treat_offered = true;
-    return say('treat', t.treatAfterRoutine, { productIds: [treat.product_id] });
+    return say('treat', t.treatAfterRoutine(inSentence(concern)), { productIds: [treat.product_id] });
   }
   if (!builder && next.offer === null && showsProducts) {
     next.offer = 'offered';

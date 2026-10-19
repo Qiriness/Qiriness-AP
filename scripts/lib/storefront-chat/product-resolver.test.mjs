@@ -158,7 +158,7 @@ test('the memory is folded from the message log', () => {
   const refs = refsFromHistory(rows);
   assert.deepEqual(refs.lastSet, ['p6', 'p7']);
   assert.deepEqual(refs.lastRecommended, ['p6', 'p7']);
-  assert.deepEqual(refs.pending, { mention: 'le soin x', ids: ['p2', 'p3'] });
+  assert.deepEqual(refs.pending, { mention: 'le soin x', ids: ['p2', 'p3'], settled: [], labels: {} });
   assert.equal(detectReference('les deux', { refs }).ids.length, 2);
 });
 
@@ -215,4 +215,23 @@ test('« …Brume Polaire riche et la Light »: the short second mention borrows
   assert.deepEqual(ids(resolve('compare the Brume Polaire rich cream and the Light')), ['p2', 'p3']);
   // Alone, « la light » stays plain words.
   assert.deepEqual(ids(resolve('la light')), []);
+});
+
+test('the answer to « laquelle ? » keeps the product found beside it; labels tell the options apart (owner, 2026-10-19)', () => {
+  const first = resolve('comparer la crème Brume Polaire et le sérum Rosée d’Aube');
+  assert.equal(first.status, 'partial');
+  assert.deepEqual(ids(first), ['p6']);
+  const labels = first.clarification.options.map((o) => o.label);
+  // No label another option also carries: « Crème Voile Brume Polaire » is the Light one's words too.
+  for (const [i, label] of labels.entries()) assert.ok(!labels.some((other, j) => j !== i && other.includes(label)), label);
+  const refs = refsFromHistory([{ role: 'assistant', context: { resolution: { ids: ['p6'], pending: first.pending } } }]);
+  assert.deepEqual(refs.pending.settled, ['p6']);
+  // A chip, or its label typed back: both products, the comparison can run.
+  const p2 = first.clarification.options.find((o) => o.id === 'p2');
+  assert.deepEqual(ids(resolve('x', { refs, choice: 'p2' })), ['p2', 'p6']);
+  assert.deepEqual(ids(resolve(p2.label.toUpperCase(), { refs })), ['p2', 'p6']);
+  // The model asking again in its own words, after the customer chose: settled, not asked again.
+  const again = resolve('crème Brume Polaire, sérum Rosée d’Aube', { refs, known: ['p2', 'p6'] });
+  assert.equal(again.status, 'resolved');
+  assert.deepEqual(ids(again), ['p2', 'p6']);
 });

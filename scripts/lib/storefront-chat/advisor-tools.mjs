@@ -103,7 +103,7 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   // THE BUILDER ASKED FOR AGAIN (owner, 2026-10-18: « the agent just returns the routine rather than
   // restarting the questionnaire »): after a routine, or once its questions were asked, a new request
   // starts from the first question; only what this message says counts.
-  const restarted = builderAsked && before.mode !== 'routine_builder' && before.asked.some((f) => BUILDER_FIELDS.includes(f));
+  let restarted = builderAsked && before.mode !== 'routine_builder' && before.asked.some((f) => BUILDER_FIELDS.includes(f));
 
   const updates = [];
   const picked = typeof choice === 'string' ? choice.match(PROFILE_CHOICE) : null;
@@ -181,6 +181,14 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
     enterBuilder() {
       if (mode === 'routine_builder') return false;
       mode = 'routine_builder';
+      // Opened by the model after a routine, or once its questions were asked: from the first
+      // question, as the quick action does (owner, 2026-10-19: "what spa treatments would you
+      // recommend" showed the earlier routine again, every answer still in the profile).
+      if (before.asked.some((f) => BUILDER_FIELDS.includes(f))) {
+        restarted = true;
+        profile = mergeProfile(withoutBuilderAnswers(before.profile), updates, { allowed: advisor.allowed, turn }).profile;
+        asked = before.asked.filter((f) => !BUILDER_FIELDS.includes(f));
+      }
       profile = withoutSingleProduct(profile);
       relevant = true;
       compute();
@@ -293,7 +301,9 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
       ...(a.budget ? { budget: { max: money(a.budget.max), total: money(a.budget.total), left_out: a.budget.dropped.length } } : {}),
       // The product they came for, when it could not go in: say why, briefly.
       ...((a.pinned ?? []).some((p) => p.status !== 'placed') ? { customer_interest_not_used: a.pinned.filter((p) => p.status !== 'placed').map((p) => ({ name: byId.get(p.product_id)?.name ?? null, why: p.status })) } : {}),
-      ...(a.defaulted ? { defaulted_after_question: true } : {})
+      ...(a.defaulted ? { defaulted_after_question: true } : {}),
+      // The type they asked for has nothing in stock for their concern: what is out of stock, and whether another type is offered.
+      ...(a.asked_type ? { asked_type: { type: a.asked_type.type, out_of_stock: a.asked_type.out_of_stock.map((id) => byId.get(id)?.name).filter(Boolean), other_type_offered: a.asked_type.replaced } } : {})
     };
   }
 }

@@ -18,7 +18,8 @@
  * @property {string[]} lastSet          the most recent set of products in play, in order
  * @property {string[]} lastRecommended  the most recent cards shown
  * @property {string | null} lastSingle  the product in play when the last set was one product
- * @property {{ mention: string, ids: string[] } | null} pending  the clarification just asked, if any
+ * @property {{ mention: string, ids: string[], settled: string[], labels: object } | null} pending  the clarification just asked, if any
+ *   (settled: the products found beside it; labels: its options as offered, id → label)
  */
 
 /** Grammar that must never be typo-corrected into a product word (« trois » is not « trio »). */
@@ -218,7 +219,10 @@ export function refsFromHistory(rows) {
     const resolution = context?.resolution;
     if (resolution && !sawResolution) {
       // Only the clarification asked in the LAST exchange is still pending.
-      if (resolution.pending?.ids?.length) pending = { mention: String(resolution.pending.mention ?? ''), ids: ids(resolution.pending.ids) };
+      if (resolution.pending?.ids?.length) {
+        const labels = resolution.pending.labels && typeof resolution.pending.labels === 'object' ? Object.fromEntries(Object.entries(resolution.pending.labels).filter(([id, l]) => ids([id]).length && typeof l === 'string').map(([id, l]) => [id, l.slice(0, 200)])) : {};
+        pending = { mention: String(resolution.pending.mention ?? ''), ids: ids(resolution.pending.ids), settled: ids(resolution.pending.settled), labels };
+      }
       sawResolution = true;
     }
     const resolvedIds = ids(resolution?.ids);

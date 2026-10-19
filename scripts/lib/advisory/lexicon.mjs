@@ -100,14 +100,21 @@ const L = {
   age: LANGUAGES.flatMap((l) => l.age),
   ageWords: LANGUAGES.flatMap((l) => l.ageWords),
   routineBuilder: union((l) => l.routineBuilder),
+  routineAsk: union((l) => l.routineAsk),
+  routineWord: union((l) => l.routineWord),
   dontKnow: union((l) => l.dontKnow)
 };
 
 export const ROUTINE_BUILDER = L.routineBuilder;
 
+/** The message talks about a routine (FR/EN): « routine », « rituel », "regimen"… */
+export function mentionsRoutine(message) {
+  return L.routineWord.test(` ${norm(message)} `);
+}
+
 /** Every pattern, for the residue: what is left once they have all been removed. */
 const ALL_PATTERNS = [
-  L.eyes, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.concernIs, L.asksFor, L.additive, L.routineBuilder, L.dontKnow,
+  L.eyes, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.concernIs, L.asksFor, L.additive, L.routineBuilder, L.routineAsk, L.dontKnow,
   ...L.concerns.map(([re]) => re), ...L.skinTypes.map(([, re]) => re), ...L.sensitivity.map(([, re]) => re),
   ...L.routineSteps.map(([, re]) => re), ...L.desired.map(([, re]) => re), ...L.scope.map(([, re]) => re),
   ...L.routineTime.map(([, re]) => re), ...L.requests.map(([, re]) => re), L.budgetSmall, L.moreOptions, ...L.budgetAmount,
@@ -264,5 +271,5 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
   const st = updates.find((u) => u.field === 'skin_type');
   if (body && st && ['dry', 'very_dry'].includes(st.value) && !found.length && !hasPrimary) add('primary_concern', 'dryness', 'medium');
 
-  return { updates, routineBuilder: L.routineBuilder.test(` ${norm(message)} `), moreOptions: L.moreOptions.test(` ${norm(message)} `), residue: residueOf(message) };
+  return { updates, routineBuilder: L.routineBuilder.test(` ${norm(message)} `) || L.routineAsk.test(` ${norm(message)} `), moreOptions: L.moreOptions.test(` ${norm(message)} `), residue: residueOf(message) };
 }

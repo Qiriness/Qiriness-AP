@@ -38,7 +38,8 @@ import { knowledgeToolDefinitions, KNOWLEDGE_TOOL_NAMES, runKnowledgeTool, getPo
 import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
 import { promotionsForProduct, routineReward } from './shopping-evaluator.mjs';
-import { buildRoutineView } from './routine-view.mjs';
+import { buildRoutineView, concernName } from './routine-view.mjs';
+import { mentionsRoutine } from '../advisory/lexicon.mjs';
 import { displayLanguage, languageContext, validReplyLanguage } from './conversation-language.mjs';
 import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
 import { ORDER_TOOL, orderToolDefinition, runOrderTool } from './order-tools.mjs';
@@ -232,6 +233,8 @@ export function createLlmAgent({
         ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || purchaseAnswer || flowChoice ? null : choice })
         : null;
       const resolvedIds = new Set(resolution?.products.map((p) => p.id) ?? []);
+      // The answer to the « which one? » just asked: the model asking it again in its own words is settled by it.
+      const answeredIds = refs?.pending && resolution?.status === 'resolved' ? [...resolvedIds] : [];
       const productDataIds = new Set(resolution?.products.slice(0, 3).map((p) => p.id) ?? []);
       for (const p of resolution?.products ?? []) offered.add(p.handle);
       for (const c of resolution?.candidates ?? []) for (const o of c.options) offered.add(o.handle);
@@ -380,7 +383,8 @@ export function createLlmAgent({
           purchaseChoices: (item) => purchaseChoices(item, lang),
           cartable,
           cart: flowStart.cart,
-          discount: Boolean(routineDiscount) && isBuiltRoutine(finalAdvice, advisorTurn.mode)
+          discount: Boolean(routineDiscount) && isBuiltRoutine(finalAdvice, advisorTurn.mode),
+          concern: concernName(advisorTurn.profile, advisor?.routineLabels ?? {}, finalAdvice?.playbook?.key ?? null, lang)
         });
         flow = decided.flow;
         followUp = decided.followUp;
@@ -402,6 +406,12 @@ export function createLlmAgent({
       const openSkill = (name) => {
         const skill = skillNamed(name);
         if (!skill || !advisorTurn) return { status: 'unavailable' };
+        // Only when the customer talks about a routine (owner, 2026-10-19: "what spa treatments would
+        // you recommend" opened it, and the earlier routine came back). Otherwise the model answers.
+        if (skill.name === 'routine_builder' && advisorTurn.mode !== 'routine_builder' && !mentionsRoutine(message)) {
+          trace.skill_refused = 'routine_builder';
+          return { status: 'not_opened', why: 'the customer did not ask for a routine: answer their question; the app offers the routine itself' };
+        }
         if (skill.name === 'routine_builder' && advisorTurn.enterBuilder()) {
           skillOpenedByModel = true;
           if (!flow.anchor) flow = { ...flow, anchor: anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds], advice: advisorTurn.advice }) };
@@ -734,7 +744,7 @@ export function createLlmAgent({
                   currency,
                   locale,
                   query: message,
-                  resolution: { index: resolutionIndex, refs, pageProductId: pageProduct?.id ?? null }
+                  resolution: { index: resolutionIndex, refs, pageProductId: pageProduct?.id ?? null, known: () => answeredIds }
                 });
             const { result: output, handles } = ran;
             if (call.name === ORDER_TOOL) {
@@ -801,7 +811,9 @@ export function createLlmAgent({
         // nor is one where the model opened the routine builder itself.
         // Nor one that already showed a routine (several steps): the offer would repeat it.
         const routineShown = (advisorTurn?.advice?.steps?.length ?? 0) > 1;
-        if (followUp?.kind === 'offer' && (skillOpenedByModel || routineShown || (!products.length && !pageProduct && !resolvedIds.size))) {
+        // Nor one asking « which one? » after a resolve_products of its own (owner, 2026-10-19: the
+        // offer came under « parlez-vous du Sérum Temps Sublime ou de l'Élixir ? »).
+        if (followUp?.kind === 'offer' && (skillOpenedByModel || routineShown || Boolean(resolution?.clarification) || (!products.length && !pageProduct && !resolvedIds.size))) {
           followUp = null;
           if (!skillOpenedByModel) flow = flowBefore;
         }

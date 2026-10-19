@@ -198,15 +198,22 @@ export function buildResolutionIndex(catalogue, { aliases = new Map(), ranges: p
 // on the Light cream's page resolved to another cream).
 const DEMONSTRATIVE = /\b(?:cette|cet|ce) (?:creme|serum|soin|produit|masque|lotion|baume|gel|lait|huile|contour|fluide|nettoyant|elixir|coffret)\b|\bthis (?:cream|serum|product|one|mask|lotion|balm|gel|cleanser|fluid|oil|kit|set)\b/;
 
-export function resolveProducts(message, { index, pageProductId = null, refs = null, choice = null }) {
+export function resolveProducts(message, { index, pageProductId = null, refs = null, choice = null, known = [] }) {
   const out = { products: [], candidates: [], unresolved: [], range: null, clarificationFor: null };
   const text = String(message ?? '');
   const demonstrative = Boolean(pageProductId && index.byId.has(pageProductId) && DEMONSTRATIVE.test(` ${normalise(text)} `));
 
-  // 0. A chip the customer clicked: an id from the pending options, or a care type.
-  if (choice && refs?.pending) {
-    const chosen = resolveChoice(choice, refs.pending, index);
-    if (chosen) return finish(chosen, index);
+  // 0. A chip the customer clicked: an id from the pending options, or a care type. Or one option's
+  // label typed back (« Sérum Temps Sublime »). The products settled beside the question stay
+  // (owner, 2026-10-19: « to compare the agent must get both products »: the answer to « lequel des
+  // deux ? » dropped the Exception serum already found, and the comparison asked again).
+  if (refs?.pending) {
+    const typed = choice ? null : typedOption(text, refs.pending);
+    const chosen = choice || typed ? resolveChoice(choice ?? typed, refs.pending, index) : null;
+    if (chosen) {
+      for (const id of refs.pending.settled ?? []) if (index.byId.has(id) && !chosen.products.some((p) => p.id === id)) chosen.products.push(resolved(index, id, 'strong', 'settled before the question', index.byId.get(id).product.name));
+      return finish(chosen, index);
+    }
   }
 
   // 1. SKUs, exact.
@@ -277,7 +284,7 @@ export function resolveProducts(message, { index, pageProductId = null, refs = n
     }
   }
 
-  return finish(out, index);
+  return finish(out, index, known);
 }
 
 /** The customer's words in the catalogue's language: « the Hyal-Aqua mask » → « the hyal aqua masque ». */
@@ -446,6 +453,14 @@ function rank(entries, chunk, index) {
   );
 }
 
+/** The option whose label the customer typed back, word for word (accents and case aside). */
+function typedOption(text, pending) {
+  const said = normalise(text).trim();
+  if (!said) return null;
+  const hits = Object.entries(pending.labels ?? {}).filter(([id, label]) => pending.ids.includes(id) && normalise(String(label)).trim() === said);
+  return hits.length === 1 ? hits[0][0] : null;
+}
+
 function resolveChoice(choice, pending, index) {
   const out = { products: [], candidates: [], unresolved: [], range: null };
   if (pending.ids.includes(choice) && index.byId.has(choice)) {
@@ -472,11 +487,15 @@ function reasonFor(what, chunk) {
 }
 
 /** The contract: status, products, candidates (top 3 each), one clarification, unresolved mentions, range. */
-function finish(out, index) {
+function finish(out, index, known = []) {
   const products = [...out.products];
   const ambiguous = [];
   for (const c of out.candidates) {
-    if (c.entries.length === 1) products.push(resolved(index, c.entries[0].product.id, 'strong', 'only candidate', c.mention));
+    // A product this turn already settled (the customer's answer) is the one meant: the model's
+    // own « sérum Temps Sublime » after the customer chose it (owner, 2026-10-19).
+    const settled = c.entries.filter((e) => known.includes(e.product.id));
+    if (settled.length === 1) products.push(resolved(index, settled[0].product.id, 'strong', 'settled earlier in this turn', c.mention));
+    else if (c.entries.length === 1) products.push(resolved(index, c.entries[0].product.id, 'strong', 'only candidate', c.mention));
     else if (c.entries.length > 1) ambiguous.push(c);
   }
   const unique = dedupe(products);
@@ -501,15 +520,22 @@ function finish(out, index) {
   else status = 'partial';
 
   const first = candidates[0] ?? null;
+  const clarification = first ? clarify(first, index) : null;
   return {
     status,
     products: unique,
     candidates: candidates.map(({ mention, options }) => ({ mention, options })),
-    clarification: first ? clarify(first, index) : null,
+    clarification,
     unresolved_mentions: unresolved,
     range: out.range,
     // For the conversation memory: what a follow-up « la crème » or a chip narrows.
-    pending: first ? { mention: first.mention, ids: first.all.map((e) => e.product.id) } : null
+    // `settled`: the products found beside the question, kept with its answer; `labels`: the options as offered, typed back.
+    pending: first ? {
+      mention: first.mention,
+      ids: first.all.map((e) => e.product.id),
+      settled: unique.map((p) => p.id),
+      labels: clarification?.kind === 'choose_product' ? Object.fromEntries(clarification.options.map((o) => [o.id, o.label])) : {}
+    } : null
   };
 }
 
@@ -531,15 +557,19 @@ function clarify(candidate, index) {
   return {
     mention: candidate.mention,
     kind: 'choose_product',
-    options: candidate.options.map((o) => ({ label: shortLabel(index.byId.get(o.id), index, candidate.identity), id: o.id }))
+    options: candidate.options.map((o) => ({ label: shortLabel(index.byId.get(o.id), index, candidate.identity, candidate.options.map((x) => index.byId.get(x.id))), id: o.id }))
   };
 }
 
-/** The commercial name when it names this product alone, else the full title. */
-function shortLabel(entry, index, required = []) {
+/**
+ * The commercial name when it names this product alone, else the full title. Never a label another
+ * option's title also contains: « Sérum Temps Sublime » for the booster, typed back, was the
+ * Élixir Temps Sublime (a serum too) as much, and the question came again (owner, 2026-10-19).
+ */
+function shortLabel(entry, index, required = [], siblings = []) {
   const keeps = (label) => {
     const words = new Set(foldedTokens(label));
-    return required.every((t) => words.has(t));
+    return required.every((t) => words.has(t)) && !siblings.some((o) => o && o !== entry && [...words].every((t) => o.tokens.has(t)));
   };
   // 1. The commercial name, when it names this product alone and keeps the customer's words.
   const key = ` ${[...entry.commercialTokens].join(' ')} `;

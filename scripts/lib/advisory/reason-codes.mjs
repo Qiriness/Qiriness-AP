@@ -46,7 +46,9 @@ export const FIT = {
   /** The step's own product (Routines tab « Produit »): always this one (owner, 2026-10-17: the eye routine). */
   STEP_PRODUCT: 'step_product',
   /** No product met the step's criteria: its « Produit » instead (the standard eye cream). */
-  STEP_FALLBACK: 'step_fallback'
+  STEP_FALLBACK: 'step_fallback',
+  /** The type they asked for has nothing in stock for their concern: another type that treats it (owner, 2026-10-19). */
+  ASKED_TYPE_UNAVAILABLE: 'asked_type_unavailable'
 };
 
 /** Why a step of the playbook was not filled. */

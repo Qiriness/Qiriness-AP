@@ -239,3 +239,25 @@ test('a make-up remover also cleanses: it fills the cleanser step; a cleanser ne
   const again = cleanser(createAdvisor(CONFIG, CATALOGUE, { knowledge: remover, routines: ROUTINES }).advise({ profile, mode: 'routine_builder', asked: ASKED }));
   assert.equal(again?.handle, before.handle);
 });
+
+test('one product for a concern: the type asked for breaks the tie, and treats it; out of stock, another type does (owner, 2026-10-19)', () => {
+  const talk = (profile, a = advisor) => a.advise({ profile, mode: 'conversation', asked: [] });
+  const hi = (value) => ({ value, source: 'natural_language', confidence: 'high', turn: 2 });
+  // « je veux une crème pour les taches » after a routine for wrinkles: « rides » stays a second concern.
+  const cream = talk({ primary_concern: hi('dark_spots'), secondary_concerns: nl(['wrinkles']), skin_type: q('dry'), desired_care_type: nl('moisturiser') });
+  assert.equal(cream.steps[0].handle, 't-creme-lumiere');
+  // « un produit pour les taches »: a product that treats them, not one of the range's other concerns.
+  const any = talk({ primary_concern: nl('dark_spots') });
+  assert.ok([K(any.steps[0]).primary_concern, ...K(any.steps[0]).other_concerns].includes('dark_spots'));
+  // « un sérum pour les taches », the spot serum out of stock: the reply says so, with another type for the spots.
+  const soldOut = { ...CATALOGUE, products: CATALOGUE.products.map((p) => (p.handle === 't-serum-lumiere' ? { ...p, inStock: false } : p)) };
+  const without = talk({ primary_concern: nl('dark_spots'), desired_care_type: nl('serum') }, createAdvisor(CONFIG, soldOut, { knowledge: KNOWLEDGE, routines: ROUTINES }));
+  assert.notEqual(K(without.steps[0]).functional_type, 'serum');
+  assert.ok([K(without.steps[0]).primary_concern, ...K(without.steps[0]).other_concerns].includes('dark_spots'));
+  assert.ok(without.steps[0].reason_codes.includes('asked_type_unavailable'));
+  assert.deepEqual(without.asked_type, { type: 'serum', out_of_stock: [id('t-serum-lumiere')], replaced: true });
+  // In stock: the serum, and nothing to say.
+  const serum = talk({ primary_concern: nl('dark_spots'), desired_care_type: nl('serum') });
+  assert.equal(serum.steps[0].handle, 't-serum-lumiere');
+  assert.equal(serum.asked_type, undefined);
+});

@@ -184,8 +184,11 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     }
     // Their other eye concern answered: they are in the eye routine (« Déshydratation » there is no vote for Hydration).
     if (eyeFoundation && c.eye && eyes.length) return { key: eyeFoundation.key };
+    // One product of a type asked for: its concern breaks a tie (owner, 2026-10-19: « je veux une crème
+    // pour les taches » after a routine for wrinkles kept « rides » a second concern, and the brand's
+    // order chose an anti-wrinkle cream). A routine keeps the brand's order (§ 3.1).
     const votes = new Map();
-    for (const concern of face) for (const f of routines.foundations) if (f.primary_concerns.includes(concern)) votes.set(f.key, (votes.get(f.key) ?? 0) + 1);
+    for (const concern of face) for (const f of routines.foundations) if (f.primary_concerns.includes(concern)) votes.set(f.key, (votes.get(f.key) ?? 0) + (c.desired && concern === c.primary ? 1.5 : 1));
     // A skin type picks the foundation that names it (dry → Hydration, oily → Oily skin)
     // only when nothing else is the main need; it stands for that foundation's concern.
     const bySkin = !votes.size && c.skin ? routines.foundations.find((f) => f.skin_types?.[c.skin]) : null;
@@ -357,7 +360,11 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         keptForConcern = true;
       }
       const pin = wanted.find((x) => fillsStep(x.k, step.type) && !used.has(x.id));
-      const pool = targetedPool(step, f, c, used, scope);
+      const reachable = targetedPool(step, f, c, used, scope);
+      // One product for a need: the products that treat their concern first, when there are any
+      // (« un produit pour les taches » ranked an anti-fatigue serum first, on its range's concerns).
+      const treating = scope === 'targeted' && c.primary && !eyesAlone ? reachable.filter((x) => [x.k.primary_concern, ...x.k.other_concerns].includes(c.primary)) : [];
+      const pool = treating.length ? Object.assign(treating, { skinRelaxed: reachable.skinRelaxed }) : reachable;
       // A man: his range first among the suitable products (owner: « ranked first, others still
       // possible »); a sensitive-skin cleanser outscored the men's one in the customer batch.
       const menFirst = (x) => (c.men && x.k.men ? 1 : 0);
@@ -430,7 +437,32 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         .slice(0, 2);
       if (others.length) steps[0] = { ...steps[0], alternatives: others.map((r) => ({ product_id: r.x.id, handle: r.x.handle })) };
     }
-    return { f, scope, steps, skipped, pinned: placed, c, budget };
+    // THE TYPE ASKED FOR HAS NOTHING FOR THE CONCERN (owner, 2026-10-19: « est-ce que vous avez un
+    // sérum pour les taches » got an anti-fatigue serum, the spot serum being out of stock, then
+    // « je ne trouve pas » three times). The best product of another type that treats it takes its
+    // place, and the out-of-stock ones of that type are named, so the reply says so.
+    let askedType = null;
+    const treats = (x) => [x.k.primary_concern, ...x.k.other_concerns].includes(c.primary);
+    if (scope === 'targeted' && mode !== 'routine_builder' && c.primary && !eyesAlone && !wanted.length && steps.length <= 1 && !(steps[0] && treats(byId.get(steps[0].product_id)))) {
+      const outOfStock = products.filter((x) => !x.product.inStock && fillsStep(x.k, c.desired) && x.k.status !== 'do_not_advise' && !isBundle(x.k) && x.k.primary_concern === c.primary);
+      const other = f.steps
+        .filter((s) => s.frequency === 'daily' && s.type !== (c.desired ?? steps[0]?.type) && !c.owned.includes(s.type))
+        .flatMap((s) => targetedPool({ ...s, targets: 'primary' }, f, c, new Set(exclude), scope).filter(treats).map((x) => ({ x, step: s, ...score(x, s, f, c, ranges) })))
+        .sort((a, b) => b.s - a.s || (a.x.product.priceFrom ?? 0) - (b.x.product.priceFrom ?? 0) || a.x.name.localeCompare(b.x.name));
+      if (other.length) {
+        const [top, ...rest] = other;
+        steps.splice(0, steps.length, {
+          slot: `${top.step.type}_${top.step.order}`, kind: KIND[top.step.type] ?? top.step.type, type: top.step.type, optional: false,
+          product_id: top.x.id, handle: top.x.handle,
+          alternatives: rest.filter((r) => r.x.id !== top.x.id).slice(0, 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })),
+          reason_codes: [...top.reasons, ...(c.desired ? [FIT.ASKED_TYPE_UNAVAILABLE] : [])],
+          merchandised: null,
+          scores: { suitability: top.s, routine_fit: 0, total: top.s },
+        });
+      }
+      if (c.desired) askedType = { type: c.desired, out_of_stock: outOfStock.map((x) => x.id), replaced: other.length > 0 };
+    }
+    return { f, scope, steps, skipped, pinned: placed, c, budget, askedType };
   }
 
   /** The routine's range: the main concern's, or by their age for anti-age (Rules tab). */
@@ -892,6 +924,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         considered: result.steps.length,
         total_price: totalOf(result.steps),
         ...(result.budget ? { budget: result.budget } : {}),
+        ...(result.askedType ? { asked_type: result.askedType } : {}),
         ...(result.pinned.length ? { pinned: result.pinned } : {}),
         // Their age range, the brand's (a chip, or their age in years): kept with the routine.
         ...(result.c?.age ? { age_range: result.c.age } : {}),

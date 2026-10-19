@@ -23,6 +23,12 @@ const STAGES = new Set(['prepare', 'activate', 'optimise', 'regenerate']);
 
 const clip = (text) => (typeof text === 'string' && text.trim() ? (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT - 1).trimEnd()}…` : text.trim()) : null);
 
+/** Their main concern's name in their language (« Rides »), else their routine's (the treat's sentence). */
+export function concernName(profile, labels = {}, mainKey = null, lang = 'fr') {
+  const name = (row) => (row ? row[lang] ?? row.fr ?? null : null);
+  return name(labels.concerns?.[valueOf(profile, 'primary_concern')]) ?? name(labels.main?.[mainKey]) ?? null;
+}
+
 /** « Peau sèche · Rides »: what of theirs this product was chosen for (its skin and concern codes), in their language. */
 export function whyTags(step, profile, labels = {}, mainKey = null, lang = 'fr') {
   const name = (row) => (row ? row[lang] ?? row.fr ?? null : null);
