@@ -20,6 +20,12 @@
     "redness": ["blemishes"], "irritation": ["blemishes"]
   },
 
+  "preselected": {
+    "_about": "The routine cards' steps ticked at first, by the Routines tab's step number per moment (owner, 2026-10-19: « only the cream and the serum will be selected at first (but all four will show) »; the evening, the eye serum and the cream). The others show unticked and greyed, theirs to tick. Per main concern (its letter), else `default`; no entry, every step ticked.",
+    "default": { "day": [2, 4], "night": [3, 4] },
+    "Y": { "day": [3, 4], "night": [3, 4] }
+  },
+
   "premium_concerns": ["deep_wrinkles", "significant_loss_of_density", "advanced_loss_of_firmness", "demanding_mature_skin", "regeneration"],
 
   "foundation_priority": ["F", "E", "B", "A", "D", "Y"],

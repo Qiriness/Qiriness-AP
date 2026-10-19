@@ -350,7 +350,8 @@ export function createLlmAgent({
       // A routine's products in several sizes: the one their skin type calls for (variant_choice).
       const variantFor = (p) => cartVariant(p, variantPreference(advisor?.variantChoice, advisorTurn?.profile));
       const cartableFor = (a, namedCounts = true) => {
-        const recommended = a?.status === 'recommended' ? a.steps : [];
+        // A step the cards show unticked (`preselected: false`) is not added unasked.
+        const recommended = a?.status === 'recommended' ? a.steps.filter((s) => s.preselected !== false) : [];
         const ids = recommended.some((s) => s.top_choices) ? [] : recommended.length ? recommended.map((s) => s.product_id) : namedCounts && resolvedIds.size === 1 ? [...resolvedIds] : [];
         return ids.map(byId).filter((p) => p?.inStock).map((p) => ({ product_id: p.id, variant_id: recommended.length ? variantFor(p) : cartVariant(p), name: p.name }));
       };
@@ -458,7 +459,7 @@ export function createLlmAgent({
       // A routine of several products: what its « Ajouter la routine au panier » adds, and what needs a size.
       const routineCartFor = (a) => {
         if (a?.status !== 'recommended' || a.steps.length < 2 || a.steps.some((s) => s.top_choices)) return null;
-        const items = a.steps.map((s) => byId(s.product_id)).filter((p) => p?.inStock);
+        const items = a.steps.filter((s) => s.preselected !== false).map((s) => byId(s.product_id)).filter((p) => p?.inStock);
         const add = items.filter((p) => variantFor(p)).map((p) => ({ product_id: p.id, variant_id: variantFor(p) }));
         return add.length ? { add, needs_size: items.filter((p) => !variantFor(p)).map((p) => p.name) } : null;
       };

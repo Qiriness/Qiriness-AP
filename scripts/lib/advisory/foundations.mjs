@@ -759,6 +759,17 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     return out;
   }
 
+  /**
+   * The steps the routine cards tick at first (settings `preselected`, by the Routines tab's step
+   * number; owner, 2026-10-19: the serum and the cream in the morning, the eye serum and the cream in
+   * the evening). The others are marked `preselected: false`: shown, unticked, never added unasked.
+   */
+  function withPreselection(steps, key) {
+    const rule = routines.preselected?.[key] ?? routines.preselected?.default;
+    if (!rule || !Array.isArray(steps)) return steps;
+    return steps.map((s) => (Array.isArray(rule[s.part]) && !rule[s.part].includes(Number(String(s.slot).split('_').pop())) ? { ...s, preselected: false } : s));
+  }
+
   /** The routine's two moments: the chosen one as built, the other from a « jour et nuit » build of the same answers. */
   function bothMoments(result, profile, mode, history) {
     if (!routineSteps || !['day', 'night', 'both'].includes(result.scope)) return null;
@@ -774,6 +785,15 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       // Its steps they already have from the chosen moment are marked, the rest would complete the routine.
       [other]: all[other].map(({ also_in: _a, ...s }) => (mine.has(s.product_id) ? { ...s, also_in: result.scope } : s)),
     };
+  }
+
+  const preselectedMoments = (m, key) => (m ? { ...m, day: withPreselection(m.day, key), night: withPreselection(m.night, key) } : undefined);
+  /** The routine's steps as the cards tick them: a product ticked in a chosen moment (the evening's eye serum, « jour et nuit ») is ticked. */
+  function preselectedSteps(steps, key, moments) {
+    const marked = withPreselection(steps, key);
+    const parts = !moments ? [] : moments.chosen === 'both' ? ['day', 'night'] : [moments.chosen];
+    const ticked = new Set(parts.flatMap((part) => moments[part] ?? []).filter((s) => s.preselected !== false).map((s) => s.product_id));
+    return marked.map(({ preselected, ...s }) => (preselected === false && !ticked.has(s.product_id) ? { ...s, preselected } : s));
   }
 
   const priceOf = (s) => byId.get(s.product_id)?.product.priceFrom ?? 0;
@@ -1021,6 +1041,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         const treat = budgetTreat(result.c, result.budget.max);
         if (treat) return { ...base(mode), status: STATUS.RECOMMENDED, playbook: { key: 'treat', route: null, scope: 'targeted', preferred_family: null, notes: ['the routine is over the budget: a « petit plaisir » within it'] }, scope: 'targeted', area: 'face', steps: treat, considered: 1, total_price: totalOf(treat), budget: { ...result.budget, total: totalOf(treat) } };
       }
+      const moments = mode === 'routine_builder' && result.steps.length ? preselectedMoments(bothMoments(result, profile, mode, history), result.f.key) : undefined;
       return {
         ...base(mode),
         status: result.steps.length ? STATUS.RECOMMENDED : STATUS.NO_MATCH,
@@ -1031,7 +1052,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         // Nothing for the hands (lips): the face's product for the need, which the reply says (`area_fallback`).
         ...(result.areaFallback ? { area_fallback: result.areaFallback } : {}),
         // Outside the builder, one need: the best fit and its two alternatives are « our top choices ».
-        steps: mode !== 'routine_builder' && result.scope === 'targeted' ? result.steps.map((s) => ({ ...s, top_choices: true })) : result.steps,
+        steps: mode !== 'routine_builder' && result.scope === 'targeted' ? result.steps.map((s) => ({ ...s, top_choices: true })) : mode === 'routine_builder' ? preselectedSteps(result.steps, result.f.key, moments) : result.steps,
         skipped: result.skipped,
         considered: result.steps.length,
         total_price: totalOf(result.steps),
@@ -1041,7 +1062,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         // Their age range, the brand's (a chip, or their age in years): kept with the routine.
         ...(result.c?.age ? { age_range: result.c.age } : {}),
         // The builder's routine: both moments, for the routine cards (never read to the model).
-        ...(mode === 'routine_builder' && result.steps.length ? { moments: bothMoments(result, profile, mode, history) ?? undefined } : {}),
+        ...(moments ? { moments } : {}),
       };
     },
 

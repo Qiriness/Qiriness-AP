@@ -96,6 +96,8 @@ export function assembleRoutines({ routines, rules, products, settings }) {
       _about: 'Assembled by npm run advisor:load from the knowledge spreadsheet and the brand routine settings (assemble-routines.mjs). Do not edit: change the sources.',
       concern_map: concernMap,
       concern_also: concernAlso,
+      // The routine cards' steps ticked at first, by step number (owner, 2026-10-19).
+      preselected: withoutNotes(settings.preselected),
       premium_concerns: settings.premium_concerns ?? [],
       foundation_priority: priority,
       // The eye module's concerns, and an eye routine's (a main concern with `area: eyes` in the settings).

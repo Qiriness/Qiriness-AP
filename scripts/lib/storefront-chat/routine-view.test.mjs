@@ -116,6 +116,13 @@ test('the agent: the finished routine carries its cards and the routine layout, 
   // « No need for the text reply » (owner, 2026-10-18): the cards say it.
   assert.equal(calls.length, 0);
   assert.equal(last.text, 'Voici votre routine personnalisée, matin et soir.');
+  // All four show, the serum and the cream ticked (owner, 2026-10-19); « Oui, ajouter » adds only those.
+  const [day] = last.routineView.moments;
+  assert.equal(day.steps.length, 4);
+  assert.deepEqual(day.steps.map((s) => s.preselected !== false), [false, true, false, true]);
+  const ticked = day.steps.filter((s) => s.preselected !== false).map((s) => s.product_id).sort();
+  assert.deepEqual(last.advisor.flow.cart.pending.map((x) => x.id).sort(), ticked);
+  assert.deepEqual(last.routineCart?.add.map((x) => x.product_id).sort() ?? ticked, ticked);
 });
 
 test('a routine product in several textures: the one their skin type calls for, never a refill', async () => {

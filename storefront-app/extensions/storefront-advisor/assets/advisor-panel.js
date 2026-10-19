@@ -373,15 +373,45 @@
     return (Array.isArray(view && view.moments) ? view.moments : []).filter(function (m) { return m && Array.isArray(m.steps) && m.steps.length; });
   }
 
+  /*
+   * The ticks, per moment and product (« night:<id> »). A new routine starts with only the steps the
+   * brand ticks at first (owner, 2026-10-19: the serum and the cream in the morning, the eye serum and
+   * the cream in the evening); the others show unticked, greyed, theirs to tick (`preselected: false`).
+   */
+  function routineStepKey(m, s) { return m.part + ':' + s.product_id; }
+
   function routineChoiceOf(message) {
+    var fresh = !message.routineChoice;
     var choice = message.routineChoice || (message.routineChoice = { removed: {}, added: {} });
     if (!choice.removed) choice.removed = {};
     if (!choice.added) choice.added = {};
+    if (fresh) {
+      routineMoments(message.routineView).forEach(function (m) {
+        m.steps.forEach(function (s) { if (s.preselected === false && !s.owned) choice.removed[routineStepKey(m, s)] = true; });
+      });
+    }
     return choice;
   }
 
   function routineActive(m, choice) { return m.chosen || Boolean(choice.added[m.part]); }
-  function routineBuyable(s) { return s.in_stock && typeof s.variant_id === 'string' && !s.owned; }
+  /* A choice saved before 2026-10-19 holds product ids alone: removed from every moment. */
+  function routineRemoved(m, s, choice) { return Boolean(choice.removed[routineStepKey(m, s)] || choice.removed[s.product_id]); }
+
+  /*
+   * « Déjà dans votre routine du matin »: only while the morning's card for it is ticked. Unticked
+   * there, the evening's card is an ordinary one (its eye serum, ticked at first).
+   */
+  function routineOwned(view, m, s, choice) {
+    if (!s.owned) return false;
+    var mine = null;
+    routineMoments(view).forEach(function (o) {
+      if (o.part === m.part || !o.chosen) return;
+      o.steps.forEach(function (x) { if (!mine && !x.owned && x.product_id === s.product_id) mine = { m: o, s: x }; });
+    });
+    return !mine || !routineRemoved(mine.m, mine.s, choice);
+  }
+
+  function routineBuyable(view, m, s, choice) { return s.in_stock && typeof s.variant_id === 'string' && !routineOwned(view, m, s, choice); }
 
   /* What the routine includes now: the active moments' products they kept, each once. */
   function routineSelection(view, choice) {
@@ -390,7 +420,7 @@
     routineMoments(view).forEach(function (m) {
       if (!routineActive(m, choice)) return;
       m.steps.forEach(function (s) {
-        if (!routineBuyable(s) || choice.removed[s.product_id] || seen[s.product_id]) return;
+        if (!routineBuyable(view, m, s, choice) || routineRemoved(m, s, choice) || seen[s.product_id]) return;
         seen[s.product_id] = true;
         items.push(s);
       });
@@ -505,7 +535,9 @@
     var momentNodes = [];
 
     var active = function (m) { return routineActive(m, choice); };
-    var buyable = routineBuyable;
+    var buyable = function (m, s) { return routineBuyable(view, m, s, choice); };
+    var owned = function (m, s) { return routineOwned(view, m, s, choice); };
+    var removed = function (m, s) { return routineRemoved(m, s, choice); };
     function selection() { return routineSelection(view, choice); }
 
     var totalLabel = el('p', { className: 'sa-routine__count' });
@@ -548,13 +580,15 @@
 
     function StepCard(step, m) {
       var check = el('input', { type: 'checkbox', className: 'sa-rcard__check' });
-      var status = step.owned
-        ? el('span', { className: 'sa-rcard__owned', text: m.part === 'night' ? rs.owned_morning : rs.owned_evening })
-        : !step.in_stock ? el('span', { className: 'sa-rcard__owned', text: rs.unavailable })
-          : typeof step.variant_id !== 'string' ? el('span', { className: 'sa-rcard__owned', text: rs.choose_size })
-            : el('label', { className: 'sa-rcard__include' }, [check, el('span', { text: rs.included || 'Inclus' })]);
+      var include = el('label', { className: 'sa-rcard__include' }, [check, el('span', { text: rs.included || 'Inclus' })]);
+      var ownedNote = step.owned ? el('span', { className: 'sa-rcard__owned', text: m.part === 'night' ? rs.owned_morning : rs.owned_evening }) : null;
+      var status = !step.in_stock ? el('span', { className: 'sa-rcard__owned', text: rs.unavailable })
+        : typeof step.variant_id !== 'string' ? el('span', { className: 'sa-rcard__owned', text: rs.choose_size })
+          : el('span', {}, [ownedNote, include]);
       check.addEventListener('change', function () {
-        if (check.checked) delete choice.removed[step.product_id]; else choice.removed[step.product_id] = true;
+        var key = routineStepKey(m, step);
+        delete choice.removed[step.product_id];
+        if (check.checked) delete choice.removed[key]; else choice.removed[key] = true;
         persist();
         refresh();
       });
@@ -602,19 +636,23 @@
         Fold(rs.usage || 'Application', step.usage)
       ]);
       cards.push(function () {
-        var included = active(m) && (step.owned || !choice.removed[step.product_id]);
-        check.checked = !choice.removed[step.product_id];
+        var isOwned = owned(m, step);
+        var kept = !removed(m, step);
+        if (ownedNote) ownedNote.hidden = !isOwned;
+        include.hidden = isOwned;
+        check.checked = kept;
         check.disabled = !active(m);
-        node.className = 'sa-rcard' + (included && buyable(step) ? ' sa-rcard--included' : '') + (active(m) ? '' : ' sa-rcard--muted');
+        // Unticked: greyed like the moment not chosen (owner, 2026-10-19), back when ticked again.
+        var off = active(m) && buyable(m, step) && !kept;
+        node.className = 'sa-rcard' + (active(m) && buyable(m, step) && kept ? ' sa-rcard--included' : '') + (off ? ' sa-rcard--off' : '') + (active(m) ? '' : ' sa-rcard--muted');
       });
       return node;
     }
 
     function Moment(m) {
       var night = m.part === 'night';
-      var missing = m.steps.filter(function (s) { return buyable(s); }).length;
       var toggle = m.chosen ? null : el('button', { type: 'button', className: 'sa-moment__complete' });
-      var note = m.chosen ? null : el('p', { className: 'sa-moment__note', text: missing ? fill(rs.complete_note, { count: missing }) : rs.complete_none });
+      var note = m.chosen ? null : el('p', { className: 'sa-moment__note' });
       if (toggle) toggle.addEventListener('click', function () {
         if (choice.added[m.part]) delete choice.added[m.part]; else choice.added[m.part] = true;
         persist();
@@ -632,6 +670,11 @@
       ]);
       momentNodes.push(function () {
         node.className = 'sa-moment' + (active(m) ? '' : ' sa-moment--muted');
+        // What « Compléter ma routine » would add, as ticked now.
+        if (note) {
+          var missing = m.steps.filter(function (s) { return buyable(m, s) && !removed(m, s); }).length;
+          note.textContent = missing ? fill(rs.complete_note, { count: missing }) : rs.complete_none;
+        }
         if (toggle) {
           toggle.textContent = choice.added[m.part] ? (rs.remove || 'Retirer') : (rs.complete || 'Compléter ma routine');
         }

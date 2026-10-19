@@ -185,3 +185,21 @@ test('puffiness under the eyes: an actual eye care first, the roller (an accesso
   assert.deepEqual(shown(advise("J'ai des cernes")), ['serum-anti-age-elixir-regard-eclat']);
   assert.ok(advise("J'ai des rides autour des yeux").steps.every((s) => KNOWLEDGE.get(s.handle).primary_concern === 'eye_wrinkles'));
 });
+
+test('the routine cards tick the serum and the cream in the morning, the eye serum and the cream in the evening; all four show', () => {
+  // Owner, 2026-10-19: « only the cream and the serum will be selected at first (but all four will show) ».
+  const build = (concern, time) => advisor.advise({ profile: { primary_concern: q(concern), skin_type: q('combination'), age_band: q('35_44'), routine_time: q(time), eye_concern: q('none') }, mode: 'routine_builder' });
+  const ticked = (steps) => steps.filter((s) => s.preselected !== false).map((s) => s.slot);
+  const day = build('wrinkles', 'day');
+  assert.equal(day.moments.day.length, 4);
+  assert.deepEqual(ticked(day.moments.day), ['day_2', 'day_4']);
+  assert.deepEqual(ticked(day.moments.night), ['night_3', 'night_4']);
+  assert.deepEqual(ticked(day.steps), ['day_2', 'day_4']);
+  // Both moments: the eye cream is the evening's, so the routine's own list keeps it (the chat's « add to cart »).
+  const both = build('wrinkles', 'both');
+  assert.deepEqual(ticked(both.steps), ['day_2', 'day_3', 'day_4', 'night_4']);
+  // The eye routine: its eye serum and eye cream.
+  assert.deepEqual(ticked(build('puffiness', 'night').moments.night), ['night_3', 'night_4']);
+  // Outside the builder nothing is marked.
+  assert.ok(advise("J'ai des rides").steps.every((s) => s.preselected === undefined));
+});

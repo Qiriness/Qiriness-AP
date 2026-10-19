@@ -83,6 +83,8 @@ export function buildRoutineView({ advice, profile, byId, money, cartVariant, la
       ingredients: clip(p.keyIngredients),
       benefits: clip(p.benefits),
       usage: clip(p.usage),
+      // Shown unticked at first (settings `preselected`): theirs to tick.
+      ...(s.preselected === false ? { preselected: false } : {}),
       // Already theirs from the chosen moment: shown, never bought twice.
       ...(owned ? { owned: true } : {}),
     };
