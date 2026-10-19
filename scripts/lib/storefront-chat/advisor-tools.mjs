@@ -13,7 +13,7 @@
  * only adapts it to a live chat: chips, cards, the prompt block, the log.
  */
 
-import { extractProfile } from '../advisory/lexicon.mjs';
+import { extractProfile, eyeConcernOf } from '../advisory/lexicon.mjs';
 import { FIELDS, mergeProfile, profileSummary } from '../advisory/profile.mjs';
 import { turnEvents } from '../advisory/events.mjs';
 import { emptyAdvisorState } from './advisor-state.mjs';
@@ -108,7 +108,10 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   const updates = [];
   const picked = typeof choice === 'string' ? choice.match(PROFILE_CHOICE) : null;
   if (picked) {
-    for (const value of picked[2].split('+')) updates.push({ field: picked[1], value, source: 'quick_choice', confidence: 'high', replace: true });
+    // A face concern's button while the eyes are discussed (« contour des yeux », then « Rides »): its eye
+    // version. Not in the builder, whose « Rides » is the face's routine.
+    const eyes = picked[1] === 'primary_concern' && mode !== 'routine_builder' && before.profile.body_area?.value === 'eyes';
+    for (const value of picked[2].split('+')) updates.push({ field: picked[1], value: eyes ? eyeConcernOf(value) : value, source: 'quick_choice', confidence: 'high', replace: true });
   }
   // A chip's label arrives as the message too: the chip wins, the words add nothing new.
   if (!picked) updates.push(...lex.updates);
@@ -268,6 +271,9 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
       status: a.status,
       mode,
       ...(a.reason ? { reason: a.reason } : {}),
+      // The hands, lips, feet or body (owner's notes v4): their own products; `area_fallback`, the face's.
+      ...(a.area && !['face', 'eyes'].includes(a.area) ? { area: a.area } : {}),
+      ...(a.area_fallback ? { area: a.area_fallback.from, area_fallback: true } : {}),
       profile: profileSummary(profile),
       next_question: a.next_question ? { field: a.next_question.field, why: a.next_question.reason, options: a.next_question.options.map((o) => o.label) } : null,
       playbook: a.playbook,

@@ -44,7 +44,7 @@ const SOURCE_RANK = { quick_choice: 3, natural_language: 3, model_inferred: 2, p
 export const CONFIDENCE = ['high', 'medium', 'low'];
 
 const FIXED_VALUES = {
-  body_area: ['face', 'eyes', 'body', 'lips', 'hands'],
+  body_area: ['face', 'eyes', 'body', 'lips', 'hands', 'feet'],
   // Sensitive is a skin type too (owner, 2026-10-16), besides the sensitivity field.
   skin_type: ['very_dry', 'dry', 'normal', 'combination', 'oily', 'sensitive', 'unknown'],
   skin_behaviour: ['tightness', 'shine', 'dehydration', 'dullness', 'reactive', 'flaking'],

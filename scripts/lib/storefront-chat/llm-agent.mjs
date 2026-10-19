@@ -39,7 +39,8 @@ import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
 import { promotionsForProduct, routineReward } from './shopping-evaluator.mjs';
 import { buildRoutineView, concernName } from './routine-view.mjs';
-import { mentionsRoutine } from '../advisory/lexicon.mjs';
+import { BODY_AREAS, mentionsCaution, mentionsRoutine } from '../advisory/lexicon.mjs';
+import { norm } from '../advisory/text.mjs';
 import { displayLanguage, languageContext, validReplyLanguage } from './conversation-language.mjs';
 import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
 import { ORDER_TOOL, orderToolDefinition, runOrderTool } from './order-tools.mjs';
@@ -93,6 +94,17 @@ const REPLY_SCHEMA = {
 // A reply that sends them to customer service always carries the contact form,
 // whatever the model set (owner, 2026-10-13). French and English.
 const CONTACT_WORDS = /service (?:client|clientèle|consommateurs?)|nous contacter|contactez[- ]nous|formulaire de contact|notre équipe|customer (?:service|care|support)|contact us|contact form|get in touch|reach (?:out to )?us/iu;
+// A reply that sends them to a doctor, a dermatologist or a pharmacist is followed by no routine offer
+// (owner's notes v4, 2026-10-19). French and English, on `norm` text.
+const PROFESSIONAL_WORDS = /\b(medecins?|dermatolog\w*|pharmacien\w*|professionnel de sante|allergolog\w*|doctors?|physicians?|pharmacists?|gp|healthcare professional)\b/;
+// A message about an order (owner's notes v4: « livré mais pas reçu », « un produit différent »), on `norm` text.
+const ORDER_WORDS = /\b(commandes?|commande|colis|livr\w*|recu|recue|recus|manquants?|rembours\w*|echange\w*|retour\w*|suivi|produit (different|errone|abime|casse)|orders?|parcels?|packages?|deliver\w*|received|missing|refunds?|exchanges?|returns?|tracking|wrong (item|product))\b/;
+const ORDER_NUMBER = /\b(numero de (la )?commande|order number)\b/;
+// …so the contact form gets it (the form never sees this chat).
+const ORDER_REMINDER = { fr: "N'oubliez pas d'indiquer votre numéro de commande dans le formulaire.", en: "Don't forget to include your order number in the form." };
+// The model asking the concern itself (« Quelle est votre priorité… ? », « l'une de ces préoccupations ? »).
+// …or what they want to work on (« que souhaitez-vous cibler ? », "what would you like to address?").
+const CONCERN_ASK = /\b(preoccup\w*|priorit\w*|soucis?|concerns?|worr\w*|bother\w*|l une de ces|parmi ces|one of these|which of these|cibler|traiter|ameliorer|attenuer|travailler|address|target|focus on|work on|improve|treat)\b/;
 
 const FINAL_ROUND_NOTE =
   'No more tool calls are available. Answer now from the authoritative facts already returned above. Product data may support product cards; policy passages keep their conditions. If an answer is missing, uncertain or unavailable, say so or refer to customer service. Never fill a gap from training.';
@@ -201,6 +213,9 @@ export function createLlmAgent({
      */
     async respond({ message, context = {}, history = [], refs = null, choice = null, cart = null, shopDomain = null, action = null, advisorState = null, conversationRef = null, purchases = null }) {
       const endsAt = Date.now() + deadlineMs;
+      // A medical question, a treatment, an allergy, a reaction (owner's notes v4, 2026-10-19): no product
+      // card unless asked for, no routine offer, no treat, no consultation buttons.
+      const caution = mentionsCaution(message);
       // Order lookups so far in this conversation (each assistant row keeps its own count).
       const priorLookups = history.reduce((n, m) => n + (Number(m?.context?.order_lookups) || 0), 0);
       let orderLookups = 0;
@@ -281,7 +296,8 @@ export function createLlmAgent({
           state: advisorState,
           choice: advisorTurn.picked ? choice : null,
           productQuestion: !profileChoice && (resolution?.products.length ?? 0) > 0,
-          otherTopic: Boolean(shoppingOpening) || ['general_policy', 'general_faq', 'product_and_policy'].includes(opening?.route),
+          // A caution turn shows no product: no extra model call for its profile either.
+          otherTopic: caution || Boolean(shoppingOpening) || ['general_policy', 'general_faq', 'product_and_policy'].includes(opening?.route),
           skinWords: mentionsSkin(message)
         });
         reader = { reason: gate.reason };
@@ -375,7 +391,12 @@ export function createLlmAgent({
           answer: flowStart.answer,
           advice: finalAdvice,
           // Not while a question about which product is pending (« laquelle souhaitez-vous comparer ? »).
-          showsProducts: !otherTopic && !budgetTreat && !resolution?.clarification && (finalAdvice?.status === 'recommended' || resolvedIds.size > 0 || Boolean(pageProduct)),
+          // Nor after « nothing for that » (owner's notes v4: « should not suggest a routine when we don't even
+          // offer a product »), nor under the hands', lips' or body's products: there is no routine for them.
+          showsProducts: !otherTopic && !budgetTreat && !resolution?.clarification && finalAdvice?.status !== 'no_match' && !BODY_AREAS.includes(finalAdvice?.area) && (finalAdvice?.status === 'recommended' || resolvedIds.size > 0 || Boolean(pageProduct)),
+          // The engine's question first: the offer waits for its answer (owner's notes v4).
+          engineAsks: !builder && Boolean(finalAdvice?.next_question),
+          caution,
           anchor: anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds], advice: finalAdvice }),
           purchaseAsk,
           runningLow,
@@ -412,6 +433,11 @@ export function createLlmAgent({
           trace.skill_refused = 'routine_builder';
           return { status: 'not_opened', why: 'the customer did not ask for a routine: answer their question; the app offers the routine itself' };
         }
+        // « Quel rituel pour mes coudes ? » (owner's notes v4): the builder is the face's; that area's products answer.
+        if (skill.name === 'routine_builder' && advisorTurn.mode !== 'routine_builder' && BODY_AREAS.includes(advisorTurn.profile.body_area?.value)) {
+          trace.skill_refused = 'routine_builder';
+          return { status: 'not_opened', why: 'there is no routine for this area: answer with the products for it in ADVICE' };
+        }
         if (skill.name === 'routine_builder' && advisorTurn.enterBuilder()) {
           skillOpenedByModel = true;
           if (!flow.anchor) flow = { ...flow, anchor: anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds], advice: advisorTurn.advice }) };
@@ -446,7 +472,8 @@ export function createLlmAgent({
         if (view) trace.routine_view = { chosen: view.chosen, steps: view.moments.map((x) => x.steps.length), saving: view.discount?.percentage ?? null };
         return view;
       };
-      let describedAdvice = advice ? advisorTurn.describe() : null;
+      // A caution turn: the model answers it without the engine's products (owner's notes v4).
+      let describedAdvice = advice && !caution ? advisorTurn.describe() : null;
       // ONE PRODUCT PROPOSED, WITH ITS OFFER (owner, 2026-10-13; the foundation
       // engine): the public offers running on it now, from the same synced
       // promotions the shopping tools read (30 s cache), never a guess.
@@ -488,7 +515,8 @@ export function createLlmAgent({
         pageProduct: pageProduct && !resolvedIds.has(pageProduct.id) ? productDetail(pageProduct, money, message) : null,
         resolution: resolution ? withOffers(describeResolution(resolution, byId, money, message), namedOffers) : null,
         followUp: followUpNote(followUp),
-        skill: openAtStart ? skillBlock(openAtStart, {}) : null
+        skill: openAtStart ? skillBlock(openAtStart, {}) : null,
+        caution
       });
       const messages = [...historyMessages(history), { role: 'user', content: message }];
       const trace = { calls: [], tools: [] };
@@ -509,10 +537,12 @@ export function createLlmAgent({
       // The reader's tokens count with the reply's: one ledger per assistant row.
       const usage = { inputTokens: reader?.usage?.prompt_tokens ?? 0, outputTokens: reader?.usage?.completion_tokens ?? 0 };
 
-      // The engine's question was not asked this turn when the purchase question took its place.
+      // The engine's question was not asked this turn when the purchase question took its place, or when
+      // its buttons were dropped (the model asked something else, a caution turn).
+      let questionDropped = false;
       const advisorState_ = (next) => ({
         ...next,
-        ...(followUp?.choices.length ? { asked: advisorState?.asked ?? [], last_question: null } : {}),
+        ...(followUp?.choices.length || questionDropped ? { asked: advisorState?.asked ?? [], last_question: null } : {}),
         purchases: purchaseState,
         flow
       });
@@ -793,7 +823,9 @@ export function createLlmAgent({
         // A recommended routine always shows its products, even when the model
         // forgot to list them: the cards ARE the recommendation.
         const finalAdvice = advisorTurn?.advice ?? null;
-        if (finalAdvice?.status === 'recommended' && finalAdvice.steps.some((s) => s.top_choices)) {
+        if (caution) {
+          // A caution turn forces no card (the acne-treatment answer showed three cleansers under it).
+        } else if (finalAdvice?.status === 'recommended' && finalAdvice.steps.some((s) => s.top_choices)) {
           // Our top choices are the cards, whatever the model listed (it showed one of three in the batch).
           const top = finalAdvice.steps.flatMap((s) => [s.handle, ...s.alternatives.map((x) => x.handle)]);
           products = toCards([...products.map((p) => ({ handle: top.find((h) => p.url.endsWith(`/${encodeURIComponent(h)}`)) ?? '', rationale: p.rationale })).filter((x) => x.handle), ...top.map((handle) => ({ handle, rationale: '' }))], offered, catalogue, money, linkBase);
@@ -813,7 +845,13 @@ export function createLlmAgent({
         const routineShown = (advisorTurn?.advice?.steps?.length ?? 0) > 1;
         // Nor one asking « which one? » after a resolve_products of its own (owner, 2026-10-19: the
         // offer came under « parlez-vous du Sérum Temps Sublime ou de l'Élixir ? »).
-        if (followUp?.kind === 'offer' && (skillOpenedByModel || routineShown || Boolean(resolution?.clarification) || (!products.length && !pageProduct && !resolvedIds.size))) {
+        // The contact form: on every order answer and every « contact us ».
+        const contactPath = company.contactFormPath ?? null;
+        const contact = contactPath && (parsed.contactLink || orderAnswered || CONTACT_WORDS.test(parsed.text)) ? { url: contactPath } : null;
+        // Nor one that asks a question of its own: the offer waits for the answer (owner's notes v4, « this
+        // doubling of messages »). Nor one that sends them to customer service or to a doctor.
+        const asksBack = endsWithQuestion(parsed.text);
+        if (followUp?.kind === 'offer' && (skillOpenedByModel || routineShown || asksBack || Boolean(contact) || PROFESSIONAL_WORDS.test(norm(parsed.text)) || Boolean(resolution?.clarification) || (!products.length && !pageProduct && !resolvedIds.size))) {
           followUp = null;
           if (!skillOpenedByModel) flow = flowBefore;
         }
@@ -841,12 +879,21 @@ export function createLlmAgent({
           routine: finalAdvice?.status === 'recommended' && (advisorTurn?.mode === 'routine_builder' || finalAdvice.steps.length > 1),
           message
         });
-        // The contact form: on every order answer and every « contact us ».
-        const contactPath = company.contactFormPath ?? null;
-        const contact = contactPath && (parsed.contactLink || orderAnswered || CONTACT_WORDS.test(parsed.text)) ? { url: contactPath } : null;
+        if (caution && !ASKS_TO_SEE.test(message)) products = [];
+        // An order the chat cannot settle: the form needs its number (owner's notes v4), said once, by the code.
+        const replyLang = String(parsed.replyLanguage ?? displayLanguage(language, locale)).slice(0, 2) === 'en' ? 'en' : 'fr';
+        const orderReminder = contact && ORDER_WORDS.test(norm(message)) && !ORDER_NUMBER.test(norm(parsed.text)) ? ORDER_REMINDER[replyLang] : null;
+        if (orderReminder) trace.order_reminder = true;
         if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace, ...(describedAdvice?.steps?.[0]?.promotions ? { promotions: describedAdvice.steps[0].promotions.map((p) => p.promotion_id) } : {}) };
         if (followUp) trace.follow_up = followUp.kind;
-        const engineChoices = advisorTurn && !purchaseAsk ? advisorTurn.choices() : [];
+        // THE CONCERN BUTTONS ONLY UNDER THE CONCERN QUESTION (owner's notes v4: « De quelle crème s'agit-il ? »
+        // came with the six concern buttons, and a click on one gave unrelated products). Outside the builder,
+        // the reply must ask it: two of its options named, or a question about their concern. Dropped, it is
+        // not counted as asked, so it can come later.
+        const engineQuestion = advisorTurn?.advice?.next_question ?? null;
+        questionDropped = Boolean(engineQuestion) && !purchaseAsk && (caution || (advisorTurn.mode !== 'routine_builder' && engineQuestion.field === 'primary_concern' && !asksConcern(parsed.text, engineQuestion.options)));
+        if (questionDropped) trace.question_dropped = engineQuestion.field;
+        const engineChoices = advisorTurn && !purchaseAsk && !questionDropped ? advisorTurn.choices() : [];
         // Only the last bubble's buttons are live: a follow-up without its own carries the engine's.
         const followUpChoices = followUp ? (followUp.choices.length ? followUp.choices : engineChoices) : [];
         const advisorChoices = followUp ? [] : engineChoices;
@@ -854,12 +901,13 @@ export function createLlmAgent({
         // A routine the model built itself: its cards too, and the short sentence in place of its text.
         const routineView = await routineViewFor(finalAdvice);
         return {
-          text: routineView ? routineReadyText(displayLanguage(language, locale)) : shopping ? shopping.sanitizeReply(parsed.text, parsed.replyLanguage ?? language.previous_language ?? 'fr') : parsed.text,
+          text: routineView ? routineReadyText(displayLanguage(language, locale)) : withReminder(shopping ? shopping.sanitizeReply(parsed.text, parsed.replyLanguage ?? language.previous_language ?? 'fr') : parsed.text, orderReminder),
           replyLanguage: parsed.replyLanguage ?? null,
           products,
           // Chips: the resolver's clarification first (which product?), else the
           // consultation's next question. From the data, never the model.
-          choices: resolution?.clarification ? resolution.clarification.options.map((o) => ({ label: o.label, value: o.id ?? o.label })) : advisorChoices,
+          // A caution turn offers no choice of product (« Crème | Coffret | Fluide » under the acne-treatment answer).
+          choices: caution ? [] : resolution?.clarification ? resolution.clarification.options.map((o) => ({ label: o.label, value: o.id ?? o.label })) : advisorChoices,
           model,
           usage: usage.inputTokens || usage.outputTokens ? usage : null,
           trace,
@@ -891,6 +939,31 @@ export function createLlmAgent({
       }
     }
   };
+}
+
+/** The reply's last sentence asks something (« … ? »): the model's own question. */
+export function endsWithQuestion(text) {
+  const sentences = String(text ?? '').trim().split(/(?<=[.!?…])\s+/).filter(Boolean);
+  return /\?/.test(sentences.at(-1) ?? '');
+}
+
+/**
+ * The reply asks the engine's concern question: it names two of its options (« déshydratation,
+ * imperfections… »), or its question is about their concern (« l'une de ces préoccupations ? »).
+ */
+export function asksConcern(text, options = []) {
+  const said = ` ${norm(text)} `;
+  const named = options.filter((o) => {
+    const word = norm(o.label).split(' ').find((w) => w.length >= 4);
+    return word && said.includes(` ${word}`);
+  }).length;
+  if (named >= 2) return true;
+  return String(text ?? '').split(/(?<=[.!?…])\s+/).some((sentence) => /\?/.test(sentence) && CONCERN_ASK.test(norm(sentence)));
+}
+
+/** A sentence the code adds after the model's reply (the order-number reminder). */
+function withReminder(text, reminder) {
+  return reminder ? `${text} ${reminder}` : text;
 }
 
 /** Earlier turns of THIS session only, oldest first, as the model's own conversation. */

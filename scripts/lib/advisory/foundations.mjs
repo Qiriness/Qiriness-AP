@@ -91,6 +91,10 @@ const QUESTION_OPTIONS = {
   routine_time: ['day', 'night', 'both'],
 };
 const OPPOSITE_TEXTURE = { rich: 'light', light: 'rich' };
+/** The areas the face and eye routines cover; any other (hands, lips, feet, body) gets its own products. */
+const ROUTINE_AREAS = new Set(['face', 'eyes']);
+/** Never a product for one need on its own: a device, an accessory (kits and coffrets: isBundle). */
+const NOT_ALONE = new Set(['device', 'tool']);
 
 export const WEIGHTS = {
   primary: 1, primaryAmongOthers: 0.6, foundationConcern: 0.4, secondary: 0.3, secondaryCap: 0.6,
@@ -142,6 +146,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     const skin = valueOf(profile, 'skin_type');
     return {
       primaryChosen: profile.primary_concern?.source === 'quick_choice' ? concernOf(primaryRaw) : null,
+      primarySource: profile.primary_concern?.source ?? null,
       primary: primaryRaw ? concernOf(primaryRaw) : null,
       concerns: all,
       // The eye routine's other eye concern: counted once the eye routine is chosen, never a vote for another.
@@ -172,12 +177,18 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       const basic = routines.foundations.find((f) => f.only_on_explicit_request);
       if (basic) return { key: basic.key };
     }
-    if (c.area === 'body') return { none: NO_MATCH.AREA_NOT_COVERED };
+    // The hands, lips, feet or body (owner's notes v4, 2026-10-19): that area's products, no routine.
+    if (c.area && !ROUTINE_AREAS.has(c.area)) return { area: c.area };
     const face = c.concerns.filter((x) => !eyeConcerns.has(x));
     const eyes = c.concerns.filter((x) => eyeConcerns.has(x));
     // « Cernes et poches » chosen with its button: the eye routine, whatever else they said.
     if (eyeFoundation && c.primaryChosen && eyeFoundation.primary_concerns.includes(c.primaryChosen)) return { key: eyeFoundation.key };
     if (!face.length && (eyes.length || c.area === 'eyes')) return eyes.length ? { key: eyeFoundation?.key ?? 'eyes' } : { missing: true };
+    // The eyes asked about for a face concern (« un contour des yeux déshydraté »), outside a routine:
+    // the eye products for it, none said honestly, never the face's (owner's notes v4: « SPECIFICALLY
+    // asking about eyes, not getting an eye response »). A concern only the model reader guessed
+    // ("best for the eye area" read as dehydration) is no answer: the eye question is asked.
+    if (c.area === 'eyes' && !eyes.length && !c.builder) return c.primarySource === 'model_inferred' ? { missing: true } : { key: 'eyes', byArea: true };
     if (c.primaryChosen && !eyeConcerns.has(c.primaryChosen)) {
       const f = routines.foundations.find((x) => x.primary_concerns.includes(c.primaryChosen));
       if (f) return { key: f.key };
@@ -292,10 +303,14 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   }
 
   /** One routine: a foundation's steps for a size, filled. */
-  function evaluate(profile, mode, { owned = [], ranges = new Set(), pinned = [], exclude = [] } = {}) {
+  function evaluate(profile, mode, { owned = [], ranges = new Set(), pinned = [], exclude = [], areaOff = false } = {}) {
     const c = read(profile);
+    c.builder = mode === 'routine_builder';
+    // The builder builds the face's routine: a hand or body area said earlier does not stop it.
+    if (areaOff || (c.builder && c.area && !ROUTINE_AREAS.has(c.area))) c.area = null;
     const choice = chooseFoundation(c);
     if (choice.none) return { none: choice.none };
+    if (choice.area) return areaChoice(profile, mode, c, choice.area, { owned, ranges, pinned, exclude });
     if (choice.missing) return { missing: true };
     if (choice.impliedConcern && !c.primary) { c.primary = choice.impliedConcern; c.concerns = [...c.concerns, choice.impliedConcern]; }
 
@@ -305,7 +320,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     const eyesAlone = choice.key === 'eyes' || (foundations.get(choice.key)?.area === 'eyes' && !wantsRoutine);
     const eyeTypes = ['eye', ...(routineSteps?.day ?? []).filter((s) => s.area === 'eyes').flatMap((s) => s.types)];
     let f = eyesAlone
-      ? { key: 'eyes', name_fr: 'Yeux', primary_concerns: c.concerns.filter((x) => eyeConcerns.has(x)), steps: [{ order: 1, type: 'eye', types: [...new Set(eyeTypes)], area: 'eyes', frequency: 'daily', required: true, targets: 'primary' }] }
+      ? { key: 'eyes', name_fr: 'Yeux', primary_concerns: choice.byArea ? c.concerns : c.concerns.filter((x) => eyeConcerns.has(x)), steps: [{ order: 1, type: 'eye', types: [...new Set(eyeTypes)], area: 'eyes', frequency: 'daily', required: true, targets: 'primary' }] }
       : foundations.get(choice.key);
     if (eyesAlone && !eyeConcerns.has(c.primary)) c.primary = f.primary_concerns[0];
     // The eye routine: its other eye concern counts, the eyes are sensitive, no skin type.
@@ -463,6 +478,75 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       if (c.desired) askedType = { type: c.desired, out_of_stock: outOfStock.map((x) => x.id), replaced: other.length > 0 };
     }
     return { f, scope, steps, skipped, pinned: placed, c, budget, askedType };
+  }
+
+  /**
+   * THE HANDS, LIPS, FEET, BODY (owner's notes v4, 2026-10-19: « should prioritise a hand cream over a face
+   * cream »; « it should suggest the body lotions, creams or lait »). No routine: up to three of that area's
+   * products for the need, best first: their concern as the product's main one, among its others, then a
+   * concern of the same main concern (« sèches » is Hydration, as the hand cream's « Déshydratation »); the
+   * daily care before an occasional one (the hand cream before the hand mask). An « Autre » (a shower oil)
+   * only when it treats the need itself, last; never a kit, a coffret, a device. Nothing there: the brand's `area_fallback` for that need (the face cream for dry hands or
+   * lips, owner), else nothing, said.
+   */
+  function areaChoice(profile, mode, c, area, opts) {
+    if (!c.primary) return { areaMissing: area };
+    const f = { key: `area_${area}`, name_fr: area, primary_concerns: [c.primary], steps: [] };
+    const skip = new Set(opts.exclude ?? []);
+    const family = routines.foundations.filter((x) => x.primary_concerns.includes(c.primary)).flatMap((x) => x.primary_concerns);
+    const fit = (k) => {
+      const targets = [k.primary_concern, ...k.other_concerns];
+      if (k.primary_concern === c.primary) return { s: 3, code: c.primary };
+      if (k.other_concerns.includes(c.primary)) return { s: 2, code: c.primary };
+      const near = targets.find((t) => family.includes(t));
+      return near ? { s: 1, code: near } : { s: 0 };
+    };
+    // An « Autre » after the care products, an occasional one (a hand mask) after the daily ones (the hand cream).
+    const other = (x) => (x.k.functional_type === 'out_of_routine' ? 2 : x.k.frequency === 'occasional' ? 1 : 0);
+    const ranked = products
+      .filter((x) => (x.k.area ?? 'face') === area && !isBundle(x.k) && !NOT_ALONE.has(x.k.functional_type) && !skip.has(x.id) && suitable(x, { ...c, skin: null }))
+      .map((x) => ({ x, ...fit(x.k) }))
+      .filter((r) => r.s >= (other(r.x) === 2 ? 2 : 1))
+      .sort((a, b) => other(a.x) - other(b.x) || b.s - a.s || (a.x.product.priceFrom ?? 0) - (b.x.product.priceFrom ?? 0) || a.x.name.localeCompare(b.x.name));
+    const none = { f, scope: 'targeted', steps: [], skipped: [], pinned: [], c, budget: null, area };
+    if (!ranked.length) {
+      const fallback = routines.area_fallback?.[area];
+      if (fallback?.to !== 'face' || !(fallback.concerns ?? []).includes(c.primary)) return none;
+      const face = evaluate(profile, mode, { ...opts, areaOff: true });
+      return face.steps?.length ? { ...face, areaFallback: { from: area, to: 'face' } } : none;
+    }
+    const [top, ...rest] = ranked;
+    const type = top.x.k.functional_type;
+    return {
+      ...none,
+      steps: [{
+        slot: `${area}_1`, kind: KIND[type] ?? type, type, optional: false,
+        product_id: top.x.id, handle: top.x.handle,
+        alternatives: rest.slice(0, 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })),
+        reason_codes: [`${FIT.PRIMARY_CONCERN}:${top.code}`],
+        merchandised: null,
+        scores: { suitability: top.s, routine_fit: 0, total: top.s },
+      }],
+    };
+  }
+
+  /**
+   * EXAMPLES OF A TYPE (owner's notes v4: « it should give more than one example … prioritise the creams or
+   * the serums that are in a gamme »): a care type asked for, their concern asked and still open. Up to three
+   * of that type for the face, one per range first, products in a range before the others.
+   */
+  function typeExamples(c) {
+    const pool = products
+      .filter((x) => fillsStep(x.k, c.desired) && !isBundle(x.k) && (x.k.area ?? 'face') === 'face' && suitable(x, c))
+      .sort((a, b) => Boolean(b.k.range) - Boolean(a.k.range) || Number(c.men && b.k.men) - Number(c.men && a.k.men) || skinFit(b.k, c).score - skinFit(a.k, c).score
+        || Boolean(a.k.premium) - Boolean(b.k.premium) || (a.product.priceFrom ?? 0) - (b.product.priceFrom ?? 0) || a.name.localeCompare(b.name));
+    const ranges = new Set();
+    const picked = [];
+    for (const x of pool) if (picked.length < 3 && (!x.k.range || !ranges.has(x.k.range))) { picked.push(x); if (x.k.range) ranges.add(x.k.range); }
+    for (const x of pool) if (picked.length < 3 && !picked.includes(x)) picked.push(x);
+    if (!picked.length) return null;
+    const [top, ...rest] = picked;
+    return [{ slot: `${c.desired}_examples`, kind: KIND[c.desired] ?? c.desired, type: c.desired, optional: false, product_id: top.id, handle: top.handle, alternatives: rest.map((x) => ({ product_id: x.id, handle: x.handle })), reason_codes: ['type_example'], merchandised: null, scores: { suitability: 0, routine_fit: 0, total: 0 } }];
   }
 
   /** The routine's range: the main concern's, or by their age for anti-age (Rules tab). */
@@ -792,15 +876,18 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     return text ? { ...q, text } : q;
   };
 
-  function concernQuestion(locale) {
+  function concernQuestion(locale, eyes = false) {
     // One button per main concern, in the shop's order: its `concern_buttons` value and label, else a
-    // representative customer key for its first concern.
+    // representative customer key for its first concern. The eyes asked about (owner's notes v4: « contour
+    // des yeux », then « Rides » gave face products): the settings' `eye_concern_buttons`, eye concerns.
     const buttons = questions.concern_buttons ?? {};
     const lang = String(locale).slice(0, 2);
-    const entries = routines.foundations.filter((f) => f.primary_concerns.length).map((f) => {
+    const valid = (value) => value && String(value).split('+').every((v) => allowed.primary_concern.includes(v));
+    const eyeButtons = eyes && Array.isArray(questions.eye_concern_buttons) ? questions.eye_concern_buttons.filter((b) => valid(b?.value)) : [];
+    const entries = eyeButtons.length ? eyeButtons.map((b) => ({ value: b.value, label: b[lang] ?? b.fr ?? null })) : routines.foundations.filter((f) => f.primary_concerns.length).map((f) => {
       const b = buttons[f.key] ?? {};
       const value = b.value ?? Object.entries(routines.concern_map ?? {}).find(([k, v]) => v === f.primary_concerns[0] && allowed.primary_concern.includes(k))?.[0];
-      return value && String(value).split('+').every((v) => allowed.primary_concern.includes(v)) ? { value, label: b[lang] ?? b.fr ?? null } : null;
+      return valid(value) ? { value, label: b[lang] ?? b.fr ?? null } : null;
     }).filter(Boolean);
     const q = question('primary_concern', entries.map((e) => e.value), locale, 'missing');
     q.options = q.options.map((o, i) => (entries[i]?.label ? { ...o, label: entries[i].label } : o));
@@ -897,10 +984,18 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       }
       const result = evaluate(profile, mode, history);
       if (result.none) return { ...base(mode), status: STATUS.NO_MATCH, reason: result.none };
+      // The hands, lips, feet or body with no concern yet: no buttons (they are the face's), the model asks.
+      if (result.areaMissing) return { ...base(mode), status: STATUS.NEEDS_INFO, reason: 'open_primary_concern', area: result.areaMissing };
       if (exclude.length && !result.missing && !result.steps?.length) return { ...base(mode), status: STATUS.NO_MATCH, reason: 'no_other_option', playbook: summary(result.f, result.scope) };
       if (result.missing) {
-        if (asked.includes('primary_concern')) return { ...base(mode), status: STATUS.NEEDS_INFO, reason: 'open_primary_concern' };
-        return { ...base(mode), status: STATUS.NEEDS_INFO, reason: 'missing', next_question: concernQuestion(locale) };
+        const c = read(profile);
+        if (asked.includes('primary_concern')) {
+          // A type asked for, the concern still open: examples of it rather than nothing.
+          const examples = mode !== 'routine_builder' && c.desired ? typeExamples(c) : null;
+          if (examples) return { ...base(mode), status: STATUS.RECOMMENDED, playbook: { key: 'type_examples', route: null, scope: 'targeted', preferred_family: null, notes: ['examples of the type asked for, their concern still open'] }, scope: 'targeted', area: 'face', steps: examples.map((s) => ({ ...s, top_choices: true })), considered: 1, total_price: totalOf(examples) };
+          return { ...base(mode), status: STATUS.NEEDS_INFO, reason: 'open_primary_concern' };
+        }
+        return { ...base(mode), status: STATUS.NEEDS_INFO, reason: 'missing', next_question: concernQuestion(locale, mode !== 'routine_builder' && c.area === 'eyes') };
       }
       if (mode === 'routine_builder' && asked.length < MAX_BUILDER_QUESTIONS + 2) {
         const q = nextQuestion(profile, asked, history, locale, result.f);
@@ -917,7 +1012,9 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         ...(result.steps.length ? {} : { reason: NO_MATCH.NO_PRODUCT }),
         playbook: summary(result.f, result.scope, result.range),
         scope: result.scope,
-        area: result.f.key === 'eyes' ? 'eyes' : 'face',
+        area: result.area ?? (result.f.key === 'eyes' ? 'eyes' : 'face'),
+        // Nothing for the hands (lips): the face's product for the need, which the reply says (`area_fallback`).
+        ...(result.areaFallback ? { area_fallback: result.areaFallback } : {}),
         // Outside the builder, one need: the best fit and its two alternatives are « our top choices ».
         steps: mode !== 'routine_builder' && result.scope === 'targeted' ? result.steps.map((s) => ({ ...s, top_choices: true })) : result.steps,
         skipped: result.skipped,

@@ -24,8 +24,12 @@ export default {
 
   areas: {
     eyes: /\b(eyes?|eye area|eye contour|under ?eyes?|eyelids?|eye bags|around (my|the) eyes)\b/,
+    // Owner's notes v4 (2026-10-19): "very dry hands", "the backs of my hands" (not the body's "back").
+    hands: /\b(hands?|backs? of (my |the )?hands|knuckles|cuticles)\b/,
+    lips: /\b(lips?)\b/,
+    feet: /\b(feet|foot|heels?)\b/,
     // Not « after the shower »: « my skin feels tight after showering » is about the face too.
-    body: /\b(body|legs?|arms?|my back)\b/,
+    body: /\b(body|legs?|arms?|my back|elbows?|knees?|body skin)\b/,
     face: /\b(faces?|facial|forehead|cheeks?|chin)\b/
   },
 
@@ -40,7 +44,8 @@ export default {
     mature_skin: /\bmature skin\b/,
     regeneration: /\b(regenerat\w+|skin renewal)\b/,
     wrinkles: /\b(wrinkles?|wrinkled|anti ?wrinkles?|crows? feet|expression lines)\b/,
-    dark_spots: /\b((dark|age|sun|brown|pigment) spots?|hyperpigmentation|pigmentation|melasma)\b/,
+    // The marks a spot leaves are spots, not blemishes (owner's notes v4).
+    dark_spots: /\b((acne|spot|pimple|blemish|breakout) (marks?|scars?)|(marks?|scars?) left by (old |past |my )?(spots?|pimples?|acne|blemishes|breakouts?)|post ?acne( marks?)?|(dark|age|sun|brown|pigment) spots?|hyperpigmentation|pigmentation|melasma)\b/,
     uneven_tone: /\b(uneven (skin )?(tone|complexion)|blotchy)\b/,
     redness: /\b(redness|red skin|red patches|rosacea|couperose|flushing)\b/,
     lack_of_radiance: /\b(lack of radiance|lacks radiance|no radiance|lack of glow|no glow)\b/,
@@ -51,7 +56,8 @@ export default {
     dehydration: /\b(dehydrat\w*|lacks? (water|moisture|hydration)|thirsty skin)\b/,
     tightness: /\b(tightness|(feels?|feeling|gets?|getting|is|so|very|really) (\w+ )?tight|tight skin|pulling)\b/,
     discomfort: /\b(discomfort|uncomfortable|itch\w*|sting\w*|tingl\w*|burning)\b/,
-    dryness: /\b(dryness|flaky|flaking|peeling|rough skin)\b/,
+    // A dry hand, lip, foot or body part: no skin type of the face ("my hands are very dry", "chapped lips").
+    dryness: /\b(dryness|flaky|flaking|peeling|rough skin|chapped|cracked|(dry|rough) (hands?|lips?|feet|heels?|elbows?|knees?|legs?)|(hands?|lips?|feet|heels?|elbows?|knees?|legs?|body)( \w+){0,2}? (dry|rough))\b/,
     clogged_pores: /\b(blackheads?|(enlarged|clogged|visible|large|open|blocked) pores?|pores?)\b/,
     imperfections: /\b(blemish\w*|imperfections?|acne|pimples?|spots?|breakouts?|zits?)\b/,
     excess_sebum: /\b(sebum|excess (oil|sebum)|too much oil)\b/,
@@ -147,5 +153,8 @@ export default {
   // Never "my routine is…": a verb of asking comes first.
   routineAsk: /\b(i want|i d like|i would like|i need|i m looking for|looking for|can you (suggest|recommend|give me|make me|do)|could you (suggest|recommend|give me|make me|do)|suggest|recommend|give me|do you have) (me )?(a |an |some )?((new|proper|good|simple|full|complete|whole|personali[sz]ed|daily|skin ?care|skincare|beauty|face)\s){0,3}(routine|ritual|regimen)\b/,
   routineBuilder: /\b((build|create|make|put together|design|set up|help me (build|create|make|put together)) (me )?(together )?(a |an |my |our )?((full|complete|whole|personali[sz]ed|daily|new|skin ?care) )*routine|routine builder|(redo|restart|retry|rebuild|start over( with)?|start again( with)?) (my |the |a )?(routine|quiz|questionnaire)|new routine)\b/,
-  dontKnow: /\b(i don t know|i do not know|no idea|not sure|dunno|i m not sure)\b/
+  dontKnow: /\b(i don t know|i do not know|no idea|not sure|dunno|i m not sure)\b/,
+  // A medical situation, a treatment, an allergy or a reaction (owner's notes v4): no cards, no routine offer.
+  // A treatment they are ON, not one they look for ("an acne cream" is a product request).
+  caution: /\b((dermatolog\w*|prescription|prescribed|medical) (\w+ )?(treatment|medication|medicine|cream)|on (a |an )?(\w+ ){0,2}(treatment|medication)|taking (a |an )?(\w+ ){0,2}(treatment|medication|medicine)|medications?|prescription|isotretinoin|accutane|roaccutane|antibiotics?|moles?|allerg\w*|burns?|my skin (is )?burning|red patches|(allergic |skin )?reactions?|rash(es)?|eczema|psoriasis|dermatitis|pregnan\w*|breastfeeding|nursing)\b/
 };

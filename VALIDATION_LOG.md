@@ -42,6 +42,24 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 62. The owner's notes v4: tested offline and on the live model with invented data, not yet on the dev store — 2026-10-19
+
+Server-side only (no theme deploy). `qiriness-routine-settings.json` gained `questions.eye_concern_buttons` and `area_fallback`: they reach the dev store with `npm run advisor:load` (not run). Until then the eyes get the face's concern buttons (a « Rides » click still records the eye concern) and there is no hand or lip fallback. Every product the notes name is now on the dev store and in stock (queried 2026-10-19: the roller, the hand cream, the lip balm, the body cream, milk and oil, the Éclat Parfait serum and cream).
+
+1. **The offer waits.** **Check:** on a product page, « Je suis un homme de 30 ans et je n'ai jamais utilisé de soins visage. Par quoi commencer ? » → the concern question and its buttons, no « Souhaitez-vous que je vous construise une routine personnalisée ? » under it; a button → products, then the offer.
+2. **No offer after a referral or nothing.** **Check:** the mole (note 15), the acne treatment (16), the allergy (17), the burn (18), spots on the hands (7) → no offer, and no card on 15, 16, 18.
+3. **Concern buttons.** **Check:** « Est-ce que je peux utiliser ma crème visage sur mes mains ? » and the masks question (12) → no concern buttons.
+4. **Hands, lips, body.** **Check:** « mains très sèches » → the Caresse Mains Velours cream first; « lèvres sèches » → Lip Beauty; « peau du corps très sèche » and « coudes et genoux… rituel » → Body Wrap, Lait Qi, shower oil, and no skin-type question, no offer.
+5. **Eyes.** **Check (after `advisor:load`):** « contour des yeux » → Cernes · Poches · Rides du contour des yeux · Déshydratation; « Rides du contour des yeux » → eye creams only. « poches sous les yeux » → the roller.
+6. **Marks.** **Check:** « marques laissées par d'anciens boutons » → the Éclat Parfait serum, lotion and cream.
+7. **Contact.** **Check:** « je veux parler à une vraie personne » never says the chat is passed on; « livré mais pas reçu » and « produit différent » end with « N'oubliez pas d'indiquer votre numéro de commande dans le formulaire. »
+8. **English.** **Check:** 1, 4 and 7 in English.
+
+**Open, the owner's to-do list:**
+- **Brand knowledge** (note 13: EOS Complex®, « ce qui différencie Qiriness »). Owner's proposal: a Brand History policy and FAQs in the database that the advisor can call on. What exists: the email side already retrieves `brand_story` (`agent/src/retrieval/retrieval-rules.mjs`); the storefront excludes it (`knowledge-repository.mjs`, `faq-matcher.mjs`), and its matcher drops answers over 1,800 characters. No EOS Complex® text was found in the repo; check the database's brand articles. Until then the advisor answers from `company_description` only.
+- **A body routine** (note 9: « perhaps we should add a body specific routine »). Today the body, hands, lips and feet get up to three products for the need, no routine.
+- **For the sheet:** the deodorant (`deodorant-anti-transpirant-48h-…`, Corps, Autre) has « Déshydratation » as its main concern, so a « peau du corps déshydratée » shows it third; the LED mask (Électrocosmétique) is never advised for marks (it fills no step), if the owner wants it there.
+
 ## 61. The routine cards: tested offline, not yet in the widget — 2026-10-18
 
 After the widget redeploy (knowledge v5 and the dev sync are done).

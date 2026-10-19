@@ -603,6 +603,11 @@
   },
   "questions": {
     "_rule": "the question whose answer changes the routine most first; skin traits before naming a concern; never age first (§ 3.3)",
+    "eye_concern_buttons": [
+      { "value": "dark_circles", "fr": "Cernes", "en": "Dark circles" },
+      { "value": "puffiness", "fr": "Poches", "en": "Puffiness" },
+      { "value": "eye_wrinkles", "fr": "Rides du contour des yeux", "en": "Wrinkles around the eyes" }
+    ],
     "order": [
       "concern",
       "skin_type",

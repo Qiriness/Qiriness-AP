@@ -112,6 +112,8 @@ export function assembleRoutines({ routines, rules, products, settings }) {
       modules,
       questions: settings.questions ?? {},
       treats: settings.treats ?? {},
+      // Nothing for the need on the hands or lips: the face's product for it (owner's notes v4).
+      area_fallback: Object.fromEntries(Object.entries(settings.area_fallback ?? {}).filter(([k, v]) => !k.startsWith('_') && v?.to)),
       // The code a finished routine's « add to cart » applies (owner, 2026-10-17), never named to the customer.
       // Its minimum (owner, 2026-10-18): a routine the customer trims below it on the cards loses the discount.
       // The size or texture a routine product is added in (owner, 2026-10-18): its texture from their skin type.

@@ -206,10 +206,12 @@ export function anchorFor({ pageProductId = null, resolvedIds = [], advice = nul
  *   cart: 'yes' | 'no' | null                                    this turn's answer to the cart question
  *   discount: boolean                                            a finished routine with the shop's routine discount
  *   concern: string | null                                       their main concern's name, in their language (the treat's sentence)
+ *   engineAsks: boolean                                          the engine asks a question this turn (the offer waits for its answer)
+ *   caution: boolean                                             a medical, treatment, allergy or reaction message: no follow-up at all
  * }} input
  * @returns {{ flow: object, followUp: { kind: string, text: string, choices: object[], productIds: string[] } | null }}
  */
-export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices, cartable = [], cart = null, discount = false, concern = null }) {
+export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices, cartable = [], cart = null, discount = false, concern = null, engineAsks = false, caution = false }) {
   const next = cleanFlow(flow);
   const t = text(lang);
   const say = (kind, words, { choices = [], productIds = [] } = {}) => ({ flow: next, followUp: { kind, text: words, choices, productIds } });
@@ -224,6 +226,9 @@ export function followUpFor({ flow, lang, builder, answer, advice, showsProducts
   // to the model's own question added the retinol cream the customer had just
   // excluded (dev store, 2026-10-16). askCart below sets a new one.
   next.cart = { ...next.cart, pending: [] };
+  // A medical question, a treatment, an allergy, a reaction (owner's notes v4, 2026-10-19: « shouldn't
+  // propose a routine here »): no offer, no cart question, no treat.
+  if (caution) return { flow: next, followUp: null };
 
   if (runningLow) return say('running_low', t.runningLow(runningLow.name), { productIds: [runningLow.product_id] });
   if (answer === 'no' && treat && !next.treat_offered) {
@@ -241,13 +246,15 @@ export function followUpFor({ flow, lang, builder, answer, advice, showsProducts
     next.treat_offered = true;
     return say('treat', t.treatAfterRoutine(inSentence(concern)), { productIds: [treat.product_id] });
   }
-  if (!builder && next.offer === null && showsProducts) {
+  // THE OFFER WAITS FOR THE CONVERSATION (owner's notes v4: « routine builder does not wait for the
+  // conversation to finish »): never under the engine's own question; it comes on a later turn.
+  if (!builder && next.offer === null && showsProducts && !engineAsks) {
     next.offer = 'offered';
     if (anchor) next.anchor = anchor;
     return say('offer', t.offer, { choices: [{ label: t.yes, value: 'flow:routine:yes' }, { label: t.no, value: 'flow:routine:no' }] });
   }
   // One product, once the routine offer has had its turn, never twice for the same product.
-  if (!builder && next.offer !== null && !cart && cartable.length === 1 && !next.cart.asked.includes(cartable[0].product_id)) return askCart(cartable);
+  if (!builder && next.offer !== null && !cart && !engineAsks && cartable.length === 1 && !next.cart.asked.includes(cartable[0].product_id)) return askCart(cartable);
   return { flow: next, followUp: null };
 }
 

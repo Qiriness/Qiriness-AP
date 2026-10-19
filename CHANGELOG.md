@@ -10,6 +10,19 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The advisor, owner's notes v4: the offer waits, caution turns, the hands and body, the eyes, the contact form (2026-10-19)
+
+Owner: 21 conversations tested on the dev store (`data/advisor/qiriness-advisor-conversation-notes-v4.xlsx`). Rules and reasons: DECISIONS.md § « The owner's notes v4 ».
+
+- **The routine offer waits** while the engine asks its question (`followUpFor` `engineAsks`) and when the model's reply ends with a question (`endsWithQuestion`); it comes on a later turn. **No offer** after customer service, a doctor or a pharmacist (`PROFESSIONAL_WORDS`), after `no_match`, or under hand, lip, foot or body products.
+- **Caution turns** (lexicon `caution`, FR/EN: a treatment they are on, a mole, an allergy, a burn, a reaction, pregnancy…): no forced card, no model card unless asked to see it, no offer, no treat, no buttons, no profile-reader call; the model gets a CAUTION note and no ADVICE.
+- **Concern buttons only under the concern question** (`asksConcern`): otherwise dropped and not counted as asked.
+- **Hands, lips, feet, body:** read by the lexicons (« main » only after an article; « le dos des mains »; « sèches », « gercées », "chapped" there are dryness); the engine's `areaChoice` gives up to three of that area's products, daily care first; `area_fallback` in the routine settings (the face's product for dry hands or lips); a body « rituel » does not open the builder, and the builder ignores a body area.
+- **Eyes:** `questions.eye_concern_buttons` (Cernes, Poches, Rides du contour des yeux, Déshydratation) when the eyes are asked about; a face button pressed then records its eye version (`eyeConcernOf`); a face concern asked about the eyes gets eye products, none is said, never the face's; a concern the reader only guessed asks the eye question.
+- **Post-acne marks are dark spots** (FR/EN), so the Éclat Parfait products come; « boutons » alone stays blemishes. **« ma crème »** reads as a cream; **a type asked for with the concern still open** gets three examples, one per range (`type_examples`).
+- **Contact:** the prompt forbids saying the chat reaches customer service; an order question sent to the form gets « N'oubliez pas d'indiquer votre numéro de commande dans le formulaire. » / "Don't forget to include your order number in the form." from the code. **Brand questions** are answered from the shop's description only, never with products.
+- **Measured:** `npm test` 3795/3795 (23 new: `areas.test.mjs` on the real sheet, `conversation-guards.test.mjs`); eval:advisory 43/49, advisor:score 20/54 and eval:resolution 123/123, each identical to before the change. The notes replayed through the engine on the dev store's catalogue: the hand cream, the lip balm, the body cream / milk / oil, the roller, the eye creams, the Éclat Parfait products; spots on the hands: nothing. Live model (`advisor:try-batch -- --only v4_`, 12 situations × FR/EN; `--only` now takes a prefix): 22/24 on the first run, the misses fixed (a guessed eye concern fell back to face products; product chips under the acne-treatment answer; « what would you like to address? » not read as the concern question). The whole batch: 46/50. Of the misses, `single_then_cart` fails the same way on the committed code (no treat after « Non merci » when no concern is known, the treat rule of 2026-10-17), `compare.fr` was model variance, and `v4_eye_contour.en` was fixed after (3/3 since; the bench's routines got the same `eye_concern_buttons`). **Not on the dev store yet**; the settings need `npm run advisor:load` (VALIDATION_LOG § 62).
+
 ## Egress and log ingest: idle polls back off, stamp reads use the index (2026-10-17)
 
 Owner: « 110 mB egress for the 17th … Log ingest 84 mb today and 164 mb yesterday, this is still too high ».

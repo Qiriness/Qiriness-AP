@@ -46,6 +46,13 @@
       "F": { "fr": "Premières rides", "en": "First wrinkles" },
       "Y": { "fr": "Cernes et poches", "en": "Dark circles and puffiness" }
     },
+    "eye_concern_buttons": [
+      { "_about": "Question 1 when the eyes are asked about (owner's notes v4, 2026-10-19: « contour des yeux », then the face's « Rides » gave a face serum). Outside the routine builder; eye concerns, so the eye products answer." },
+      { "value": "dark_circles", "fr": "Cernes", "en": "Dark circles" },
+      { "value": "puffiness", "fr": "Poches", "en": "Puffiness" },
+      { "value": "eye_wrinkles", "fr": "Rides du contour des yeux", "en": "Wrinkles around the eyes" },
+      { "value": "dehydration", "fr": "Déshydratation", "en": "Dehydration" }
+    ],
     "eye_concern": {
       "_about": "The eye routine's question 2: another concern around the eyes (owner, 2026-10-17: one of the three, no « none » button).",
       "options": ["eye_wrinkles", "dehydration", "dark_spots"],
@@ -83,6 +90,12 @@
     "code": "MAROUTINE20",
     "min_products": 3,
     "_min_products": "The routine cards let the customer untick products (owner, 2026-10-18): below this many included products the discount is not applied."
+  },
+
+  "area_fallback": {
+    "_about": "Nothing for the need on that area: the face's product for it, said as such (owner's notes v4, 2026-10-19: « if there is no product the falling back to that cream is fine », for dry hands and lips). Rules tab concern keys. An area or a need not listed: nothing, said.",
+    "hands": { "to": "face", "concerns": ["dryness", "dehydration"] },
+    "lips": { "to": "face", "concerns": ["dryness", "dehydration"] }
   },
 
   "treats": {

@@ -21,8 +21,13 @@ export default {
 
   areas: {
     eyes: /\b(yeux|oeil|contour des yeux|contour de l oeil|regard|paupieres?|cernes?|poches?)\b/,
+    // Owner's notes v4 (2026-10-19): « les mains très sèches », « le dos des mains » (not the body's « dos »).
+    // « main » alone only after an article: every table reads every message, and "my main concern" is English.
+    hands: /\b(mains|(la|ma|une|sa|votre) main|dos des mains|cuticules)\b/,
+    lips: /\b(levres?)\b/,
+    feet: /\b(pieds?|talons?)\b/,
     // Not « après la douche »: « ma peau tiraille après la douche » is about the face too (customer batch).
-    body: /\b(corps|jambes?|bras|dos|peau du corps)\b/,
+    body: /\b(corps|jambes?|bras|dos|peau du corps|coudes?|genoux)\b/,
     face: /\b(visages?|figure|front|joues?|menton)\b/
   },
 
@@ -37,7 +42,8 @@ export default {
     mature_skin: /\b(peau mature|peaux matures)\b/,
     regeneration: /\b(regenerer|regeneration)\b/,
     wrinkles: /\b(rides?|anti ?rides?)\b/,
-    dark_spots: /\b(taches?|hyperpigmentation|pigmentation|masque de grossesse|melasma)\b/,
+    // The marks a spot leaves are spots, not blemishes (owner's notes v4: « marques laissées par d'anciens boutons »).
+    dark_spots: /\b((marques?|traces?|taches?|cicatrices?)( (laissees?|laisses?) par)?( (d|des|de|mes|les|ses))?( anciens?| anciennes?| vieux| vieilles?)? (boutons?|acne|imperfections?)|post ?acne|taches?|hyperpigmentation|pigmentation|masque de grossesse|melasma)\b/,
     uneven_tone: /\b(teint (irregulier|inegal|brouille|pas uniforme|heterogene))\b/,
     redness: /\b(rougeurs?|couperose|rosacee|peau rouge)\b/,
     lack_of_radiance: /\b(manque d eclat|pas d eclat|sans eclat)\b/,
@@ -48,7 +54,8 @@ export default {
     dehydration: /\b(deshydrat\w*|manque d eau)\b/,
     tightness: /\b(tiraill\w*|ma peau tire|peau qui tire|sensation de tension|tire apres)\b/,
     discomfort: /\b(inconfort|picote(ments?)?|demange(aisons?)?|brule|chauffe)\b/,
-    dryness: /\b(secheresse|peau qui pele|desquame|dessechee?|squames|rugueuse)\b/,
+    // A dry hand, lip, foot or body part: no skin type of the face (« les mains très sèches », « lèvres gercées »).
+    dryness: /\b(secheresse|peau qui pele|desquame|dessechee?|squames|rugueuses?|gercee?s?|gercures?|crevasses?|(mains?|levres?|pieds?|talons?|coudes?|genoux|jambes?|corps|bras)( \w+){0,2}? (seche|seches|secs?|abimee?s?))\b/,
     clogged_pores: /\b(points? noirs?|pores? (dilates?|bouches?|obstrues?|visibles?)|pores?)\b/,
     imperfections: /\b(boutons?|imperfections?|acne)\b/,
     excess_sebum: /\b(sebum|exces de sebum)\b/,
@@ -104,8 +111,8 @@ export default {
     eye_care: /\b(un|le|mon) contour des yeux\b/,
     cleanser: /\b(un|une|le|la) (nettoyant|demaquillant)\b/,
     mask: /\b(un|le) masque\b/,
-    // « un creme » typed: still a cream.
-    moisturiser: /\b(une|un|la) (creme|creme de jour|creme hydratante)\b/
+    // « un creme » typed: still a cream. « ma crème visage » too, as « mon sérum » is a serum.
+    moisturiser: /\b(une|un|la|ma|mon) (creme|creme de jour|creme hydratante)\b/
   },
 
   scope: {
@@ -149,5 +156,9 @@ export default {
   // Never « ma routine actuelle… »: a verb of asking comes first.
   routineAsk: /\b(je veux|je voudrais|j aimerais|je cherche|je recherche|il me faut|j ai besoin d|besoin d|proposez moi|propose moi|conseillez moi|suggerez moi|donnez moi|recommandez moi|vous pouvez me (proposer|conseiller|faire)|pouvez vous me (proposer|conseiller|faire)|avez vous) (un |une )?((nouvelle|nouveau|vraie|vrai|bonne|bon|petite|petit|complete|complet|personnalisee|personnalise|quotidienne|quotidien|de soin|de soins|beaute|visage)\s){0,3}(routine|rituel)\b/,
   routineBuilder: /\b((construire|creer|composer|elaborer|monter|etablir|faire|me faire|m aider a (construire|creer|faire)) (ensemble )?(avec moi )?(ma|une|mon|la) ((nouvelle|vraie|bonne|petite) )?routine|routine builder|mode routine|(refaire|recommencer|reprendre|relancer|reessayer|reconstruire) (a zero )?(ma |la |une |mon |le )?(routine|questionnaire|diagnostic)|nouvelle routine)\b/,
-  dontKnow: /\b(je (ne )?sais pas|aucune idee|j en sais rien|pas sure?|je ne suis pas sure?)\b/
+  dontKnow: /\b(je (ne )?sais pas|aucune idee|j en sais rien|pas sure?|je ne suis pas sure?)\b/,
+  // A medical situation, a treatment, an allergy or a reaction (owner's notes v4, 2026-10-19): no product
+  // cards, no routine offer. Not « rougeurs », « peau sensible », « rosacée »: those get sensitive-skin care.
+  // A treatment they are ON, not one they look for (« un traitement anti-acné » is a product request).
+  caution: /\b(traitements? (dermatologiques?|medica(l|ux)|medicamenteux|prescrits?)|(je suis |suis )?sous traitement|je prends (un |une |des )?(traitement|medicament|creme prescrite)|medicaments?|ordonnance|isotretinoine|roaccutane|curacne|antibiotiques?|grains? de beaute|allergi\w*|brulures?|ma peau brule|ca brule|plaques? rouges?|reactions? (allergiques?|cutanees?)|j ai (eu )?une reaction|eczema|psoriasis|dermatite|enceinte|(pendant|durant) (la |ma )?grossesse|allait\w*)\b/
 };

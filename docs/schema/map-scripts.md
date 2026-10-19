@@ -149,7 +149,9 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # order by number, status and days only, logged) ·
 |       |                                # routine-flow (the routine offer, the builder's
 |       |                                # purchase question, the anchor, the treat: the
-|       |                                # follow-up message, words and buttons from code) ·
+|       |                                # follow-up message, words and buttons from code;
+|       |                                # conversation-guards.test: the offer waits, caution
+|       |                                # turns, concern buttons, the order-number reminder) ·
 |       |                                # routine-view (a finished routine → the widget's
 |       |                                # routine cards: both moments, each product's content
 |       |                                # and « Pourquoi pour vous ? », the saving; never
@@ -199,7 +201,9 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # sizes, modules, owned types, gift, spa; with
 |       |                                # routine_steps, the day / night routine in the
 |       |                                # builder; used when a shop has routines + product
-|       |                                # knowledge; day-night.test on the real sheet) ·
+|       |                                # knowledge; day-night.test on the real sheet;
+|       |                                # the hands, lips, feet, body: their own products,
+|       |                                # area_fallback; areas.test on the real sheet) ·
 |       |                                # routine-cases (npm run advisor:score) ·
 |       |                                # routine-knowledge (the Routines tab → day and night
 |       |                                # steps, modules; the Rules tab → concerns, main

@@ -75,6 +75,9 @@ const keyed = (group, order) => order.map((key) => [key, union((l) => l[group][k
 
 const L = {
   eyes: union((l) => l.areas.eyes),
+  hands: union((l) => l.areas.hands),
+  lips: union((l) => l.areas.lips),
+  feet: union((l) => l.areas.feet),
   body: union((l) => l.areas.body),
   face: union((l) => l.areas.face),
   concerns: CONCERN_ORDER.map(([face, eye]) => [union((l) => l.concerns[face]), face, eye]).filter(([re]) => re),
@@ -102,8 +105,25 @@ const L = {
   routineBuilder: union((l) => l.routineBuilder),
   routineAsk: union((l) => l.routineAsk),
   routineWord: union((l) => l.routineWord),
-  dontKnow: union((l) => l.dontKnow)
+  dontKnow: union((l) => l.dontKnow),
+  caution: union((l) => l.caution)
 };
+
+/** The areas the face routines do not cover, read in this order (owner's notes v4): one product for the need. */
+export const BODY_AREAS = ['hands', 'lips', 'feet', 'body'];
+
+/**
+ * A medical situation, a treatment, an allergy or a reaction (FR/EN, owner's notes v4, 2026-10-19):
+ * the reply shows no product and is followed by no routine offer.
+ */
+export function mentionsCaution(message) {
+  return L.caution.test(` ${norm(message)} `);
+}
+
+/** A concern's eye-area version (« Rides » chosen with a button while the eyes are discussed): eye_wrinkles. */
+export function eyeConcernOf(value) {
+  return CONCERN_ORDER.find(([face]) => face === value)?.[1] ?? value;
+}
 
 export const ROUTINE_BUILDER = L.routineBuilder;
 
@@ -114,7 +134,7 @@ export function mentionsRoutine(message) {
 
 /** Every pattern, for the residue: what is left once they have all been removed. */
 const ALL_PATTERNS = [
-  L.eyes, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.concernIs, L.asksFor, L.additive, L.routineBuilder, L.routineAsk, L.dontKnow,
+  L.eyes, L.hands, L.lips, L.feet, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.concernIs, L.asksFor, L.additive, L.routineBuilder, L.routineAsk, L.dontKnow,
   ...L.concerns.map(([re]) => re), ...L.skinTypes.map(([, re]) => re), ...L.sensitivity.map(([, re]) => re),
   ...L.routineSteps.map(([, re]) => re), ...L.desired.map(([, re]) => re), ...L.scope.map(([, re]) => re),
   ...L.routineTime.map(([, re]) => re), ...L.requests.map(([, re]) => re), L.budgetSmall, L.moreOptions, ...L.budgetAmount,
@@ -174,9 +194,11 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
   // Area first: it decides which concern a word means (« rides » near « yeux »).
   const face = L.face.test(text);
   const eyes = L.eyes.test(text) && !face;
-  const body = L.body.test(text);
+  // Hands, lips, feet, then the body (« le dos des mains » is the hands): before the face, as the body was.
+  const bodyArea = BODY_AREAS.find((a) => L[a].test(text)) ?? null;
+  const body = Boolean(bodyArea);
   if (eyes) add('body_area', 'eyes', 'high');
-  else if (body) add('body_area', 'body', 'high');
+  else if (body) add('body_area', bodyArea, 'high');
   else if (face) add('body_area', 'face', 'high');
   const eyeContext = eyes || (!body && !face && profile.body_area?.value === 'eyes');
 
@@ -258,6 +280,8 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
     for (const c of found) c.value = c.face ?? c.value;
     if (!face) add('body_area', 'face', 'high');
   }
+  // …and after the hands, lips, feet or body (« mains sèches », then « et pour les rides ? »): the face's.
+  if (switches && !eyes && !body && !face && BODY_AREAS.includes(profile.body_area?.value) && found[0].value !== profile.primary_concern.value) add('body_area', 'face', 'high');
   if (switches && found[0].value !== profile.primary_concern.value) {
     add('primary_concern', found[0].value, 'high', { replace: true });
     found.slice(1).forEach((c) => add('secondary_concerns', c.value, 'medium'));
@@ -267,9 +291,12 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
   const sens = updates.find((u) => u.field === 'sensitivity' && u.value !== 'none');
   if (sens && !found.length && !hasPrimary) add('primary_concern', sens.value === 'reactive' ? 'reactive_skin' : 'sensitivity', 'medium');
 
-  // Dry skin on the body is a dryness concern: there is no « skin type » of the body.
+  // Dry skin on the body (hands, lips, feet) is a dryness concern: there is no « skin type » of the body.
   const st = updates.find((u) => u.field === 'skin_type');
   if (body && st && ['dry', 'very_dry'].includes(st.value) && !found.length && !hasPrimary) add('primary_concern', 'dryness', 'medium');
 
-  return { updates, routineBuilder: L.routineBuilder.test(` ${norm(message)} `) || L.routineAsk.test(` ${norm(message)} `), moreOptions: L.moreOptions.test(` ${norm(message)} `), residue: residueOf(message) };
+  // A « rituel » for the hands, the feet or the body is not the face's routine builder (owner's notes v4):
+  // there is no body routine yet, their products answer it.
+  const routineWords = L.routineBuilder.test(` ${norm(message)} `) || L.routineAsk.test(` ${norm(message)} `);
+  return { updates, routineBuilder: routineWords && !(body && !face), moreOptions: L.moreOptions.test(` ${norm(message)} `), residue: residueOf(message) };
 }

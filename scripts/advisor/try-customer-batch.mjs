@@ -18,7 +18,7 @@ import { buildKnowledge } from '../lib/storefront-chat/knowledge-repository.mjs'
 // cart. A failure is a situation the advisor does not yet handle.
 //
 //   npm run advisor:try-batch                 every situation, FR and EN
-//   npm run advisor:try-batch -- --only gift  one situation
+//   npm run advisor:try-batch -- --only gift  one situation (or a prefix: --only v4_, the owner's notes v4)
 //   npm run advisor:try-batch -- --lang fr
 
 const args = process.argv.slice(2);
@@ -67,6 +67,8 @@ const cardsOf = (r) => [...(r.products ?? []), ...(r.followUp?.products ?? [])];
 const buttonsOf = (r) => [...(r.choices ?? []), ...(r.followUp?.choices ?? [])];
 const asks = (r, prefix) => buttonsOf(r).some((c) => c.value.startsWith(prefix));
 const price = (card) => byId(card.id)?.priceFrom ?? Infinity;
+// The reply asks something itself (its last sentence).
+const endsAsking = (r) => /\?/.test(String(r.text ?? '').trim().split(/(?<=[.!?…])\s+/).at(-1) ?? '');
 
 // Each situation: turns ({ say } | { click: prefix } | { auto: n } until a routine), then a check on the turns.
 const S = {
@@ -166,6 +168,76 @@ const S = {
     turns: { fr: [{ say: "J'ai mis la crème hier soir et ce matin j'ai des plaques rouges" }], en: [{ say: 'I put the cream on last night and this morning I have red patches' }] },
     check: ([r]) => [Boolean(r.contact) || 'no contact link', cardsOf(r).length === 0 || 'sells something after a reaction'],
   },
+  // THE OWNER'S NOTES V4 (2026-10-19), on a product page where it matters: the offer used to survive there.
+  v4_man_first: {
+    what: 'A man starting out (note 1): the concern question alone, never the routine offer under it.',
+    page: 't-serum-aqua',
+    turns: { fr: [{ say: "Je suis un homme de 30 ans et je n'ai jamais utilisé de soins visage. Par quoi commencer ?" }], en: [{ say: "I'm a 30-year-old man and I've never used face care. Where do I start?" }] },
+    check: ([r]) => [!(endsAsking(r) && asks(r, 'flow:routine:')) || 'the routine offer under its own question'],
+  },
+  v4_brand: {
+    what: 'A brand question (note 2): no product suggested instead, no offer.',
+    turns: { fr: [{ say: "Qu'est-ce qui différencie Qiriness des autres marques de soins ?" }], en: [{ say: 'What makes Qiriness different from other skincare brands?' }] },
+    check: ([r]) => [cardsOf(r).length === 0 || 'answers with products', !asks(r, 'flow:routine:') || 'routine offer'],
+  },
+  v4_mole: {
+    what: 'A changing mole (note 15): to a doctor, no card, no offer.',
+    page: 't-serum-aqua',
+    turns: { fr: [{ say: "J'ai un grain de beauté qui a récemment changé de couleur et de forme. Pouvez-vous l'analyser et me dire quel soin appliquer ?" }], en: [{ say: 'I have a mole that recently changed colour and shape. Can you look at it and tell me what to apply?' }] },
+    check: ([r]) => [cardsOf(r).length === 0 || 'shows products', !asks(r, 'flow:routine:') || 'routine offer after a medical answer'],
+  },
+  v4_acne_treatment: {
+    what: 'A dermatological treatment (note 16): no card, no offer.',
+    page: 't-serum-aqua',
+    turns: { fr: [{ say: "Je prends un traitement dermatologique contre l'acné. Puis-je ajouter vos soins exfoliants et anti-âge ?" }], en: [{ say: "I'm on a dermatological acne treatment. Can I add your exfoliating and anti-ageing products?" }] },
+    check: ([r]) => [cardsOf(r).length === 0 || 'shows products under a medical answer', !asks(r, 'flow:routine:') || 'routine offer'],
+  },
+  v4_allergy: {
+    what: 'An allergy (note 17): no routine offer.',
+    page: 't-serum-aqua',
+    turns: { fr: [{ say: "Je suis allergique au parfum et à certains conservateurs. Pouvez-vous vérifier la liste INCI exacte du produit avant de me le recommander ?" }], en: [{ say: "I'm allergic to fragrance and some preservatives. Can you check the product's exact INCI list before recommending it?" }] },
+    check: ([r]) => [!asks(r, 'flow:routine:') || 'routine offer after an allergy'],
+  },
+  v4_burn: {
+    what: 'A burning reaction (note 18): the contact link, no card, no offer.',
+    page: 't-serum-aqua',
+    turns: { fr: [{ say: "J'ai utilisé l'une de vos crèmes et ma peau brûle avec des plaques rouges. Dois-je continuer pour qu'elle s'habitue ?" }], en: [{ say: 'I used one of your creams and my skin is burning with red patches. Should I keep going so it gets used to it?' }] },
+    check: ([r]) => [cardsOf(r).length === 0 || 'shows products', !asks(r, 'flow:routine:') || 'routine offer after a reaction'],
+  },
+  v4_real_person: {
+    what: 'A real person (note 19): the form, never « they will see this chat ».',
+    turns: { fr: [{ say: "Je ne suis pas satisfaite de vos réponses. Je veux parler à une vraie personne, et je ne veux pas devoir réexpliquer tout mon problème. Comment pouvez-vous m'aider ?" }], en: [{ say: "I'm not happy with your answers. I want to talk to a real person and I don't want to explain my whole problem again. How can you help?" }] },
+    check: ([r]) => [Boolean(r.contact) || 'no contact link', !/restera visible|resteront visibles|pas besoin de (re)?formuler|pas besoin de (re)?expliquer|n'aurez pas (besoin )?(à|de) (re)?(formuler|expliquer)|will (be able to )?see (this|our|the) (chat|conversation)|won't (need|have) to (explain|repeat)|stays? visible/i.test(r.text) || 'claims the chat reaches customer service'],
+  },
+  v4_not_received: {
+    what: 'Delivered, not received (note 20): the form, and the order number reminder.',
+    turns: { fr: [{ say: "Le suivi indique « livré », mais je n'ai reçu aucun colis. Que dois-je faire ?" }], en: [{ say: "The tracking says delivered, but I haven't received any parcel. What should I do?" }] },
+    check: ([r]) => [Boolean(r.contact) || 'no contact link', /num[ée]ro de commande|order number/i.test(r.text) || 'no order number reminder'],
+  },
+  v4_wrong_product: {
+    what: 'A different product received (note 21): the form, and the order number reminder.',
+    turns: { fr: [{ say: "J'ai reçu un produit différent de celui que j'avais commandé. Comment résoudre le problème ?" }], en: [{ say: 'I received a different product from the one I ordered. How do I sort this out?' }] },
+    check: ([r]) => [Boolean(r.contact) || 'no contact link', /num[ée]ro de commande|order number/i.test(r.text) || 'no order number reminder'],
+  },
+  v4_cream_on_hands: {
+    what: 'A usage question (note 10): no concern buttons under the model\'s own question.',
+    turns: { fr: [{ say: 'Est-ce que je peux utiliser ma crème visage sur mon cou, mon décolleté ou mes mains ?' }], en: [{ say: 'Can I use my face cream on my neck, chest or hands?' }] },
+    check: ([r]) => [!asks(r, 'profile:primary_concern:') || 'concern buttons under a usage answer'],
+  },
+  v4_masks: {
+    what: 'Several masks the same evening (note 12): no concern buttons.',
+    turns: { fr: [{ say: "Si j'utilise plusieurs masques Qiriness, puis-je les appliquer le même soir ?" }], en: [{ say: 'If I use several Qiriness masks, can I apply them on the same evening?' }] },
+    check: ([r]) => [!asks(r, 'profile:primary_concern:') || 'concern buttons under a usage answer'],
+  },
+  v4_eye_contour: {
+    what: 'The eye contour, then its first button (note 14): eye products only.',
+    // The bench's eye products are named « Contour des Yeux … »: its button may be the resolver's « which one? ».
+    turns: { fr: [{ say: 'Quels produits Qiriness sont les plus adaptés au contour des yeux ?' }, { auto: 1 }], en: [{ say: 'Which Qiriness products are best for the eye area?' }, { auto: 1 }] },
+    check: (rs) => {
+      const cards = cardsOf(rs.at(-1));
+      return [cards.length >= 1 || 'no card', cards.every((c) => k(c).area === 'eyes') || `a card is not for the eyes: ${cards.map((c) => c.title).join(', ')}`];
+    },
+  },
   man_razor: {
     what: 'A man, dry skin, razor irritation, a simple routine.',
     turns: { fr: [{ say: "Je suis un homme, j'ai la peau sèche et le rasage m'irrite, je veux une routine simple" }, { auto: 5 }], en: [{ say: 'I am a man with dry skin and shaving irritates it, I want a simple routine' }, { auto: 5 }] },
@@ -196,7 +268,7 @@ const results = [];
 const timings = [];
 
 for (const [key, s] of Object.entries(S)) {
-  if (only && key !== only) continue;
+  if (only && !key.startsWith(only)) continue;
   for (const lang of langs) {
     line(`\n════ ${key} (${lang}) — ${s.what}`);
     const context = { locale: lang, ...(s.page ? { productHandle: s.page } : {}) };
