@@ -45,7 +45,7 @@
       "button": {{ banner_button | json }},
       "close": {{ 'banner.close' | t | json }},
       "action": {{ 'actions.build_routine' | t | json }},
-      "days": {{ block.settings.banner_days | json }}
+      "hours": {{ block.settings.banner_hours | json }}
     },
     "viewer": {% if customer %}{{ customer.id | append: '' | json }}{% else %}""{% endif %},
     "quickActions": [
@@ -125,7 +125,8 @@
         "banner_eyebrow": {{ 'routine.banner_eyebrow' | t | json }},
         "banner_title": {{ 'routine.banner_title' | t | json }},
         "banner_text": {{ 'routine.banner_text' | t | json }},
-        "banner_badge": {{ 'routine.banner_badge' | t | json }},
+        "banner_add": {{ 'routine.banner_add' | t | json }},
+        "banner_added": {{ 'routine.banner_added' | t | json }},
         "add": {{ 'routine.add' | t | json }},
         "added": {{ 'routine.added' | t | json }},
         "add_again": {{ 'routine.add_again' | t | json }},
@@ -197,7 +198,7 @@
     { "type": "checkbox", "id": "banner_enabled", "label": "Show the routine banner", "info": "A bar across the bottom of the screen; its button opens the advisor and starts the routine builder.", "default": true },
     { "type": "text", "id": "banner_text", "label": "Banner text", "info": "Leave empty for the default text, in the visitor's language." },
     { "type": "text", "id": "banner_button", "label": "Banner button", "info": "Leave empty for the default label, in the visitor's language." },
-    { "type": "range", "id": "banner_days", "label": "Hidden after closing for", "min": 1, "max": 30, "step": 1, "unit": "d", "default": 7 }
+    { "type": "range", "id": "banner_hours", "label": "Hidden after closing for", "min": 1, "max": 72, "step": 1, "unit": "h", "default": 4 }
   ]
 }
 {% endschema %}

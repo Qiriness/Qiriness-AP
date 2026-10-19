@@ -80,12 +80,12 @@
   /*
    * THE ROUTINE BANNER (owner, 2026-10-19): a bar across the bottom of the screen inviting the
    * visitor to build their routine for the shop's offer. Its button opens the advisor and starts
-   * the routine builder; its × hides it for `days` days (this browser only). Hidden while the
+   * the routine builder; its × hides it for `hours` hours (this browser only). Hidden while the
    * panel is open; the launcher sits above it.
    */
   function routineBanner(root, config, start) {
     var banner = config.banner || {};
-    if (!banner.enabled || !banner.text || !banner.button || bannerClosed(banner.days)) return;
+    if (!banner.enabled || !banner.text || !banner.button || bannerClosed(banner.hours)) return;
     var bar = document.createElement('div');
     bar.className = 'sa-banner';
     bar.setAttribute('role', 'region');
@@ -135,10 +135,10 @@
     }, BANNER_DELAY_MS);
   }
 
-  function bannerClosed(days) {
+  function bannerClosed(hours) {
     try {
       var at = Number(window.localStorage.getItem(BANNER_KEY));
-      return Boolean(at) && Date.now() - at < (Number(days) || 7) * 86400000;
+      return Boolean(at) && Date.now() - at < (Number(hours) || 4) * 3600000;
     } catch (error) {
       return false;
     }

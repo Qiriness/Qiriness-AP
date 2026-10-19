@@ -535,6 +535,11 @@
       addButton.textContent = fill(added ? (rs.add_again || rs.add) : rs.add || 'Ajouter — {amount}', { amount: money(pct ? after : total) });
       addButton.disabled = !items.length;
       addButton.className = 'sa-routine__add' + (added ? ' sa-routine__add--done' : '');
+      if (bannerButton) {
+        bannerButton.textContent = added ? (rs.banner_added || rs.added) : (rs.banner_add || 'Ajouter ma routine');
+        bannerButton.disabled = !items.length;
+        bannerButton.className = 'sa-routine__badge' + (added ? ' sa-routine__badge--done' : '');
+      }
       if (!added) addStatus.textContent = '';
       addStatus.hidden = !addStatus.textContent;
       cards.forEach(function (c) { c(); });
@@ -634,9 +639,11 @@
       return node;
     }
 
-    addButton.addEventListener('click', function () {
+    // The footer button and the offer banner's « Ajouter ma routine » (owner, 2026-10-19) add the same selection.
+    function addSelection() {
       if (addButton.disabled || !selection().length) return;
       addButton.disabled = true;
+      if (bannerButton) bannerButton.disabled = true;
       addRoutineToCart(view, choice).then(function (result) {
         persist();
         addStatus.textContent = routineAddedText(view, result, strings);
@@ -644,17 +651,22 @@
       }).catch(function () {
         addButton.textContent = strings.addFailed || 'Réessayer';
         addButton.disabled = false;
+        if (bannerButton) bannerButton.disabled = false;
       });
-    });
+    }
+    addButton.addEventListener('click', addSelection);
 
-    var banner = discount && typeof discount.percentage === 'number'
+    var offered = discount && typeof discount.percentage === 'number';
+    var bannerButton = offered ? el('button', { type: 'button', className: 'sa-routine__badge' }) : null;
+    if (bannerButton) bannerButton.addEventListener('click', addSelection);
+    var banner = offered
       ? el('div', { className: 'sa-routine__banner' }, [
         el('div', {}, [
           el('p', { className: 'sa-routine__banner-eyebrow', text: rs.banner_eyebrow }),
           el('p', { className: 'sa-routine__banner-title', text: fill(rs.banner_title, { percent: String(discount.percentage).replace('.', lang === 'en' ? '.' : ',') }) }),
           el('p', { className: 'sa-routine__banner-text', text: fill(rs.banner_text, { min: discount.min_products }) })
         ]),
-        el('span', { className: 'sa-routine__badge', text: rs.banner_badge })
+        bannerButton
       ])
       : null;
 

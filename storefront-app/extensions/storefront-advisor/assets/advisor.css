@@ -584,12 +584,19 @@
 .sa-routine__banner-text { margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.75); }
 .sa-routine__badge {
   flex: none;
-  padding: 10px 16px;
-  border: 1px dashed rgba(255, 255, 255, 0.6);
-  font-size: 12px;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  padding: 11px 16px;
+  border: 1px solid #ffffff;
+  border-radius: 0;
+  background: #ffffff;
+  color: var(--sa-accent) !important;
+  font-size: 12px !important;
+  letter-spacing: 0.16em !important;
+  text-transform: uppercase !important;
+  cursor: pointer;
 }
+.sa-routine__badge:hover { background: transparent; color: #ffffff !important; }
+.sa-routine__badge:disabled { opacity: 0.6; cursor: default; }
+.sa-routine__badge--done { background: transparent; color: #ffffff !important; }
 
 .sa-routine__moments { display: grid; gap: 18px; }
 .sa-panel--wide .sa-routine__moments { grid-template-columns: 1fr 1fr; align-items: start; }
@@ -642,8 +649,8 @@ a.sa-rcard__title:hover { text-decoration: underline; text-underline-offset: 3px
 .sa-rcard__aside { text-align: right; }
 .sa-rcard__price { margin: 0; font-size: 15px; }
 .sa-rcard__volume { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sa-muted); }
-.sa-rcard__include { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
-.sa-rcard__check { width: 16px; height: 16px; margin: 0; accent-color: var(--sa-ink); }
+.sa-rcard__include { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; letter-spacing: 0.1em; white-space: nowrap; text-transform: uppercase; cursor: pointer; }
+.sa-rcard__check { flex: none; width: 13px; height: 13px; margin: 0; accent-color: var(--sa-ink); }
 .sa-rcard__owned { display: inline-block; max-width: 130px; font-size: 11px; line-height: 1.35; color: var(--sa-muted); }
 .sa-rcard__why { margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--sa-line); }
 .sa-rcard__why-text {
