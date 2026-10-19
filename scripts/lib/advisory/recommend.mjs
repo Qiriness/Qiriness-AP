@@ -337,7 +337,7 @@ export function createAdvisor(rawConfig, catalogue, { knowledge = null, routines
   // The brand's own age ranges (its Rules tab) are the age values a chip or the reader may set.
   const brandAllowed = routines.age_ranges?.length ? { ...allowed, age_band: [...routines.age_ranges.map((a) => a.key), 'unknown'] } : allowed;
   const foundation = createFoundationAdvisor({ routines, catalogue, knowledge, allowed: brandAllowed, question });
-  return { ...playbookAdvisor, allowed: brandAllowed, engine: 'foundations', advise: foundation.advise, treat: foundation.treat };
+  return { ...playbookAdvisor, allowed: brandAllowed, engine: 'foundations', advise: foundation.advise, treat: foundation.treat, routineDiscount: routines.routine_discount?.code ?? null, routineDiscountRule: routines.routine_discount ?? null, routineLabels: routines.labels ?? {}, variantChoice: routines.variant_choice ? { ...routines.variant_choice, skin_texture: routines.skin_type_texture ?? {} } : null };
 }
 
 function playbookSummary(selection, scope = null) {

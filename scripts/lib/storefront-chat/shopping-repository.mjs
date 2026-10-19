@@ -42,6 +42,33 @@ export function createShoppingReader(db, { now = Date.now, ttlMs = SHOPPING_TTL_
   };
 }
 
+/**
+ * THE ROUTINE DISCOUNT'S OWN RULE (owner, 2026-10-18: the routine cards show « Économie »), read on
+ * its own, by its code, and never added to the shopping data: a private code's rule reaches no tool
+ * and no model. Its percentage and minimum only (`routineReward`).
+ */
+export const ROUTINE_CODE_COLUMNS = 'codes,status,starts_at,ends_at,rule_snapshot';
+
+export function createRoutineCodeReader(db, { now = Date.now, ttlMs = SHOPPING_TTL_MS } = {}) {
+  const cache = new Map();
+  return async function readRoutineCode(shopDomain, code) {
+    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shopDomain || '') || !/^[A-Za-z0-9_-]{1,80}$/.test(code || '')) return { status: 'unavailable' };
+    const key = `${shopDomain}:${code}`;
+    const cached = cache.get(key);
+    if (cached && now() - cached.at < ttlMs) return cached.value;
+    const value = (async () => {
+      const shops = await db.selectAll('shops', { shop_domain: shopDomain }, 'id');
+      if (!shops[0]?.id) return { status: 'unavailable' };
+      const rows = await db.selectAll('promotions', { shop_id: shops[0].id, deleted_at: { operator: 'is', value: 'null' }, method: 'code', codes: { operator: 'cs', value: JSON.stringify([{ code }]) } }, ROUTINE_CODE_COLUMNS);
+      return { status: 'ok', cartCodeRows: rows };
+    })();
+    cache.set(key, { at: now(), value });
+    if (cache.size > 10) cache.delete(cache.keys().next().value);
+    value.catch(() => cache.delete(key));
+    return value;
+  };
+}
+
 export function isPublicPromotion(p) {
   return p?.method === 'code' ? p.offerable_in_replies === true : p?.method === 'automatic' && p.describable_in_replies === true;
 }

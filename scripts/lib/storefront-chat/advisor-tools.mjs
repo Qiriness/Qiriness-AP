@@ -19,6 +19,13 @@ import { turnEvents } from '../advisory/events.mjs';
 import { emptyAdvisorState } from './advisor-state.mjs';
 
 export const ADVISE = 'advise';
+/**
+ * Why a product suits them, as the reply may say it: their skin and their concern only (owner,
+ * 2026-10-17: « only talk about adapted to skin type and concern, not tranche d'age »). The other codes
+ * (range, age range, moment, the step's own product) stay in the advice, the trace and the events.
+ */
+const SPOKEN_REASONS = new Set(['primary_concern', 'secondary_concern', 'skin_type_match', 'texture_match', 'sensitive_skin_match', 'customer_interest', 'cheaper_alternative', 'cheaper_bundle', 'cheaper_generic', 'replaces_missing_step', 'concern_needs_specific_product']);
+const spoken = (codes) => (codes ?? []).filter((c) => SPOKEN_REASONS.has(String(c).split(':')[0]));
 export const CHANNEL = 'storefront_chat';
 /** Chip value prefix: `profile:<field>:<value>[+<value>]`. */
 export const PROFILE_CHOICE = /^profile:([a-z_]{1,40}):([a-z0-9_+]{1,80})$/;
@@ -76,6 +83,13 @@ export function adviseToolDefinition(advisor, { builder = false } = {}) {
  *   pinned?: string[]        products to build the routine around (their interest), in the builder only
  * }} input
  */
+/** The builder's questions' fields: a new routine asks them all again. */
+const BUILDER_FIELDS = ['primary_concern', 'secondary_concerns', 'skin_type', 'skin_behaviour', 'eye_concern', 'sensitivity', 'current_routine', 'routine_scope', 'age_band', 'age', 'routine_time', 'desired_care_type', 'body_area'];
+
+function withoutBuilderAnswers(profile) {
+  return Object.fromEntries(Object.entries(profile ?? {}).filter(([field]) => !BUILDER_FIELDS.includes(field)));
+}
+
 export function createAdvisorTurn({ advisor, state = null, message, choice = null, action = null, locale = 'fr', catalogue, money, productQuestion = false, turn = 0, consultation = false, stillUsing = [], ranges = [], pinned = [] }) {
   const before = state ?? emptyAdvisorState();
   const lang = String(locale || 'fr').slice(0, 2);
@@ -86,6 +100,10 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   const routineSize = lex.updates.some((u) => u.field === 'routine_scope' && u.value !== 'targeted');
   const builderAsked = action === 'build_routine' || lex.routineBuilder || routineSize;
   let mode = builderAsked ? 'routine_builder' : before.mode;
+  // THE BUILDER ASKED FOR AGAIN (owner, 2026-10-18: « the agent just returns the routine rather than
+  // restarting the questionnaire »): after a routine, or once its questions were asked, a new request
+  // starts from the first question; only what this message says counts.
+  const restarted = builderAsked && before.mode !== 'routine_builder' && before.asked.some((f) => BUILDER_FIELDS.includes(f));
 
   const updates = [];
   const picked = typeof choice === 'string' ? choice.match(PROFILE_CHOICE) : null;
@@ -101,10 +119,15 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
   }
   // Asking for a routine supersedes « one product of this type »: the routine
   // offer after « pour hydrater mon visage » built one cream (live run, 2026-10-13).
-  const base = builderAsked ? withoutSingleProduct(before.profile) : before.profile;
+  // A new main concern said in words, without a care type: the earlier type was for the earlier need
+  // (« un sérum » for hydration, then « un produit pour les rides »: every type for the wrinkles).
+  const newMain = updates.some((u) => u.field === 'primary_concern' && u.replace && u.value !== before.profile.primary_concern?.value) && !updates.some((u) => u.field === 'desired_care_type');
+  // Starting over also drops what limited the earlier search to one product (a « sérum » said before
+  // the restart made the new routine a choice between a serum and a cream).
+  const base = restarted ? withoutSingleProduct(withoutBuilderAnswers(before.profile)) : builderAsked || newMain ? withoutSingleProduct(before.profile) : before.profile;
   let { profile, changed } = mergeProfile(base, updates, { allowed: advisor.allowed, turn });
   let advice = null;
-  let asked = [...before.asked];
+  let asked = restarted ? before.asked.filter((f) => !BUILDER_FIELDS.includes(f)) : [...before.asked];
 
   // Advice is computed when the customer is in a consultation: they said
   // something about their skin or routine, clicked a profile chip, or are
@@ -124,6 +147,8 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
 
   return {
     get mode() { return mode; },
+    /** The builder started over this turn: the routine's flow (treat, cart question) starts over too. */
+    get restarted() { return restarted; },
     get advice() { return advice; },
     get profile() { return profile; },
     /** What the lexicon read, and what it left unexplained (`residue`): the reader's gate. */
@@ -242,10 +267,13 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
         step: s.slot,
         // The day routine (morning) or the night routine (evening).
         ...(s.part ? { time: s.part } : {}),
+        // Its ritual stage (prepare, activate, optimise, regenerate): the reply names the step by it.
+        ...(s.stage ? { stage: s.stage } : {}),
         optional: s.optional || undefined,
-        product: slim(byId.get(s.product_id), money),
+        // Prices are on the cards (owner, 2026-10-17): a routine's products come without one.
+        product: slim(byId.get(s.product_id), money, { price: !(a.status === 'recommended' && a.steps.length > 1) }),
         ...(s.customer_interest ? { customer_interest: true } : {}),
-        reason_codes: s.reason_codes,
+        reason_codes: spoken(s.reason_codes),
         // Top choices: the alternatives are presented too, so they carry their facts.
         ...(s.top_choices ? { top_choices: true } : {}),
         alternatives: s.alternatives.map((x) => (s.top_choices ? { ...slim(byId.get(x.product_id), money) } : { handle: x.handle, name: byId.get(x.product_id)?.name ?? null }))
@@ -258,8 +286,9 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
         // also_in_day_routine: the day routine's product, used in the evening too.
         ...(s.product_id && s.reason === 'also_in_day_routine' ? { product: byId.get(s.product_id)?.name ?? null } : s.product_id && s.reason !== 'over_budget' ? { customer_product: byId.get(s.product_id)?.name ?? null } : {})
       })),
-      // The routine's price, and what a budget left out: quoted from here, never computed by the model.
-      ...(typeof a.total_price === 'number' ? { total_price: money(a.total_price) } : {}),
+      // The routine's price only with a budget (what it was cut to fit): otherwise the cards show prices
+      // and the reply names none (owner, 2026-10-17).
+      ...(typeof a.total_price === 'number' && (a.budget || a.cheaper_than || a.playbook?.key === 'treat') ? { total_price: money(a.total_price) } : {}),
       ...(a.cheaper_than ? { cheaper_than: byId.get(a.cheaper_than)?.name ?? null } : {}),
       ...(a.budget ? { budget: { max: money(a.budget.max), total: money(a.budget.total), left_out: a.budget.dropped.length } } : {}),
       // The product they came for, when it could not go in: say why, briefly.
@@ -286,7 +315,7 @@ function modelUpdates(list) {
 }
 
 /** The facts of a step's product: from product data only (rule 11). */
-function slim(p, money) {
+function slim(p, money, { price = true } = {}) {
   if (!p) return null;
   return {
     handle: p.handle,
@@ -294,7 +323,7 @@ function slim(p, money) {
     short: clip(p.short, 220),
     key_ingredients: clip(p.keyIngredients, 220),
     how_to_use: clip(p.usage, 180),
-    price_from: p.priceFrom === null ? null : money(p.priceFrom),
+    ...(price ? { price_from: p.priceFrom === null ? null : money(p.priceFrom) } : {}),
     in_stock: p.inStock
   };
 }

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { loadConfig, loadEnv } from '../lib/sync-config.mjs';
 import { createSupabaseClient, supabaseSelect, supabaseUpdate } from '../lib/supabase-rest-client.mjs';
 import { devStoreTarget } from './dev-store-config.mjs';
+import { copyProductionContent } from './copy-production-content.mjs';
 
 // DEV STORE ONLY. Copies the dev store's products (with stock), collections
 // (with membership) and discounts into Supabase under its OWN shop row,
@@ -47,5 +48,8 @@ if (!dryRun) {
   if (!shop) throw new Error(`No development shop row for ${target.domain} after the sync.`);
   await supabaseUpdate(supabase, 'advice_collections', { shop_id: shop.id, is_active: false }, { is_active: true }, { returning: 'minimal' });
   run('sync-shopify-collections.mjs');
+  // The routine cards' content (ingredients, benefits, usage, ratings), from production by handle.
+  const content = await copyProductionContent(supabase, shop.id);
+  console.log(`\n→ production content: ${content.updated} of ${content.of ?? 0} dev products filled${content.reason ? ` (${content.reason})` : ''}.`);
   console.log(`\nDone. Set STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN=${target.domain} for the advisor to use this catalogue.`);
 }

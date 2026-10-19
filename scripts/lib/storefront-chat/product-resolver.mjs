@@ -76,15 +76,21 @@ function headOf(title) {
 
 /**
  * @param {import('./product-repository.mjs').Catalogue} catalogue
- * @param {{ aliases?: Map<string, string[]> }} [options]  curated alias → product ids (none yet)
+ * @param {{ aliases?: Map<string, string[]>, ranges?: Map<string, string> }} [options]
+ *   aliases: curated alias → product ids (none yet).
+ *   ranges: handle → the product's range, from the brand's product knowledge. A range not in
+ *   the title still names the product: « la crème contour des yeux Temps Sublime » is « Crème
+ *   Contour des Yeux Anti-âge - Caresse Regard Sublime » (owner, 2026-10-19: the comparison
+ *   offered three face creams). Read when matching a name only, never to learn the vocabulary.
  */
-export function buildResolutionIndex(catalogue, { aliases = new Map() } = {}) {
+export function buildResolutionIndex(catalogue, { aliases = new Map(), ranges: productRanges = new Map() } = {}) {
   const products = catalogue.products.map((p) => {
     const segments = String(p.name).split(SEGMENT_SPLIT).filter((s) => s.trim());
     const commercial = commercialName(p.name);
     return {
       product: p,
       tokens: new Set(foldedTokens(p.name)),
+      rangeTokens: new Set(productRanges.get(p.handle) ? foldedTokens(productRanges.get(p.handle)) : []),
       commercial,
       commercialKey: ` ${normalise(commercial)} `,
       commercialTokens: new Set(foldedTokens(commercial)),
@@ -223,6 +229,16 @@ export function resolveProducts(message, { index, pageProductId = null, refs = n
       const sibling = chunks[i + 1]?.identity.length ? chunks[i + 1] : chunks[i - 1]?.identity.length ? chunks[i - 1] : null;
       if (sibling) c.identity = [...sibling.identity];
     }
+    // « …Temps Sublime Riche et la Light »: a short chunk with one name word and no type is
+    // another product of the line just named (owner, 2026-10-19: the comparison flow).
+    if (c.identity.length === 0 && c.lone && c.short && i > 0 && chunks[i - 1].identity.length) {
+      const before = chunks[i - 1];
+      const line = before.identity.filter((t) => t !== c.lone && index.products.some((e) => e.tokens.has(t) && e.tokens.has(c.lone)));
+      if (line.length) {
+        c.identity = [...line, c.lone];
+        if (!c.care.length) c.care = [...before.care];
+      }
+    }
   }
   const discovery = isDiscoveryQuestion(normalise(text));
   for (const c of chunks) {
@@ -297,7 +313,9 @@ function analyse(chunkText, index) {
   // parfum », « la lune est belle »: a name word used as plain French — an
   // article is not enough. « le masque Lune » is a reference; two name words
   // (« la Lip Beauty ») need no anchor at all.
-  if (identity.length === 1 && !anchored(identity[0])) identity = [];
+  // Kept aside: « et la Light » after « la Caresse Temps Sublime Riche » borrows its line below.
+  const lone = identity.length === 1 && !anchored(identity[0]) ? identity[0] : null;
+  if (lone) identity = [];
 
   const careAt = words.findIndex((w) => isCare(w));
   const indefinite = careAt > 0 && INDEFINITE_WORDS.has(words[careAt - 1]);
@@ -316,6 +334,8 @@ function analyse(chunkText, index) {
     tokens,
     corrections,
     identity,
+    lone,
+    short: words.length <= 3,
     indefinite,
     bare,
     // « la crème licorne magique »: a product named after a DEFINITE article in
@@ -357,7 +377,7 @@ function resolveIdentityChunk(chunk, index, out, { exclusiveOnly = false } = {})
     }
   }
 
-  const pool = index.products.filter((e) => chunk.identity.every((t) => e.tokens.has(t)));
+  const pool = index.products.filter((e) => chunk.identity.every((t) => e.tokens.has(t) || e.rangeTokens?.has(t)));
   if (!pool.length) {
     out.unresolved.push(mention);
     return;

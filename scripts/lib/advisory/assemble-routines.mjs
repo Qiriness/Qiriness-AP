@@ -103,10 +103,29 @@ export function assembleRoutines({ routines, rules, products, settings }) {
       age_ranges: ageRanges,
       routine_times: rules.routine_times ?? [],
       skin_type_texture: rules.skin_type_texture ?? {},
+      // The concerns' and skin types' names (Rules tab), for the routine cards' « Pourquoi pour vous ? ».
+      labels: {
+        concerns: Object.fromEntries(rules.concerns.map((c) => [c.key, { fr: c.label_fr, en: c.label_en ?? c.label_fr }])),
+        skin: rules.skin_labels ?? {},
+        main: Object.fromEntries(foundations.map((f) => [f.key, { fr: f.name_fr, en: f.name_en ?? f.name_fr }])),
+      },
       modules,
       questions: settings.questions ?? {},
       treats: settings.treats ?? {},
+      // The code a finished routine's « add to cart » applies (owner, 2026-10-17), never named to the customer.
+      // Its minimum (owner, 2026-10-18): a routine the customer trims below it on the cards loses the discount.
+      // The size or texture a routine product is added in (owner, 2026-10-18): its texture from their skin type.
+      variant_choice: variantChoice(settings.variant_choice),
+      routine_discount: settings.routine_discount?.code ? { code: String(settings.routine_discount.code), min_products: Math.max(1, Number(settings.routine_discount.min_products) || 1) } : null,
     },
     warnings,
   };
+}
+
+/** The variant words, lower-cased; none: no choice made, the customer picks the size on the page. */
+function variantChoice(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const words = (list) => (Array.isArray(list) ? list : []).map((w) => String(w).trim().toLowerCase()).filter(Boolean);
+  const textures = Object.fromEntries(Object.entries(raw.textures ?? {}).map(([k, list]) => [k, words(list)]).filter(([, list]) => list.length));
+  return { textures, default: typeof raw.default === 'string' && textures[raw.default] ? raw.default : null, avoid: words(raw.avoid) };
 }

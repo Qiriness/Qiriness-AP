@@ -20,6 +20,48 @@ Owner: « 110 mB egress for the 17th … Log ingest 84 mb today and 164 mb yeste
 - **The stamp reads use the index:** `updated_at.desc`, not `desc.nullslast`, in `change-gate.mjs` and `customer-lookup.mjs`. Customers went from 49,486 blocks / 1.6 s to 4 blocks; tickets and orders from ~740 and ~1,050 to 4. Guard: `scripts/lib/stamp-order-uses-index.test.mjs`.
 - Tests: agent 2151/2151, plus the new tests. A sealed run (fake writes) waited 10 → 20 → 40 s with ~47 reads per idle poll. **Not deployed**; re-measure a day after deploy against a fresh snapshot (`scripts/.tmp-egress-snap.mjs`).
 
+## The routine cards, second pass: the cart question, re-adding, the size, starting over (2026-10-18)
+
+- **The cart question is back under the routine cards;** its « Oui » adds what the cards include (the reply's `cart.routine_ref`), then the treat.
+- **No model reply above the cards:** the finished routine is a code turn with one sentence (`model_skipped: 'routine_cards'`).
+- **The cards stay live after an add:** tick, untick, complete, and add again; the button adds what the cart (`/cart.js`) lacks, so a cleared cart is refilled and nothing is doubled.
+- **A routine product's size chosen for them:** `variant_choice` in the routine settings (texture words, default, refills avoided), the texture from the skin type (Rules tab); `preferredVariant`, `variantPreference`; the card shows the variant's name and price.
+- **« Refaire ma routine » starts over** from the first question (`advisorTurn.restarted`; FR and EN words in the lexicons).
+- **Widget:** « Nouvelle conversation » in the header; in the wide panel bubbles stay in their own column.
+- **The « petit plaisir » is a mask, a sheet mask or a kit only:** `treats.types` in the routine settings, over the sheet's column (`isTreat` in foundations.mjs).
+- **« Refaire ma routine » forgets an earlier care type** (a « sérum » made the new routine a choice of two products).
+- **A concern asked for is the main concern** (« je cherche un produit pour les rides », « ma préoccupation, ce sont mes rides », EN too: `concernIs` in the lexicons); the earlier care type dropped.
+- **One product for a need: skin type ranks, never blocks** (`targetedPool`, `skin_type_mismatch`); routines unchanged.
+- **Comparison flow:** the product knowledge's range counts in product names (« crème contour des yeux Temps Sublime » finds Caresse Regard Sublime); « …Temps Sublime Riche et la Light » resolves both; no routine offer under a « laquelle ? » question. eval:resolution 123/123.
+- **Routine banner:** a full-width bar at the bottom of the screen (FR/EN, theme settings: on/off, text, button, days hidden); its button opens the advisor and starts the routine builder, its × hides it for 7 days.
+- **A concern named later is the main one:** questions (`asksFor`), a concern with no question pending, `additive` words keep it second (FR/EN lexicons); after an eye concern, a new concern without an eye word is the face's; « visages »; the type alone (« un serum ») read.
+- **Product cards show images** (the shop's `/products/<handle>.js`, as the routine cards).
+- **Widget, wide panel:** product cards share the width (2–3 side by side, up to 300 px each; more scroll), the text above them stays in our column.
+- **« Je cherche encore » is a code turn:** one sentence, then the petit plaisir (`model_skipped: 'cart_no'`); the model no longer answers it with products from the earlier routine.
+- Knowledge v7 loaded (variant_choice, treat types). Tests 3761/3761; web tsc clean.
+
+## The routine cards: both moments, the content, the saving (2026-10-18)
+
+From the owner's screenshots.
+
+- **Routine mode widens the panel** (`layout: 'routine'` on the builder's replies); an expand / collapse button in the header.
+- **The routine cards** (`routine-view.mjs`, `reply.routineView`): the morning and the evening always; the moment not chosen greyed with « Compléter ma routine », its steps already theirs marked. Each card: stage, image (the shop's `/products/<handle>.js`), name, size, price, stars, « Inclus », « Pourquoi pour vous ? » (their skin type and concern from the reason codes, then the short description: no model call), « Ingrédients clés », « Bienfaits », « Application ». Footer: total, saving, « Ajouter ma routine au panier — total ».
+- **Engine:** `advise()` gives a builder routine `moments` (the other moment from a « jour et nuit » build of the same answers; the shared night steps put back, marked).
+- **Catalogue:** benefits, claims, rating, rating count and size from named metafields (`CONTENT_METAFIELDS`), never the whole set.
+- **Discount:** `routine_discount.min_products: 3`; the percentage from the code's own synced rule (`createRoutineCodeReader`, `routineReward`; MAROUTINE20: 20 %, Shopify minimum 3). Below the minimum no code. Never shown.
+- **No cart question under a routine with cards;** the treat follows directly.
+- **Dev store:** `dev-store:sync` fills missing content from production by handle (52 of 54 rows on 2026-10-18; ingredients 47/50, usage 50/50, benefits 46/50, ratings 44/50).
+- Knowledge v5 loaded (labels, the minimum). Tests 3755/3755; web tsc clean.
+
+## The routine reply, its treat and the routine discount (2026-10-17)
+
+Owner's notes on the first routines (`qiriness-advisor-conversation-notes-v2.xlsx`).
+
+- **No prices** on the day / night buttons or in a routine reply (the advice the model reads carries none, except with a budget). **Reasons by skin type and concern only**: the model no longer reads the age-range, line or moment codes. **Each step carries its ritual stage** (Préparer, Activer, Optimiser, Régénérer) and the reply names it.
+- **The treat** treats one of their concerns, suits their skin and stays on the routine's area (eyes after the eye routine, face or eyes otherwise); none fits, none. On the full sheet: anti-age dry → Masque Wrap d'Or; blemishes → the purifying Wrap mask; hydration → the Hyal Aqua mask; eye routine → the hydrating eye-patch kit.
+- **The routine discount** (`routine_discount` in the settings: MAROUTINE20, synced from the dev store): only with a finished routine; « Oui, ajouter avec la remise » and « Ajouter la routine au panier avec la remise »; the widget applies it after the products through `/cart/update.js`, keeping the cart's codes; never named (prompt rule, `hideCodes` on shopping data, reply backstop) unless the customer types it themselves.
+- Tests 3744/3744; `advisor:score` 54/54; web tsc clean.
+
 ## The eye routine, every question asked, the routines kept (2026-10-17)
 
 Owner: « Replace Teint terne with Tache et Teint Terne, Add Cernes et Poches. Remove je ne sais pas, and … dont skip question 3 »; « we need to save the data from these answers … dont save customer name ».

@@ -62,6 +62,9 @@
 
   var ICONS = {
     close: ['M6 6l12 12', 'M18 6L6 18'],
+    expand: ['M14 4h6v6', 'M20 4l-7 7', 'M10 20H4v-6', 'M4 20l7-7'],
+    collapse: ['M20 10h-6V4', 'M14 10l7-7', 'M4 14h6v6', 'M10 14l-7 7'],
+    newChat: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'],
     send: ['M3.5 12h16', 'M14.5 7l5 5-5 5']
   };
 
@@ -95,6 +98,7 @@
         viewer: state.viewer,
         sessionId: state.sessionId,
         open: state.open,
+        wide: state.wide,
         messages: state.messages.filter(function (m) { return !m.failed; }).slice(-MAX_STORED_MESSAGES)
       }));
     } catch (error) { /* not fatal */ }
@@ -227,6 +231,8 @@
   var onCardAdd = null;
   /* A routine added whole (advisor_routines): its ref only, never who added it. */
   var onRoutineAdd = null;
+  /* The routine cards keep the customer's choices on their message: saved through this. */
+  var persistState = function () {};
 
   /*
    * « Ajouter au panier »: the shop's own cart (Shopify's /cart/add.js, same
@@ -257,14 +263,49 @@
     });
   }
 
+  /*
+   * A finished routine's discount (owner, 2026-10-17), applied with its products: the shop's
+   * /cart/update.js `discount` sets the cart's codes, so the codes already there are kept. The code
+   * is never shown. A failure leaves the products in the cart.
+   */
+  function applyDiscount(code) {
+    if (typeof code !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(code)) return Promise.resolve();
+    var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    return fetch(root + 'cart.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.ok ? res.json() : { discount_codes: [] }; })
+      .then(function (cart) {
+        var codes = (Array.isArray(cart && cart.discount_codes) ? cart.discount_codes : [])
+          .map(function (d) { return d && typeof d.code === 'string' ? d.code : null; }).filter(Boolean);
+        if (codes.some(function (c) { return c.toUpperCase() === code.toUpperCase(); })) return;
+        return fetch(root + 'cart/update.js', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ discount: codes.concat([code]).join(',') })
+        }).then(function () {
+          try {
+            document.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
+            document.dispatchEvent(new CustomEvent('cart:updated', { bubbles: true }));
+          } catch (e) { /* an old browser */ }
+        });
+      })
+      .catch(function () { /* the products are in the cart; the discount can still be entered at checkout */ });
+  }
+
   function ProductCard(product, strings) {
     var link = safeLink(product.url);
     var image = safeImage(product.image);
     var title = typeof product.title === 'string' ? product.title : '';
+    var media = image ? el('img', { src: image, alt: '', loading: 'lazy', width: '160', height: '160' }) : el('span', { className: 'sa-card__placeholder', 'aria-hidden': 'true' });
+    // No image from the server: the shop's own, as the routine cards do (owner, 2026-10-18).
+    var handle = !image && link && !link.external ? (link.href.match(/\/products\/([^/?#]+)/) || [])[1] : null;
+    if (handle) {
+      productImage(decodeURIComponent(handle)).then(function (src) {
+        if (src && media.parentNode) media.parentNode.replaceChild(el('img', { src: src, alt: '', loading: 'lazy', width: '240', height: '240' }), media);
+      });
+    }
     return el('article', { className: 'sa-card' }, [
-      el('div', { className: 'sa-card__media' }, [
-        image ? el('img', { src: image, alt: '', loading: 'lazy', width: '160', height: '160' }) : el('span', { className: 'sa-card__placeholder', 'aria-hidden': 'true' })
-      ]),
+      el('div', { className: 'sa-card__media' }, [media]),
       el('div', { className: 'sa-card__body' }, [
         el('h3', { className: 'sa-card__title', text: title }),
         product.rationale ? el('p', { className: 'sa-card__rationale', text: String(product.rationale) }) : null,
@@ -287,11 +328,15 @@
   function RoutineCartButton(routineCart, strings) {
     var items = Array.isArray(routineCart && routineCart.add) ? routineCart.add.filter(function (x) { return x && typeof x.variant_id === 'string'; }) : [];
     if (items.length < 2) return null;
-    var button = el('button', { type: 'button', className: 'sa-card__add sa-routine-add', text: strings.addRoutine || 'Ajouter la routine au panier' });
+    var discount = typeof routineCart.discount_code === 'string' ? routineCart.discount_code : null;
+    var label = discount ? (strings.addRoutineDiscount || 'Ajouter la routine au panier avec la remise') : (strings.addRoutine || 'Ajouter la routine au panier');
+    var button = el('button', { type: 'button', className: 'sa-card__add sa-routine-add', text: label });
     button.addEventListener('click', function () {
       if (button.disabled) return;
       button.disabled = true;
       addAllToCart(items.map(function (x) { return x.variant_id; })).then(function () {
+        return applyDiscount(discount);
+      }).then(function () {
         button.textContent = strings.added || 'Ajouté';
         button.className = 'sa-card__add sa-routine-add sa-card__add--done';
         if (onCardAdd) items.forEach(function (x) { if (typeof x.product_id === 'string') onCardAdd(x.product_id); });
@@ -306,6 +351,325 @@
       button,
       sizes.length ? el('p', { className: 'sa-routine-cart__note', text: (strings.chooseSize || 'Choisissez la taille sur sa page :') + ' ' + sizes.join(', ') }) : null
     ]);
+  }
+
+  /*
+   * THE ROUTINE CARDS (owner, 2026-10-18). Both moments, always: the chosen one included, the
+   * other greyed with « Compléter ma routine » (its steps already theirs are marked, the rest
+   * added). Each card: the stage, the product (image from the shop's own /products/<handle>.js,
+   * name, size, price, stars), « Inclus », « Pourquoi pour vous ? » and three foldable sections.
+   * The footer: the total, the routine saving from its minimum on, one button adding what is
+   * included and then the routine discount (never shown). The choices live on the message, so a
+   * re-render or the next page keeps them; a toggle updates the cards in place.
+   */
+  var productImages = {};
+
+  /* The routine's moments that have steps. */
+  function routineMoments(view) {
+    return (Array.isArray(view && view.moments) ? view.moments : []).filter(function (m) { return m && Array.isArray(m.steps) && m.steps.length; });
+  }
+
+  function routineChoiceOf(message) {
+    var choice = message.routineChoice || (message.routineChoice = { removed: {}, added: {} });
+    if (!choice.removed) choice.removed = {};
+    if (!choice.added) choice.added = {};
+    return choice;
+  }
+
+  function routineActive(m, choice) { return m.chosen || Boolean(choice.added[m.part]); }
+  function routineBuyable(s) { return s.in_stock && typeof s.variant_id === 'string' && !s.owned; }
+
+  /* What the routine includes now: the active moments' products they kept, each once. */
+  function routineSelection(view, choice) {
+    var seen = {};
+    var items = [];
+    routineMoments(view).forEach(function (m) {
+      if (!routineActive(m, choice)) return;
+      m.steps.forEach(function (s) {
+        if (!routineBuyable(s) || choice.removed[s.product_id] || seen[s.product_id]) return;
+        seen[s.product_id] = true;
+        items.push(s);
+      });
+    });
+    return items;
+  }
+
+  function routineQualifies(view, items) {
+    var d = view && view.discount && typeof view.discount.code === 'string' ? view.discount : null;
+    return Boolean(d && items.length >= (d.min_products || 1));
+  }
+
+  /* The variant ids already in the shop's cart; unknown: none (everything is added). */
+  function cartVariantIds() {
+    var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    return fetch(root + 'cart.js', { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (cart) {
+        var ids = {};
+        (cart && Array.isArray(cart.items) ? cart.items : []).forEach(function (i) { if (i && i.variant_id) ids[String(i.variant_id)] = true; });
+        return ids;
+      })
+      .catch(function () { return {}; });
+  }
+
+  /*
+   * ADD THE ROUTINE (owner, 2026-10-18: « if they accidentally clear their cart they cannot re-add
+   * it »): as often as they like, what the routine includes now and the cart lacks, then the
+   * routine discount from its minimum on. A product already in the cart is not added twice.
+   */
+  function addRoutineToCart(view, choice) {
+    var items = routineSelection(view, choice);
+    if (!items.length) return Promise.reject(new Error('empty'));
+    var qualifies = routineQualifies(view, items);
+    return cartVariantIds().then(function (inCart) {
+      var missing = items.filter(function (s) { return !inCart[s.variant_id.replace(/^gid:\/\/shopify\/ProductVariant\//, '')]; });
+      return (missing.length ? addAllToCart(missing.map(function (s) { return s.variant_id; })) : Promise.resolve()).then(function () {
+        return qualifies ? applyDiscount(view.discount.code) : null;
+      }).then(function () {
+        if (onCardAdd) missing.forEach(function (s) { if (typeof s.product_id === 'string') onCardAdd(s.product_id); });
+        if (missing.length && onRoutineAdd && typeof view.ref === 'string') onRoutineAdd(view.ref);
+        choice.addedKey = routineKey(items);
+        return { items: items, added: missing, qualifies: qualifies };
+      });
+    });
+  }
+
+  function routineKey(items) {
+    return items.map(function (s) { return s.variant_id; }).sort().join(',');
+  }
+
+  /* After an add: what happened, in their words. */
+  function routineAddedText(view, result, strings) {
+    var rs = strings.routine || {};
+    var parts = [result.added.length ? (strings.cartAdded || 'C\'est dans votre panier.') : (rs.already_in_cart || 'Ces soins sont déjà dans votre panier.')];
+    if (result.qualifies && typeof view.discount.percentage === 'number') parts.push(rs.discount_applied || 'Votre remise routine est appliquée.');
+    else if (view.discount && !result.qualifies) parts.push(fill(rs.min_note || '', { min: view.discount.min_products }));
+    return parts.filter(Boolean).join(' ');
+  }
+
+  function productImage(handle) {
+    if (productImages[handle]) return productImages[handle];
+    var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    productImages[handle] = fetch(root + 'products/' + encodeURIComponent(handle) + '.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (p) {
+        var src = p && (p.featured_image || (Array.isArray(p.images) && p.images[0]));
+        if (typeof src !== 'string' || !src) return null;
+        src = src.indexOf('//') === 0 ? 'https:' + src : src;
+        return safeImage(src) ? src + (src.indexOf('?') === -1 ? '?' : '&') + 'width=240' : null;
+      })
+      .catch(function () { return null; });
+    return productImages[handle];
+  }
+
+  function fill(template, values) {
+    return String(template || '').replace(/\{(\w+)\}/g, function (all, key) { return values[key] !== undefined ? values[key] : all; });
+  }
+
+  function Stars(rating, count, strings) {
+    if (typeof rating !== 'number' || rating <= 0) return null;
+    var full = Math.round(rating);
+    var stars = '';
+    for (var i = 0; i < 5; i++) stars += i < full ? '★' : '☆';
+    return el('p', { className: 'sa-rcard__rating' }, [
+      el('span', { className: 'sa-rcard__stars', 'aria-hidden': 'true', text: stars }),
+      el('span', { text: String(rating).replace('.', strings.decimal || ',') + (typeof count === 'number' ? ' · ' + count + ' ' + (strings.reviews || 'avis') : '') })
+    ]);
+  }
+
+  function Fold(label, text) {
+    if (typeof text !== 'string' || !text) return null;
+    return el('details', { className: 'sa-rcard__fold' }, [
+      el('summary', { text: label }),
+      el('div', { className: 'sa-rcard__fold-body' }, text.split(/\n+/).map(function (line) { return el('p', { text: line }); }))
+    ]);
+  }
+
+  function RoutineView(view, message, strings, persist) {
+    var rs = strings.routine || {};
+    var moments = routineMoments(view);
+    if (!moments.length) return null;
+    var lang = view.locale === 'en' ? 'en' : 'fr';
+    var format;
+    try { format = new Intl.NumberFormat(lang, { style: 'currency', currency: view.currency || 'EUR' }); } catch (e) { format = new Intl.NumberFormat('fr', { style: 'currency', currency: 'EUR' }); }
+    var money = function (n) { return format.format(n).replace(/ | /g, ' '); };
+    var discount = view.discount && typeof view.discount.code === 'string' ? view.discount : null;
+    // The customer's choices, kept on the message: removed products, moments added. They stay
+    // theirs to change after an add (owner, 2026-10-18), and the button adds again.
+    var choice = routineChoiceOf(message);
+    var cards = [];
+    var momentNodes = [];
+
+    var active = function (m) { return routineActive(m, choice); };
+    var buyable = routineBuyable;
+    function selection() { return routineSelection(view, choice); }
+
+    var totalLabel = el('p', { className: 'sa-routine__count' });
+    var was = el('s', { className: 'sa-routine__was' });
+    var now = el('strong', { className: 'sa-routine__now' });
+    var saving = el('span', { className: 'sa-routine__saving' });
+    var minNote = el('p', { className: 'sa-routine__min' });
+    var addButton = el('button', { type: 'button', className: 'sa-routine__add' });
+    var addStatus = el('p', { className: 'sa-routine__status', role: 'status' });
+
+    function refresh() {
+      var items = selection();
+      var total = items.reduce(function (n, s) { return n + (typeof s.price_value === 'number' ? s.price_value : 0); }, 0);
+      var qualifies = discount && items.length >= (discount.min_products || 1);
+      var pct = qualifies && typeof discount.percentage === 'number' ? discount.percentage : 0;
+      var after = Math.round(total * (100 - pct)) / 100;
+      totalLabel.textContent = fill(rs.total || 'Routine — {count}', { count: items.length });
+      was.textContent = pct ? money(total) : '';
+      was.hidden = !pct;
+      now.textContent = money(pct ? after : total);
+      saving.textContent = pct ? fill(rs.saving || 'Économie {amount}', { amount: money(total - after) }) : '';
+      saving.hidden = !pct;
+      minNote.textContent = discount && !qualifies ? fill(rs.min_note || '', { min: discount.min_products }) : '';
+      minNote.hidden = !minNote.textContent;
+      // Added as it is now: said under the button, which still adds again (a cleared cart).
+      var added = Boolean(items.length) && choice.addedKey === routineKey(items);
+      addButton.textContent = fill(added ? (rs.add_again || rs.add) : rs.add || 'Ajouter — {amount}', { amount: money(pct ? after : total) });
+      addButton.disabled = !items.length;
+      addButton.className = 'sa-routine__add' + (added ? ' sa-routine__add--done' : '');
+      if (!added) addStatus.textContent = '';
+      addStatus.hidden = !addStatus.textContent;
+      cards.forEach(function (c) { c(); });
+      momentNodes.forEach(function (n) { n(); });
+    }
+
+    function StepCard(step, m) {
+      var check = el('input', { type: 'checkbox', className: 'sa-rcard__check' });
+      var status = step.owned
+        ? el('span', { className: 'sa-rcard__owned', text: m.part === 'night' ? rs.owned_morning : rs.owned_evening })
+        : !step.in_stock ? el('span', { className: 'sa-rcard__owned', text: rs.unavailable })
+          : typeof step.variant_id !== 'string' ? el('span', { className: 'sa-rcard__owned', text: rs.choose_size })
+            : el('label', { className: 'sa-rcard__include' }, [check, el('span', { text: rs.included || 'Inclus' })]);
+      check.addEventListener('change', function () {
+        if (check.checked) delete choice.removed[step.product_id]; else choice.removed[step.product_id] = true;
+        persist();
+        refresh();
+      });
+      var media = el('span', { className: 'sa-rcard__placeholder', 'aria-hidden': 'true' });
+      var link = safeLink(step.url);
+      if (link && !link.external && typeof step.handle === 'string') {
+        productImage(step.handle).then(function (src) {
+          if (src && media.parentNode) media.parentNode.replaceChild(el('img', { src: src, alt: '', loading: 'lazy', width: '96', height: '96' }), media);
+        });
+      }
+      var whyText = step.why && typeof step.why.text === 'string' ? step.why.text : '';
+      var tags = step.why && Array.isArray(step.why.tags) ? step.why.tags.filter(function (t) { return typeof t === 'string'; }) : [];
+      var whyBody = el('p', { className: 'sa-rcard__why-text' }, [
+        el('strong', { text: (rs.why || 'Pourquoi pour vous ?') + ' ' }),
+        tags.length ? el('span', { className: 'sa-rcard__tags', text: tags.join(' · ') + ' — ' }) : null,
+        document.createTextNode(whyText)
+      ]);
+      var more = whyText.length > 180 ? el('button', { type: 'button', className: 'sa-rcard__more', text: rs.read_more || 'Lire la suite' }) : null;
+      if (more) more.addEventListener('click', function () {
+        var open = whyBody.classList.toggle('sa-rcard__why-text--open');
+        more.textContent = open ? (rs.read_less || 'Réduire') : (rs.read_more || 'Lire la suite');
+      });
+      var title = typeof step.title === 'string' ? step.title : '';
+      var node = el('article', { className: 'sa-rcard' }, [
+        el('div', { className: 'sa-rcard__head' }, [
+          el('div', { className: 'sa-rcard__media' }, [media]),
+          el('div', { className: 'sa-rcard__main' }, [
+            step.stage && rs['stage_' + step.stage] ? el('p', { className: 'sa-rcard__stage', text: rs['stage_' + step.stage] }) : null,
+            link ? el('a', {
+              className: 'sa-rcard__title', href: link.href, target: link.external ? '_blank' : null, rel: link.external ? 'noopener noreferrer' : null, text: title,
+              onClick: function () { if (onCardClick && typeof step.product_id === 'string') onCardClick(step.product_id); }
+            }) : el('p', { className: 'sa-rcard__title', text: title }),
+            Stars(step.rating, step.rating_count, { reviews: rs.reviews, decimal: lang === 'en' ? '.' : ',' })
+          ]),
+          el('div', { className: 'sa-rcard__aside' }, [
+            step.price ? el('p', { className: 'sa-rcard__price', text: String(step.price) }) : null,
+            // The size chosen for them (« Normale 50 ml »), else the product's size.
+            step.variant_title || step.volume ? el('p', { className: 'sa-rcard__volume', text: String(step.variant_title || step.volume) }) : null,
+            status
+          ])
+        ]),
+        whyText || tags.length ? el('div', { className: 'sa-rcard__why' }, [whyBody, more]) : null,
+        Fold(rs.ingredients || 'Ingrédients clés', step.ingredients),
+        Fold(rs.benefits || 'Bienfaits', step.benefits),
+        Fold(rs.usage || 'Application', step.usage)
+      ]);
+      cards.push(function () {
+        var included = active(m) && (step.owned || !choice.removed[step.product_id]);
+        check.checked = !choice.removed[step.product_id];
+        check.disabled = !active(m);
+        node.className = 'sa-rcard' + (included && buyable(step) ? ' sa-rcard--included' : '') + (active(m) ? '' : ' sa-rcard--muted');
+      });
+      return node;
+    }
+
+    function Moment(m) {
+      var night = m.part === 'night';
+      var missing = m.steps.filter(function (s) { return buyable(s); }).length;
+      var toggle = m.chosen ? null : el('button', { type: 'button', className: 'sa-moment__complete' });
+      var note = m.chosen ? null : el('p', { className: 'sa-moment__note', text: missing ? fill(rs.complete_note, { count: missing }) : rs.complete_none });
+      if (toggle) toggle.addEventListener('click', function () {
+        if (choice.added[m.part]) delete choice.added[m.part]; else choice.added[m.part] = true;
+        persist();
+        refresh();
+      });
+      var node = el('section', { className: 'sa-moment' }, [
+        el('header', { className: 'sa-moment__head' }, [
+          el('p', { className: 'sa-moment__eyebrow', text: night ? rs.evening_eyebrow : rs.morning_eyebrow }),
+          el('h3', { className: 'sa-moment__title', text: night ? rs.evening : rs.morning }),
+          el('p', { className: 'sa-moment__text', text: night ? rs.evening_text : rs.morning_text }),
+          note,
+          toggle
+        ]),
+        el('div', { className: 'sa-moment__steps' }, m.steps.map(function (s) { return StepCard(s, m); }))
+      ]);
+      momentNodes.push(function () {
+        node.className = 'sa-moment' + (active(m) ? '' : ' sa-moment--muted');
+        if (toggle) {
+          toggle.textContent = choice.added[m.part] ? (rs.remove || 'Retirer') : (rs.complete || 'Compléter ma routine');
+        }
+      });
+      return node;
+    }
+
+    addButton.addEventListener('click', function () {
+      if (addButton.disabled || !selection().length) return;
+      addButton.disabled = true;
+      addRoutineToCart(view, choice).then(function (result) {
+        persist();
+        addStatus.textContent = routineAddedText(view, result, strings);
+        refresh();
+      }).catch(function () {
+        addButton.textContent = strings.addFailed || 'Réessayer';
+        addButton.disabled = false;
+      });
+    });
+
+    var banner = discount && typeof discount.percentage === 'number'
+      ? el('div', { className: 'sa-routine__banner' }, [
+        el('div', {}, [
+          el('p', { className: 'sa-routine__banner-eyebrow', text: rs.banner_eyebrow }),
+          el('p', { className: 'sa-routine__banner-title', text: fill(rs.banner_title, { percent: String(discount.percentage).replace('.', lang === 'en' ? '.' : ',') }) }),
+          el('p', { className: 'sa-routine__banner-text', text: fill(rs.banner_text, { min: discount.min_products }) })
+        ]),
+        el('span', { className: 'sa-routine__badge', text: rs.banner_badge })
+      ])
+      : null;
+
+    var node = el('div', { className: 'sa-routine' }, [
+      el('header', { className: 'sa-routine__head' }, [
+        el('p', { className: 'sa-routine__eyebrow', text: rs.title || 'Votre routine' }),
+        el('p', { className: 'sa-routine__hint', text: rs.hint })
+      ]),
+      banner,
+      el('div', { className: 'sa-routine__moments' }, moments.map(Moment)),
+      el('footer', { className: 'sa-routine__footer' }, [
+        el('div', { className: 'sa-routine__sum' }, [totalLabel, el('p', { className: 'sa-routine__prices' }, [was, now, saving])]),
+        minNote,
+        addButton,
+        addStatus
+      ])
+    ]);
+    refresh();
+    return node;
   }
 
   function AddButton(product, strings) {
@@ -351,13 +715,19 @@
       el('span', { className: 'sa-visually-hidden', text: (isUser ? strings.you : strings.advisor) + ' : ' }),
       el('p', { className: 'sa-bubble', text: message.text })
     ]);
-    if (!isUser && Array.isArray(message.products) && message.products.length) {
+    // A finished routine: its cards replace the product cards and the routine button.
+    var routine = !isUser && message.routineView ? RoutineView(message.routineView, message, strings, persistState) : null;
+    if (routine) {
+      node.className += ' sa-message--routine';
+      node.appendChild(routine);
+    } else if (!isUser && Array.isArray(message.products) && message.products.length) {
+      node.className += ' sa-message--products';
       node.appendChild(ProductList(message.products, strings));
     }
     if (!isUser && typeof message.cartStatus === 'string') {
       node.appendChild(el('p', { className: 'sa-cart-status', role: 'status', text: message.cartStatus }));
     }
-    if (!isUser && message.routineCart) {
+    if (!isUser && message.routineCart && !routine) {
       var routineButton = RoutineCartButton(message.routineCart, strings);
       if (routineButton) node.appendChild(routineButton);
     }
@@ -417,7 +787,7 @@
 
   /* ---------- the advisor ---------- */
 
-  function createAdvisor(root, config, launcher, openNow) {
+  function createAdvisor(root, config, launcher, openNow, startAction) {
     var strings = config.strings || {};
     var actions = Array.isArray(config.quickActions) ? config.quickActions.filter(function (a) { return a && a.id && a.label; }) : [];
     var send = config.transport === 'proxy' && config.endpoint ? createProxyTransport(config) : createMockTransport(config);
@@ -426,6 +796,7 @@
       onCardAdd = function (productId) { reportClick(config.endpoint, state.sessionId, productId, 'added_to_cart'); };
       onRoutineAdd = function (routineRef) { reportRoutineAdded(config.endpoint, routineRef); };
     }
+    persistState = function () { saveState(state); };
     var mobile = window.matchMedia ? window.matchMedia(MOBILE_QUERY) : { matches: false };
 
     var viewer = typeof config.viewer === 'string' ? config.viewer : '';
@@ -435,6 +806,8 @@
       sessionId: stored ? stored.sessionId : newSessionId(),
       open: stored ? Boolean(stored.open) : false,
       messages: stored ? stored.messages : [],
+      // Routine mode opens the panel wide (owner, 2026-10-18); the header button switches it back.
+      wide: stored ? Boolean(stored.wide) : false,
       pending: false,
       // 0 dots, 1 a line of text, 2 « encore un instant »: see waitText.
       waitStage: 0
@@ -481,6 +854,13 @@
       sendButton
     ]);
 
+    var sizeButton = el('button', { type: 'button', className: 'sa-close sa-size', onClick: function () { setWide(!state.wide); } });
+    // A new conversation (owner, 2026-10-18): a fresh session, the panel back to its size.
+    var newChatButton = el('button', {
+      type: 'button', className: 'sa-close sa-new', 'aria-label': strings.newChat || 'Nouvelle conversation', title: strings.newChat || 'Nouvelle conversation',
+      onClick: function () { startOver(); }
+    }, [icon(ICONS.newChat)]);
+
     var panel = el('section', {
       id: panelId,
       className: 'sa-panel',
@@ -494,7 +874,11 @@
           el('p', { className: 'sa-eyebrow', text: strings.eyebrow }),
           el('h2', { id: titleId, className: 'sa-title', text: strings.title })
         ]),
-        el('button', { type: 'button', className: 'sa-close', 'aria-label': strings.close, onClick: function () { setOpen(false); } }, [icon(ICONS.close)])
+        el('div', { className: 'sa-header__buttons' }, [
+          newChatButton,
+          sizeButton,
+          el('button', { type: 'button', className: 'sa-close', 'aria-label': strings.close, onClick: function () { setOpen(false); } }, [icon(ICONS.close)])
+        ])
       ]),
       log,
       actionsSlot,
@@ -517,12 +901,25 @@
     });
     if (mobile.addEventListener) mobile.addEventListener('change', syncScrollLock);
 
+    setWide(state.wide, true);
     render();
     // Reopened across page loads on desktop only: a full-screen sheet greeting
     // every page on a phone would be in the customer's way.
     if (openNow) setOpen(true);
     else if (state.open && !mobile.matches) setOpen(true, true);
     else state.open = false;
+    if (startAction) start(startAction);
+
+    /*
+     * A quick action from outside the panel (the routine banner): the panel opens and the action
+     * runs as its chip would. A conversation already under way gets it too: « Construire ma
+     * routine » after other questions starts the builder.
+     */
+    function start(action) {
+      if (!action || typeof action.id !== 'string' || typeof action.label !== 'string') return;
+      setOpen(true);
+      if (!state.pending) ask(action.label, action.id);
+    }
 
     function setOpen(open, silent) {
       state.open = open;
@@ -538,6 +935,30 @@
       } else if (!silent) {
         launcher.focus();
       }
+    }
+
+    function setWide(wide, silent) {
+      state.wide = Boolean(wide);
+      panel.classList.toggle('sa-panel--wide', state.wide);
+      var label = (strings.routine || {})[state.wide ? 'collapse' : 'expand'] || (state.wide ? 'Réduire' : 'Agrandir');
+      sizeButton.setAttribute('aria-label', label);
+      sizeButton.setAttribute('title', label);
+      sizeButton.textContent = '';
+      sizeButton.appendChild(icon(state.wide ? ICONS.collapse : ICONS.expand));
+      if (!silent) saveState(state);
+    }
+
+    function startOver() {
+      if (state.pending) return;
+      state.messages = [];
+      state.sessionId = newSessionId();
+      state.showRoutine = false;
+      setWide(false, true);
+      saveState(state);
+      render();
+      input.value = '';
+      autosize();
+      if (!mobile.matches) input.focus();
     }
 
     function syncScrollLock() {
@@ -594,13 +1015,32 @@
           products: Array.isArray(body.reply.products) ? body.reply.products : [],
           choices: Array.isArray(body.reply.choices) ? body.reply.choices : [],
           contact: body.reply.contact && typeof body.reply.contact.url === 'string' ? { url: body.reply.contact.url } : null,
-          routineCart: body.reply.routineCart && Array.isArray(body.reply.routineCart.add) ? body.reply.routineCart : null
+          routineCart: body.reply.routineCart && Array.isArray(body.reply.routineCart.add) ? body.reply.routineCart : null,
+          routineView: body.reply.routineView && Array.isArray(body.reply.routineView.moments) ? body.reply.routineView : null,
+          layout: body.reply.layout === 'routine' ? 'routine' : null
         });
+        // Entering routine mode widens the panel once; a customer who collapses it keeps it collapsed.
+        var before = state.messages.slice(0, -1).filter(function (m) { return m.role === 'assistant'; }).pop();
+        if (body.reply.layout === 'routine' && !(before && before.layout === 'routine')) setWide(true);
+        // A routine is long: it opens at its top, not at the end of the conversation.
+        if (body.reply.routineView) state.showRoutine = true;
         // « Oui, ajouter »: the customer just clicked it; the widget adds, once, here (never on a re-render).
         var cart = body.reply.cart;
-        if (cart && Array.isArray(cart.add) && cart.add.length) {
+        var routineMessage = cart && typeof cart.routine_ref === 'string'
+          ? state.messages.filter(function (m) { return m.routineView && m.routineView.ref === cart.routine_ref; }).pop()
+          : null;
+        if (routineMessage) {
+          var said = state.messages[state.messages.length - 1];
+          addRoutineToCart(routineMessage.routineView, routineChoiceOf(routineMessage)).then(function (result) {
+            said.cartStatus = routineAddedText(routineMessage.routineView, result, strings);
+          }).catch(function () {
+            said.cartStatus = strings.cartFailed || 'L\'ajout au panier n\'a pas fonctionné : ajoutez-le depuis sa fiche produit.';
+          }).then(function () { saveState(state); render(); });
+        } else if (cart && Array.isArray(cart.add) && cart.add.length) {
           var answered = state.messages[state.messages.length - 1];
           addAllToCart(cart.add.map(function (x) { return x.variant_id; })).then(function () {
+            return applyDiscount(cart.discount_code);
+          }).then(function () {
             if (onCardAdd) cart.add.forEach(function (x) { if (typeof x.product_id === 'string') onCardAdd(x.product_id); });
             answered.cartStatus = strings.cartAdded || 'C\'est dans votre panier.';
           }).catch(function () {
@@ -659,13 +1099,20 @@
       }
 
       sendButton.disabled = state.pending;
+      newChatButton.disabled = state.pending || !started;
       composer.setAttribute('aria-busy', String(state.pending));
-      scrollToEnd();
+      var routines = state.showRoutine && !state.pending ? log.querySelectorAll('.sa-message--routine') : [];
+      if (routines.length) {
+        state.showRoutine = false;
+        log.scrollTop = Math.max(0, routines[routines.length - 1].offsetTop - log.offsetTop - 12);
+      } else scrollToEnd();
     }
 
     function scrollToEnd() {
       log.scrollTop = log.scrollHeight;
     }
+
+    return { start: start };
   }
 
   window.StorefrontAdvisorPanel = { mount: createAdvisor };

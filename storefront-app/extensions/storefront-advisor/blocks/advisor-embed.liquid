@@ -8,6 +8,14 @@
     assign collection_handle = collection.handle
   endif
   assign endpoint = block.settings.proxy_path | strip | append: '/chat'
+  assign banner_text = block.settings.banner_text | strip
+  if banner_text == blank
+    assign banner_text = 'banner.text' | t
+  endif
+  assign banner_button = block.settings.banner_button | strip
+  if banner_button == blank
+    assign banner_button = 'banner.button' | t
+  endif
 -%}
 <div
   id="storefront-advisor"
@@ -31,6 +39,14 @@
       "variantId": {{ product.selected_or_first_available_variant.id | prepend: 'gid://shopify/ProductVariant/' | json }},
       "loggedIn": {% if customer %}true{% else %}false{% endif %}
     },
+    "banner": {
+      "enabled": {{ block.settings.banner_enabled | json }},
+      "text": {{ banner_text | json }},
+      "button": {{ banner_button | json }},
+      "close": {{ 'banner.close' | t | json }},
+      "action": {{ 'actions.build_routine' | t | json }},
+      "days": {{ block.settings.banner_days | json }}
+    },
     "viewer": {% if customer %}{{ customer.id | append: '' | json }}{% else %}""{% endif %},
     "quickActions": [
       {%- assign first = true -%}
@@ -46,6 +62,7 @@
       "launcher": {{ 'advisor.launcher' | t | json }},
       "open": {{ 'advisor.open' | t | json }},
       "close": {{ 'advisor.close' | t | json }},
+      "newChat": {{ 'advisor.new_chat' | t | json }},
       "greeting": {{ 'advisor.greeting' | t | json }},
       "placeholder": {{ 'advisor.placeholder' | t | json }},
       "inputLabel": {{ 'advisor.input_label' | t | json }},
@@ -61,6 +78,7 @@
       "added": {{ 'advisor.added_to_cart' | t | json }},
       "addFailed": {{ 'advisor.add_failed' | t | json }},
       "addRoutine": {{ 'advisor.add_routine' | t | json }},
+      "addRoutineDiscount": {{ 'advisor.add_routine_discount' | t | json }},
       "chooseSize": {{ 'advisor.choose_size' | t | json }},
       "cartAdded": {{ 'advisor.cart_added' | t | json }},
       "cartFailed": {{ 'advisor.cart_failed' | t | json }},
@@ -69,7 +87,51 @@
       "quickActionsLabel": {{ 'advisor.quick_actions_label' | t | json }},
       "productsLabel": {{ 'advisor.products_label' | t | json }},
       "you": {{ 'advisor.you' | t | json }},
-      "advisor": {{ 'advisor.advisor' | t | json }}
+      "advisor": {{ 'advisor.advisor' | t | json }},
+      "routine": {
+        "expand": {{ 'routine.expand' | t | json }},
+        "collapse": {{ 'routine.collapse' | t | json }},
+        "title": {{ 'routine.title' | t | json }},
+        "hint": {{ 'routine.hint' | t | json }},
+        "morning_eyebrow": {{ 'routine.morning_eyebrow' | t | json }},
+        "morning": {{ 'routine.morning' | t | json }},
+        "morning_text": {{ 'routine.morning_text' | t | json }},
+        "evening_eyebrow": {{ 'routine.evening_eyebrow' | t | json }},
+        "evening": {{ 'routine.evening' | t | json }},
+        "evening_text": {{ 'routine.evening_text' | t | json }},
+        "stage_prepare": {{ 'routine.stage_prepare' | t | json }},
+        "stage_activate": {{ 'routine.stage_activate' | t | json }},
+        "stage_optimise": {{ 'routine.stage_optimise' | t | json }},
+        "stage_regenerate": {{ 'routine.stage_regenerate' | t | json }},
+        "why": {{ 'routine.why' | t | json }},
+        "read_more": {{ 'routine.read_more' | t | json }},
+        "read_less": {{ 'routine.read_less' | t | json }},
+        "ingredients": {{ 'routine.ingredients' | t | json }},
+        "benefits": {{ 'routine.benefits' | t | json }},
+        "usage": {{ 'routine.usage' | t | json }},
+        "included": {{ 'routine.included' | t | json }},
+        "reviews": {{ 'routine.reviews' | t | json }},
+        "owned_morning": {{ 'routine.owned_morning' | t | json }},
+        "owned_evening": {{ 'routine.owned_evening' | t | json }},
+        "choose_size": {{ 'routine.choose_size' | t | json }},
+        "unavailable": {{ 'routine.unavailable' | t | json }},
+        "complete": {{ 'routine.complete' | t | json }},
+        "remove": {{ 'routine.remove' | t | json }},
+        "complete_note": {{ 'routine.complete_note' | t | json }},
+        "complete_none": {{ 'routine.complete_none' | t | json }},
+        "total": {{ 'routine.total' | t | json }},
+        "saving": {{ 'routine.saving' | t | json }},
+        "min_note": {{ 'routine.min_note' | t | json }},
+        "banner_eyebrow": {{ 'routine.banner_eyebrow' | t | json }},
+        "banner_title": {{ 'routine.banner_title' | t | json }},
+        "banner_text": {{ 'routine.banner_text' | t | json }},
+        "banner_badge": {{ 'routine.banner_badge' | t | json }},
+        "add": {{ 'routine.add' | t | json }},
+        "added": {{ 'routine.added' | t | json }},
+        "add_again": {{ 'routine.add_again' | t | json }},
+        "already_in_cart": {{ 'routine.already_in_cart' | t | json }},
+        "discount_applied": {{ 'routine.discount_applied' | t | json }}
+      }
     },
     "mock": {
       "default": {{ 'mock.default' | t | json }},
@@ -130,7 +192,12 @@
     { "type": "checkbox", "id": "action_build_routine", "label": "Build my routine", "default": true },
     { "type": "checkbox", "id": "action_compare", "label": "Compare products", "default": true },
     { "type": "checkbox", "id": "action_delivery_returns", "label": "Delivery & returns", "default": true },
-    { "type": "checkbox", "id": "action_offers", "label": "Current offers", "default": true }
+    { "type": "checkbox", "id": "action_offers", "label": "Current offers", "default": true },
+    { "type": "header", "content": "Routine banner" },
+    { "type": "checkbox", "id": "banner_enabled", "label": "Show the routine banner", "info": "A bar across the bottom of the screen; its button opens the advisor and starts the routine builder.", "default": true },
+    { "type": "text", "id": "banner_text", "label": "Banner text", "info": "Leave empty for the default text, in the visitor's language." },
+    { "type": "text", "id": "banner_button", "label": "Banner button", "info": "Leave empty for the default label, in the visitor's language." },
+    { "type": "range", "id": "banner_days", "label": "Hidden after closing for", "min": 1, "max": 30, "step": 1, "unit": "d", "default": 7 }
   ]
 }
 {% endschema %}

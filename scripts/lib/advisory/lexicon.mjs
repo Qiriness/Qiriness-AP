@@ -87,6 +87,9 @@ const L = {
   routineClauses: LANGUAGES.map((l) => l.routineClause),
   routineSteps: keyed('routineSteps', ROUTINE_STEP_ORDER),
   wants: union((l) => l.wants),
+  concernIs: union((l) => l.concernIs),
+  asksFor: union((l) => l.asksFor),
+  additive: union((l) => l.additive),
   desired: keyed('desired', DESIRED_ORDER),
   scope: keyed('scope', SCOPE_ORDER),
   routineTime: keyed('routineTime', ROUTINE_TIME_ORDER),
@@ -104,7 +107,7 @@ export const ROUTINE_BUILDER = L.routineBuilder;
 
 /** Every pattern, for the residue: what is left once they have all been removed. */
 const ALL_PATTERNS = [
-  L.eyes, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.routineBuilder, L.dontKnow,
+  L.eyes, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.concernIs, L.asksFor, L.additive, L.routineBuilder, L.dontKnow,
   ...L.concerns.map(([re]) => re), ...L.skinTypes.map(([, re]) => re), ...L.sensitivity.map(([, re]) => re),
   ...L.routineSteps.map(([, re]) => re), ...L.desired.map(([, re]) => re), ...L.scope.map(([, re]) => re),
   ...L.routineTime.map(([, re]) => re), ...L.requests.map(([, re]) => re), L.budgetSmall, L.moreOptions, ...L.budgetAmount,
@@ -196,7 +199,8 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
     text = text.replace(routineClause[0], ' ');
   }
 
-  if (L.wants.test(text)) {
+  // Or the type alone, the answer to « plutôt un sérum ou une crème ? » (« un serum », "a serum").
+  if (L.wants.test(text) || text.trim().split(/\s+/).length <= 3) {
     const desired = L.desired.find(([, re]) => re.test(text));
     if (desired) add('desired_care_type', desired[0], 'medium');
   }
@@ -220,17 +224,37 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
   // The years too: a brand's own age ranges (its routines) read them.
   if (band) add('age', String(years), 'high');
 
+  // A product asked for a concern (« je cherche un produit pour les rides »), or the concern named as
+  // theirs (« ma préoccupation, ce sont mes rides »): that concern is the main one now, even after
+  // another (owner, 2026-10-18: the earlier concern kept it a secondary and the search missed it).
+  // Later (owner, same day: « the agent is not able to adapt to new concerns and remains focused on
+  // the old ones »): « que dois-je faire pour des rides », « comment enlever mes taches », or a concern
+  // named with no question pending. Not with « aussi », nor as the answer to another question
+  // (« peau grasse avec des imperfections » while the skin type is asked).
+  const namesMain = L.wants.test(text) || L.concernIs.test(text) || L.asksFor.test(text);
   const found = [];
   for (const [re, faceConcern, eyeConcern] of L.concerns) {
     const m = text.match(re);
     if (!m) continue;
     const value = eyeContext && eyeConcern ? eyeConcern : faceConcern;
-    if (value) found.push({ value, at: m.index });
+    if (value) found.push({ value, face: faceConcern, at: m.index });
     consume(re);
   }
   found.sort((a, b) => a.at - b.at);
   const hasPrimary = Boolean(profile.primary_concern?.value && profile.primary_concern.value !== 'unknown');
-  found.forEach((c, i) => add(i === 0 && !hasPrimary ? 'primary_concern' : 'secondary_concerns', c.value, 'medium'));
+  const switches = hasPrimary && found.length && !L.additive.test(text) && !['secondary_concerns', 'eye_concern'].includes(lastAsked)
+    && (namesMain || !lastAsked || lastAsked === 'primary_concern');
+  // A new concern with no eye word, after an eye one (« cernes », then « que dois-je faire pour des
+  // rides »): the face's, and the area goes back to the face (« rides » was read as eye wrinkles).
+  const leavesEyes = switches && !eyes && !body && eyeContext && found[0].face && found[0].face !== profile.primary_concern.value;
+  if (leavesEyes) {
+    for (const c of found) c.value = c.face ?? c.value;
+    if (!face) add('body_area', 'face', 'high');
+  }
+  if (switches && found[0].value !== profile.primary_concern.value) {
+    add('primary_concern', found[0].value, 'high', { replace: true });
+    found.slice(1).forEach((c) => add('secondary_concerns', c.value, 'medium'));
+  } else found.forEach((c, i) => add(i === 0 && !hasPrimary ? 'primary_concern' : 'secondary_concerns', c.value, 'medium'));
 
   // Sensitivity said on its own is the concern: « j'ai la peau sensible ».
   const sens = updates.find((u) => u.field === 'sensitivity' && u.value !== 'none');

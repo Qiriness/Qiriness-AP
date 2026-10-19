@@ -72,9 +72,24 @@
     }
   },
 
+  "variant_choice": {
+    "_about": "A routine product sold in several sizes or textures gets one chosen for the customer (owner, 2026-10-18: « between normale and riche, normale should have been chosen »). The texture follows their skin type (Rules tab, skin type → texture); these words find it in the variant's name. Without their skin type, or without a match, the default texture. Variants named with an avoid word (a refill) are never chosen while another exists.",
+    "textures": { "rich": ["riche", "rich"], "standard": ["normale", "normal", "standard"], "light": ["légère", "legere", "light"] },
+    "default": "standard",
+    "avoid": ["recharge", "refill"]
+  },
+  "routine_discount": {
+    "_about": "Applied to the cart with a routine the builder finished, when the customer adds it (owner, 2026-10-17). Never named: the advisor says the routine discount is applied to the basket. The code must exist in Shopify.",
+    "code": "MAROUTINE20",
+    "min_products": 3,
+    "_min_products": "The routine cards let the customer untick products (owner, 2026-10-18): below this many included products the discount is not applied."
+  },
+
   "treats": {
     "_rule": "commercial offers, separate from the advice: one at most per conversation (§ 3.4). The products are the spreadsheet's « Petit plaisir » ones.",
     "max_price": 25,
+    "types": ["mask", "sheet_mask", "kit"],
+    "_types": "Owner, 2026-10-18: « petit plaisir is only mask, masque tissu and kits ». Only these types are offered as the treat (after a routine, after a « Non », and for a small budget), whatever the sheet's « Petit plaisir » column says; still under max_price. Without `types`, the column decides.",
     "treat_routines": [
       { "key": "soiree_spa", "name_fr": "Soirée spa", "name_en": "Spa evening", "types": ["exfoliant", "mask", "mask:eyes"], "kit": "spa-maison-kit-rituel-hydratant" }
     ]

@@ -29,7 +29,7 @@ const anti = (skin, age, time, more = {}) => build({ primary_concern: q('global_
 const handles = (a, part) => a.steps.filter((s) => !part || s.part === part).map((s) => s.handle);
 const said = (message, profile = {}) => mergeProfile(profile, extractProfile(message).updates, { allowed: advisor.allowed }).profile;
 
-test('the questions: main concern, skin type (sensitive among them), age, then day / night / both with their price', () => {
+test('the questions: main concern, skin type (sensitive among them), age, then day / night / both', () => {
   const ask = (profile, asked) => advisor.advise({ profile, mode: 'routine_builder', asked }).next_question;
   const first = ask({}, []);
   assert.equal(first.field, 'primary_concern');
@@ -47,8 +47,8 @@ test('the questions: main concern, skin type (sensitive among them), age, then d
   const time = ask({ primary_concern: q('global_signs_of_ageing'), skin_type: q('dry'), age_band: q('35_44') }, ['primary_concern', 'skin_type', 'age_band']);
   assert.equal(time.field, 'routine_time');
   assert.deepEqual(time.options.map((o) => o.label), ['Routine du jour', 'Routine de nuit', 'Jour et nuit']);
-  assert.ok(time.options.every((o) => typeof o.total === 'number'));
-  assert.ok(time.options[2].total > time.options[0].total);
+  // No price on the moments (owner, 2026-10-17: the cards show them).
+  assert.ok(time.options.every((o) => o.total === undefined));
 });
 
 test('…in English too; and the age is asked for every concern, hydration too (owner, 2026-10-17: kept for statistics)', () => {
@@ -216,4 +216,182 @@ test('outside the builder, « mes cernes » is still one eye product, not a rout
   const one = advisor.advise({ profile: said("J'ai des cernes"), mode: 'conversation', asked: [] });
   assert.equal(one.steps.length, 1);
   assert.equal(KNOWLEDGE.get(one.steps[0].handle).area, 'eyes');
+});
+
+// THE TREAT AND THE STAGES (owner, 2026-10-17): « this also needs to be adapted to the concerns and
+// type of skin »; each step named by its ritual stage.
+test('the treat after a routine treats one of their concerns and suits their skin; none fits, none', () => {
+  const treatOf = (profile) => advisor.treat({ profile });
+  const k = (t) => (t ? KNOWLEDGE.get(t.handle) : null);
+  const concernsOf = (x) => [x.primary_concern, ...x.other_concerns];
+  // Anti-age, dry skin: never the anti-blemish patch the first test showed.
+  const antiAge = treatOf({ primary_concern: q('wrinkles'), skin_type: q('dry') });
+  assert.notEqual(antiAge?.handle, 'patch-anti-bouton-invisible-flash-patch®');
+  if (antiAge) {
+    assert.ok(concernsOf(k(antiAge)).includes('wrinkles'));
+    assert.notEqual(k(antiAge).skin?.dry, 'unsuitable');
+  }
+  const blemish = treatOf({ primary_concern: q('imperfections'), skin_type: q('oily') });
+  assert.ok(blemish && concernsOf(k(blemish)).includes('blemishes'));
+  // The eye routine's other eye concern counts.
+  const eyesTreat = treatOf({ primary_concern: q('dark_circles'), eye_concern: q('eye_wrinkles') });
+  if (eyesTreat) {
+    assert.ok(concernsOf(k(eyesTreat)).some((c) => ['dark_circles', 'puffiness', 'eye_wrinkles'].includes(c)));
+    assert.equal(k(eyesTreat).area, 'eyes');
+  }
+  // Never a body treat after a face routine.
+  const hydration = treatOf({ primary_concern: q('dehydration'), skin_type: q('combination') });
+  assert.ok(hydration && ['face', 'eyes'].includes(k(hydration).area ?? 'face'));
+});
+
+test('each step carries its ritual stage from the Products tab', () => {
+  const a = anti('dry', '35_44', 'day');
+  assert.deepEqual(a.steps.map((s) => s.stage), a.steps.map((s) => KNOWLEDGE.get(s.handle).ritual_stage ?? undefined));
+  assert.equal(a.steps[0].stage, 'prepare');
+});
+
+// BOTH MOMENTS ON THE CARDS (owner, 2026-10-18): the routine they chose, and the other moment with
+// what they already have marked, so they see the night routine their day products already make.
+test('a day routine carries the night too: its shared steps marked, the rest to complete it', () => {
+  const a = anti('dry', '35_44', 'day');
+  const m = a.moments;
+  assert.equal(m.chosen, 'day');
+  assert.deepEqual(m.day.map((s) => s.handle), handles(a));
+  assert.ok(m.night.length >= 2);
+  const shared = m.night.filter((s) => s.also_in === 'day');
+  const missing = m.night.filter((s) => !s.also_in);
+  assert.ok(shared.length >= 1, 'the cleanser / lotion / serum are already theirs');
+  assert.ok(missing.length >= 1, 'a night product completes it');
+  assert.ok(shared.every((s) => handles(a).includes(s.handle)));
+  assert.ok(missing.every((s) => !handles(a).includes(s.handle)));
+  // The night as a « jour et nuit » build has it, step for step.
+  const both = anti('dry', '35_44', 'both');
+  assert.deepEqual(m.night.map((s) => s.handle), both.moments.night.map((s) => s.handle));
+});
+
+test('a night routine carries the day; « jour et nuit » shows both, the evening with what the morning has', () => {
+  const night = anti('combination', '25_34', 'night');
+  assert.equal(night.moments.chosen, 'night');
+  assert.deepEqual(night.moments.night.map((s) => s.handle), handles(night));
+  assert.ok(night.moments.day.length >= 2);
+  const both = anti('combination', '25_34', 'both');
+  assert.equal(both.moments.chosen, 'both');
+  assert.deepEqual(both.moments.day.map((s) => s.handle), handles(both, 'day'));
+  // The evening: its own products and, put back, the ones the morning already has.
+  assert.ok(both.moments.night.length > handles(both, 'night').length);
+  assert.ok(both.moments.night.filter((s) => s.also_in === 'day').every((s) => handles(both, 'day').includes(s.handle)));
+  const order = both.moments.night.map((s) => Number(s.slot.split('_').pop()));
+  assert.deepEqual(order, [...order].sort((x, y) => x - y));
+});
+
+test('the eye routine has both moments too; outside the builder, none', () => {
+  const eyes = build({ primary_concern: q('dark_circles'), eye_concern: q('eye_wrinkles'), age_band: q('35_44'), routine_time: q('day') }, { asked: ['primary_concern', 'eye_concern', 'age_band', 'routine_time'] });
+  assert.equal(eyes.moments.chosen, 'day');
+  assert.ok(eyes.moments.night.some((s) => s.handle === 'demaquillant-yeux-biphase-express' && !s.also_in));
+  assert.ok(eyes.moments.night.some((s) => s.handle === 'serum-anti-age-elixir-regard-eclat' && s.also_in === 'day'));
+  const asked = advisor.advise({ profile: { primary_concern: q('wrinkles') }, mode: 'conversation' });
+  assert.equal(asked.moments, undefined);
+});
+
+test('the « petit plaisir » is a mask, a sheet mask or a kit only (owner, 2026-10-18)', () => {
+  assert.deepEqual(built.routines.treats.types, ['mask', 'sheet_mask', 'kit']);
+  const typeOf = (handle) => KNOWLEDGE.get ? KNOWLEDGE.get(handle)?.functional_type : built.products.find((k) => k.handle === handle)?.functional_type;
+  let offered = 0;
+  for (const concern of ['dehydration', 'imperfections', 'dark_spots', 'dullness', 'wrinkles', 'early_signs_of_ageing', 'dark_circles', 'blemishes', 'reactivity']) {
+    for (const skin of [null, 'dry', 'normal', 'combination', 'oily']) {
+      const t = advisor.treat({ profile: { primary_concern: q(concern), ...(skin ? { skin_type: q(skin) } : {}) } });
+      if (!t) continue;
+      offered += 1;
+      assert.ok(['mask', 'sheet_mask', 'kit'].includes(typeOf(t.handle)), `${concern} ${skin}: ${t.handle}`);
+    }
+  }
+  assert.ok(offered > 10);
+  // The patches, the gua sha, the sauna and the bath stones are not, whatever the sheet's column says.
+  const exclude = built.products.filter((k) => ['mask', 'sheet_mask', 'kit'].includes(k.functional_type)).map((k) => k.handle);
+  assert.equal(advisor.treat({ profile: { primary_concern: q('imperfections'), skin_type: q('oily') }, exclude }), null);
+});
+
+test('one product for a need: the concern first, the skin type only ranks (owner, 2026-10-18)', () => {
+  const misses = [];
+  for (const concern of ['wrinkles', 'dehydration', 'imperfections', 'dark_spots', 'dullness', 'early_signs_of_ageing', 'loss_of_firmness', 'redness']) {
+    for (const skin of ['dry', 'normal', 'combination', 'oily']) {
+      for (const desired of [null, 'serum', 'cream']) {
+        const profile = { primary_concern: q(concern), age_band: q('35_44'), ...(desired ? { desired_care_type: q(desired) } : {}) };
+        const anySkin = advisor.advise({ profile, mode: 'conversation' });
+        const a = advisor.advise({ profile: { ...profile, skin_type: q(skin) }, mode: 'conversation' });
+        // Whenever a product answers the need, their skin type never leaves them with none.
+        if (anySkin.status === 'recommended' && a.status !== 'recommended') { misses.push(`${concern} ${skin} ${desired}: ${a.reason}`); continue; }
+      }
+    }
+  }
+  assert.deepEqual(misses, []);
+  // Nothing for the need made for their skin type (every serum marked « Non adapté » to oily skin):
+  // still a serum for the wrinkles, marked, never « nothing suits your skin ».
+  const unsuited = built.products.map((k) => (k.functional_type === 'serum' ? { ...k, skin: { ...k.skin, oily: 'unsuitable' } } : k));
+  const strict = createAdvisor(read('data/advisor/qiriness.json'), CATALOGUE, { knowledge: knowledgeIndex(unsuited), routines: built.routines });
+  const serum = strict.advise({ profile: { primary_concern: q('wrinkles'), skin_type: q('oily'), age_band: q('35_44'), desired_care_type: q('serum') }, mode: 'conversation' });
+  assert.equal(serum.status, 'recommended');
+  assert.ok(serum.steps[0].reason_codes.includes('skin_type_mismatch:oily'));
+  // A routine keeps the skin type hard: no unsuited serum in it.
+  const routine = strict.advise({ profile: { primary_concern: q('wrinkles'), skin_type: q('oily'), age_band: q('35_44'), routine_time: q('day') }, mode: 'routine_builder', asked: ALL });
+  assert.ok(!routine.steps.some((x) => x.type === 'serum'));
+  // Wrinkles, oily skin, 35–44: a Temps Sublime product, not « nothing suits your skin ».
+  const w = advisor.advise({ profile: { primary_concern: q('wrinkles'), skin_type: q('oily'), age_band: q('35_44') }, mode: 'conversation' });
+  assert.equal(w.status, 'recommended');
+  assert.match(w.steps[0].handle, /temps-sublime/);
+});
+
+test('« je cherche un produit pour les rides » after another concern: wrinkles is the main concern, the old type dropped', async () => {
+  const { createAdvisorTurn } = await import('../storefront-chat/advisor-tools.mjs');
+  const state = { profile: { primary_concern: q('dehydration'), skin_type: q('oily'), age_band: q('35_44'), desired_care_type: { value: 'serum', source: 'natural_language', confidence: 'medium', turn: 2 } }, mode: 'conversation', asked: ['primary_concern', 'skin_type', 'age_band'], last_question: null, last_advice: null };
+  for (const message of ['je cherche un produit pour les ride', 'ma preocupation son mes rides', 'My main concern is wrinkles', "I'm looking for something for wrinkles"]) {
+    const turn = createAdvisorTurn({ advisor, state, message, catalogue: CATALOGUE, money: (n) => `${n} €` });
+    const a = turn.opening();
+    assert.equal(turn.profile.primary_concern.value, 'wrinkles', message);
+    assert.equal(turn.profile.desired_care_type, undefined, message);
+    assert.equal(a.status, 'recommended', message);
+    assert.match(a.steps[0].handle, /temps-sublime/, message);
+  }
+  // A type said with it stays: « un sérum pour les rides ».
+  const serum = createAdvisorTurn({ advisor, state, message: 'je cherche un sérum pour les rides', catalogue: CATALOGUE, money: (n) => `${n} €` });
+  serum.opening();
+  assert.equal(serum.profile.desired_care_type.value, 'serum');
+  // « j'ai aussi des rides »: another concern, the main one kept.
+  const also = createAdvisorTurn({ advisor, state, message: "j'ai aussi des rides", catalogue: CATALOGUE, money: (n) => `${n} €` });
+  assert.equal(also.profile.primary_concern.value, 'dehydration');
+});
+
+test('switching concern later: asked as a question, after an eye concern, then the type alone (FR and EN)', async () => {
+  const { createAdvisorTurn } = await import('../storefront-chat/advisor-tools.mjs');
+  const talk = (messages) => {
+    let state = null;
+    return messages.map((message) => {
+      const turn = createAdvisorTurn({ advisor, state, message, catalogue: CATALOGUE, money: (n) => `${n} €`, locale: 'fr' });
+      const a = turn.opening();
+      state = turn.nextState();
+      return { p: turn.profile, a };
+    });
+  };
+  // Cernes, then « que dois-je faire pour des rides »: the face's wrinkles, not the eye contour's.
+  const [, rides, , creme] = talk(['Mes cernes et poches', 'Que dois-je faire pour des rides', 'mais pour les rides sur le visages', 'je cherche un creme pour les rides']);
+  assert.equal(rides.p.primary_concern.value, 'wrinkles');
+  assert.equal(rides.p.body_area.value, 'face');
+  assert.match(rides.a.steps[0].handle, /temps-sublime/);
+  assert.equal(creme.p.desired_care_type.value, 'moisturiser');
+  assert.match(creme.a.steps[0].handle, /^creme-/);
+  // Wrinkles, then « comment enlever mes taches », then « un serum »: a serum for the spots.
+  const [, taches, serum] = talk(['je cherche un sérum pour les rides', 'comment enlever mes taches', 'un serum']);
+  assert.equal(taches.p.primary_concern.value, 'dark_spots');
+  assert.equal(taches.p.desired_care_type, undefined);
+  assert.equal(serum.p.desired_care_type.value, 'serum');
+  assert.match(serum.a.steps[0].handle, /taches/);
+  const en = talk(['I need something for my dark circles', 'what can I do about wrinkles', 'how do I get rid of dark spots', 'a serum']);
+  assert.deepEqual(en.map((t) => t.p.primary_concern.value), ['dark_circles', 'wrinkles', 'dark_spots', 'dark_spots']);
+  assert.match(en[3].a.steps[0].handle, /taches/);
+  // Kept: « aussi » adds a concern; a concern typed while another question is asked stays a second one.
+  const [, also] = talk(['je cherche un sérum pour les rides', "j'ai aussi des taches"]);
+  assert.equal(also.p.primary_concern.value, 'wrinkles');
+  const answering = createAdvisorTurn({ advisor, state: { profile: { primary_concern: q('wrinkles') }, mode: 'routine_builder', asked: ['primary_concern', 'skin_type'], last_question: 'skin_type' }, message: 'peau grasse avec des imperfections', catalogue: CATALOGUE, money: (n) => `${n} €` });
+  assert.equal(answering.profile.primary_concern.value, 'wrinkles');
+  assert.equal(answering.profile.skin_type.value, 'oily');
 });

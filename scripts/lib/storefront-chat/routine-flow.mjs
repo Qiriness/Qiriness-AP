@@ -50,10 +50,16 @@ const TEXT = {
     treatAfterNo: "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :",
     cartOne: (name) => `Souhaitez-vous que j'ajoute ${name} à votre panier ?`,
     cartRoutine: 'Souhaitez-vous que j\'ajoute cette routine à votre panier ?',
+    cartRoutineDiscount: 'Souhaitez-vous que j\'ajoute cette routine à votre panier ? Votre remise routine s\'y appliquera automatiquement.',
     cartYes: 'Oui, ajouter',
+    cartYesDiscount: 'Oui, ajouter avec la remise',
+    cartDiscount: 'Votre remise routine est appliquée à votre panier.',
     cartNo: 'Je cherche encore',
     cartDone: (names) => `C'est noté, j'ajoute à votre panier : ${names}.`,
     cartSize: (names) => `Pour ${names}, choisissez la taille sur sa page.`,
+    cartRoutineDone: "C'est noté, j'ajoute à votre panier les soins inclus dans votre routine.",
+    cartNoDone: 'Très bien, prenez votre temps.',
+    routineReady: 'Voici votre routine personnalisée, matin et soir.',
   },
   en: {
     offer: 'Would you like me to build you a personalised routine?',
@@ -65,10 +71,16 @@ const TEXT = {
     treatAfterNo: 'Of course. If you fancy a little treat, you might like this one:',
     cartOne: (name) => `Would you like me to add ${name} to your cart?`,
     cartRoutine: 'Would you like me to add this routine to your cart?',
+    cartRoutineDiscount: 'Would you like me to add this routine to your cart? Your routine discount will be applied automatically.',
     cartYes: 'Yes, add it',
+    cartYesDiscount: 'Yes, add it with the discount',
+    cartDiscount: 'Your routine discount is applied to your cart.',
     cartNo: "I'm still looking",
     cartDone: (names) => `Done, adding to your cart: ${names}.`,
     cartSize: (names) => `For ${names}, please choose the size on its page.`,
+    cartRoutineDone: 'Done, adding the products included in your routine to your cart.',
+    cartNoDone: 'Of course, take your time.',
+    routineReady: 'Here is your personalised routine, morning and evening.',
   },
 };
 const text = (lang) => TEXT[String(lang).slice(0, 2)] ?? TEXT.fr;
@@ -118,10 +130,22 @@ export function cartToAdd(flow, nameOf = () => null) {
   };
 }
 
-/** The code's own reply to « Oui, ajouter » (no model call). */
-export function cartDoneText(lang, added, needsSize) {
+/** The code's own reply to « Oui, ajouter » (no model call); a finished routine's discount said, never its code. */
+export function cartDoneText(lang, added, needsSize, { discount = false, routine = false } = {}) {
   const t = text(lang);
-  return [added.length ? t.cartDone(added.join(', ')) : null, needsSize.length ? t.cartSize(needsSize.join(', ')) : null].filter(Boolean).join(' ');
+  // Under the routine cards: what they include, which the widget knows (it says how it went).
+  if (routine) return t.cartRoutineDone;
+  return [added.length ? t.cartDone(added.join(', ')) : null, added.length && discount ? t.cartDiscount : null, needsSize.length ? t.cartSize(needsSize.join(', ')) : null].filter(Boolean).join(' ');
+}
+
+/** The code's own reply to « Je cherche encore » (no model call): the treat, when there is one, follows it. */
+export function cartNoText(lang) {
+  return text(lang).cartNoDone;
+}
+
+/** The one sentence above the routine cards (no model reply: the cards say it all). */
+export function routineReadyText(lang) {
+  return text(lang).routineReady;
 }
 
 /** The customer's answer to the offer: a button, or typed words while it is pending. */
@@ -175,16 +199,19 @@ export function anchorFor({ pageProductId = null, resolvedIds = [], advice = nul
  *   purchaseChoices: (item) => { label: string, value: string }[],
  *   cartable: { product_id: string, variant_id: string | null, name: string }[],   what « add to cart » would add (one product, or a routine)
  *   cart: 'yes' | 'no' | null                                    this turn's answer to the cart question
+ *   discount: boolean                                            a finished routine with the shop's routine discount
  * }} input
  * @returns {{ flow: object, followUp: { kind: string, text: string, choices: object[], productIds: string[] } | null }}
  */
-export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices, cartable = [], cart = null }) {
+export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices, cartable = [], cart = null, discount = false }) {
   const next = cleanFlow(flow);
   const t = text(lang);
   const say = (kind, words, { choices = [], productIds = [] } = {}) => ({ flow: next, followUp: { kind, text: words, choices, productIds } });
   const askCart = (items) => {
     next.cart = { pending: items.map((x) => ({ id: x.product_id, variant_id: x.variant_id ?? null })), asked: [...next.cart.asked, ...items.map((x) => x.product_id)] };
-    return say('cart', items.length > 1 ? t.cartRoutine : t.cartOne(items[0].name), { choices: [{ label: t.cartYes, value: 'flow:cart:yes' }, { label: t.cartNo, value: 'flow:cart:no' }] });
+    // A finished routine with the shop's routine discount (owner, 2026-10-17): « ajouter avec la remise ».
+    const withDiscount = discount && items.length > 1;
+    return say('cart', withDiscount ? t.cartRoutineDiscount : items.length > 1 ? t.cartRoutine : t.cartOne(items[0].name), { choices: [{ label: withDiscount ? t.cartYesDiscount : t.cartYes, value: 'flow:cart:yes' }, { label: t.cartNo, value: 'flow:cart:no' }] });
   };
   // The cart question is the last message's question only: answered or passed
   // over, nothing is pending any more. Left pending, a « oui » four turns later

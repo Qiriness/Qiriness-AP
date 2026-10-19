@@ -42,6 +42,42 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 61. The routine cards: tested offline, not yet in the widget — 2026-10-18
+
+After the widget redeploy (knowledge v5 and the dev sync are done).
+
+1. **Wide panel.** **Check:** « Construire ma routine » → the panel widens at the first question; the header button collapses it and it stays collapsed for the rest of the routine; on a phone, no button.
+2. **Both moments.** **Check:** Rides · Sèche · 35–44 · « Routine du jour » → « Le matin » included, « Le soir » greyed; its cleanser / lotion / serum say « Déjà dans votre routine du matin »; « Compléter ma routine » un-greys it and the total adds only the night products; « Retirer de ma routine » undoes it.
+3. **Cards.** **Check:** each card shows its stage, image, name, size, price and stars; « Pourquoi pour vous ? » starts with « Peau sèche / très sèche · Rides » where it applies; « Lire la suite » opens it; the three sections fold open.
+4. **Inclus and the minimum.** **Check:** untick until 2 products remain → no saving, « La remise routine s'applique dès 3 soins »; add → the cart has the 2 products and no MAROUTINE20. With 3 or more → crossed-out total, « Économie », and MAROUTINE20 in the cart.
+5. **No code shown.** **Check:** the banner says « −20 % sur votre routine » and « Automatique », never MAROUTINE20.
+6. **Page reload.** **Check:** the choices (unticked, completed) survive a page change.
+7. **English.** **Check:** « Morning » / « Evening », « Complete my routine », « Why for you? ».
+8. **No model text, then the cart question.** **Check:** above the cards only « Voici votre routine personnalisée, matin et soir. »; below, « Souhaitez-vous que j'ajoute cette routine à votre panier ? … ». Untick one product, click « Oui, ajouter avec la remise » → the cart has the included products only; the treat follows. « Je cherche encore » → the treat, nothing added.
+9. **Re-adding.** **Check:** add the routine, empty the cart, click the button again → the products are back; click again with the cart full → « Ces soins sont déjà dans votre panier. », no duplicates; untick / « Compléter ma routine » still work after an add.
+10. **Size chosen.** **Check:** a routine with « Crème Hydratante Aloe Vera B3 Caresse Source d'Eau » (or the Rétinol cream), skin « Normale » → the card says « Normale 50 ml » and that variant goes in the cart; skin « Sèche » → « Riche 50 ml ».
+11. **Starting over.** **Check:** after a routine, type « je voudrais refaire ma routine » → « Quelle est votre préoccupation principale ? » with its buttons, no routine; same in English with "redo my routine".
+12. **Layout.** **Check:** wide panel: our bubbles stay left, theirs right, neither crosses the middle; « Nouvelle conversation » (pencil icon) clears the chat and narrows the panel.
+13. **Petit plaisir.** **Check:** after several routines (Rides, Imperfections, Cernes), the treat is always a mask, a sheet mask or a kit; never a patch, the gua sha or the sauna.
+14. **Another concern.** **Check:** Déshydratation · Grasse, ask for « un sérum », then type « je cherche un produit pour les rides » → a Temps Sublime product (the Élixir serum, the Light cream beside it), not « je ne trouve pas de sérum adapté »; « ma préoccupation, ce sont mes rides » the same.
+15. **Restart after a care type.** **Check:** after 14, « refaire ma routine », answer the four questions → the routine cards, not « quel type de soin souhaitez-vous privilégier ? ».
+16. **« Je cherche encore ».** **Check:** under the routine cards, click « Je cherche encore » (then, in a new chat, type "I'm still looking") → « Très bien, prenez votre temps. » and the petit plaisir only; no paragraph, no product cards.
+17. **Cards, wide.** **Check:** wide panel, a reply with 2–3 product cards (« un sérum pour les rides ») → the cards spread across the panel, the text above stays left; narrow panel unchanged.
+18. **Concern switch.** **Check:** « mes cernes » → « que dois-je faire pour des rides » → a Temps Sublime product (not an eye cream); « comment enlever mes taches » → « un serum » → the Éclat Parfait spot serum. EN: "what can I do about wrinkles", "how do I get rid of dark spots" the same.
+19. **Card images.** **Check:** product cards in the chat show the product photo, not the beige placeholder.
+20. **Routine banner.** **Check:** a fresh visit (private window) → after about a second a dark bar slides up across the bottom: « Construisez votre routine personnalisée et profitez d'une offre exclusive » and « Construire ma routine »; the launcher sits above it. The button opens the chat on « Quelle est votre préoccupation principale ? »; reload → no banner. Another private window: × → gone, still gone on the next page. English storefront: English text. Phone: text over a full-width button, × top right.
+21. **Comparison.** **Check:** « Comparer des soins » → « la crème contour des yeux Temps Sublime et la crème Regard d'Exception » → the two eye creams compared, no « laquelle ? »; « la Caresse Temps Sublime Riche et la Light » → both; « la crème Temps Sublime et la crème Regard d'Exception » → « laquelle ? » with no routine offer under it.
+
+## 60. The routine reply, its treat and the routine discount: tested offline, not yet in the widget — 2026-10-17
+
+After `npm run advisor:load` and the widget redeploy.
+
+1. **No prices.** **Check:** the day / night buttons read « Routine du jour », « Routine de nuit », « Jour et nuit »; the routine reply names no price or total.
+2. **Stages and reasons.** **Check:** each step introduced by its stage (« Préparer », « Activer »…); the reasons name the skin type and the concern, never the age or « tranche d'âge ».
+3. **The treat.** **Check:** anti-age dry skin: no Flash Patch; the treat names one of their concerns. Eye routine: an eye treat or none.
+4. **The discount.** **Check:** after a finished routine, « Ajouter la routine au panier avec la remise » adds the products and MAROUTINE20 shows in the cart, with any code already there kept; « Oui, ajouter avec la remise » does the same. A single product's « Oui, ajouter » adds no code. « Où est le code de la routine ? » → « appliquée directement à votre panier », no code named; « le code MAROUTINE20 marche ? » → named back.
+5. **English.** **Check:** « Yes, add it with the discount », « Add the routine to my cart with the discount ».
+
 ## 59. The eye routine, button questions without the model, advisor_routines: applied and loaded, not yet in the widget — 2026-10-17
 
 Migration 98 is applied and knowledge version 3 is loaded. Before checking: redeploy the widget (`cd storefront-app && shopify app dev`): « Ajouter la routine au panier »'s routine beacon is in the new widget only. The dev store needs the eye products (the Éclat Parfait lotion, gold patches, Élixir Regard Éclat, the three eye creams, the biphase remover).

@@ -23,6 +23,20 @@ function saleOf(variant, line) {
   return Number.isFinite(was) && was > now ? { on_sale: true, price_before_sale: was, sale_percentage: Math.round((1 - now / was) * 100) } : {};
 }
 
+/**
+ * The routine discount's value (owner, 2026-10-18: the cards show « Économie »), from its synced
+ * Shopify rule: a running code's percentage off and its minimum. Null when the code is not synced,
+ * not running, or not a percentage (the cards then show no saving, and the code still applies).
+ */
+export function routineReward(source, code, now = Date.now()) {
+  if (source?.status !== 'ok' || !code) return null;
+  const row = (source.cartCodeRows ?? []).find((p) => codesOf(p).includes(norm(code)) && !running(p, now));
+  const gets = row?.rule_snapshot?.customer_gets;
+  if (!finite(gets?.percentage)) return null;
+  const min = row.rule_snapshot.minimum_requirement;
+  return { percentage: Math.round(Number(gets.percentage) * 1000) / 10, ...(min?.type === 'quantity' && finite(min.quantity) ? { min_quantity: Number(min.quantity) } : {}), ...(min?.type === 'subtotal' && finite(min.amount) ? { min_subtotal: Number(min.amount) } : {}) };
+}
+
 export function running(p, now = Date.now()) {
   if (p.ends_at && (!Number.isFinite(Date.parse(p.ends_at)) || now >= Date.parse(p.ends_at))) return 'expired';
   if (p.starts_at && (!Number.isFinite(Date.parse(p.starts_at)) || now < Date.parse(p.starts_at))) return 'not_started';

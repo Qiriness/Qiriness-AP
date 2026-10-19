@@ -23,7 +23,7 @@ export default {
     eyes: /\b(yeux|oeil|contour des yeux|contour de l oeil|regard|paupieres?|cernes?|poches?)\b/,
     // Not « après la douche »: « ma peau tiraille après la douche » is about the face too (customer batch).
     body: /\b(corps|jambes?|bras|dos|peau du corps)\b/,
-    face: /\b(visage|figure|front|joues?|menton)\b/
+    face: /\b(visages?|figure|front|joues?|menton)\b/
   },
 
   concerns: {
@@ -91,14 +91,21 @@ export default {
     moisturiser: /\b(creme|hydratant|creme de jour)\b/
   },
 
+  // « ma préoccupation, ce sont mes rides » (typed « ma preocupation son mes rides »): the concern they name is the main one.
+  // « que dois-je faire pour des rides », « comment enlever mes taches », « quelque chose contre… »: asking for a concern.
+  asksFor: /\b(que (dois je|faut il|puis je) (faire|utiliser|mettre)|comment (enlever|traiter|reduire|attenuer|effacer|eliminer|estomper|lutter|combattre|faire|se debarrasser|m en debarrasser|prevenir|eviter|soigner)|quoi (pour|contre)|quelque chose (pour|contre)|un (produit|soin) (pour|contre)|et pour (les?|la|mes|des)|mais pour (les?|la|mes|des)|qu est ce qui (marche|fonctionne))\b/,
+  // « aussi », « en plus »: another concern beside the main one.
+  additive: /\b(aussi|egalement|en plus|de plus|ainsi que|en outre)\b/,
+  concernIs: /\b(ma |mes |mon )?(principale? )?(preo?c{1,2}upations?|souci|probleme) (principale? )?(c est|ce sont|est|sont|son|serait|ce serait)\b/,
   wants: /\b(je cherche|je recherche|il me faut|je voudrais|j aimerais|je souhaite|besoin d|conseillez moi|recommandez moi|vous auriez|vous avez|quel(le)?s? (serait|serum|creme))\b/,
   desired: {
     serum: /\b(un|une|le|la|mon|ma) (serum|elixir)\b/,
-    night_cream: /\b(une|la|ma) creme de nuit\b/,
+    night_cream: /\b(une|un|la|ma) creme de nuit\b/,
     eye_care: /\b(un|le|mon) contour des yeux\b/,
     cleanser: /\b(un|une|le|la) (nettoyant|demaquillant)\b/,
     mask: /\b(un|le) masque\b/,
-    moisturiser: /\b(une|la) (creme|creme de jour|creme hydratante)\b/
+    // « un creme » typed: still a cream.
+    moisturiser: /\b(une|un|la) (creme|creme de jour|creme hydratante)\b/
   },
 
   scope: {
@@ -135,6 +142,7 @@ export default {
   age: [/\b(\d{2}) ans\b/],
   ageWords: [[/\bvingtaine\b/, 25], [/\btrentaine\b/, 35], [/\bquarantaine\b/, 45], [/\bcinquantaine\b/, 55], [/\b(soixantaine|septantaine)\b/, 65]],
 
-  routineBuilder: /\b((construire|creer|composer|elaborer|monter|etablir|faire|me faire|m aider a (construire|creer|faire)) (ensemble )?(avec moi )?(ma|une|mon|la) ((nouvelle|vraie|bonne|petite) )?routine|routine builder|mode routine)\b/,
+  // « refaire ma routine », « recommencer le questionnaire » (owner, 2026-10-18): the builder again, from its first question.
+  routineBuilder: /\b((construire|creer|composer|elaborer|monter|etablir|faire|me faire|m aider a (construire|creer|faire)) (ensemble )?(avec moi )?(ma|une|mon|la) ((nouvelle|vraie|bonne|petite) )?routine|routine builder|mode routine|(refaire|recommencer|reprendre|relancer|reessayer|reconstruire) (a zero )?(ma |la |une |mon |le )?(routine|questionnaire|diagnostic)|nouvelle routine)\b/,
   dontKnow: /\b(je (ne )?sais pas|aucune idee|j en sais rien|pas sure?|je ne suis pas sure?)\b/
 };

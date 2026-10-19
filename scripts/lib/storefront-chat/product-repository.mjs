@@ -17,6 +17,47 @@ import { isCustomerFacing } from '../../../agent/src/retrieval/product-matching.
 import { htmlToText } from '../html-to-text.mjs';
 import { keywords } from './faq-matcher.mjs';
 
+/**
+ * THE ROUTINE CARDS' CONTENT (owner, 2026-10-18: « key ingredients, benefits and how to use … a lot
+ * of the products already have this information »), read from named metafields only, never the
+ * whole set. The keys are the shop's own (Qiriness: the Accentuate fields, Judge.me's ratings in
+ * Shopify's standard `reviews.*`); the first one with a value wins. Another shop changes this map.
+ */
+export const CONTENT_METAFIELDS = {
+  benefits: ['accentuate.results'],
+  claims: ['custom.claims'],
+  rating: ['reviews.rating'],
+  rating_count: ['reviews.rating_count'],
+  volume: ['accentuate.volume'],
+  ingredients: ['accentuate.ingredients'],
+  usage: ['custom.usage_instructions', 'accentuate.how_to_tuse']
+};
+// Read as columns of their own; `ingredients` and `usage` already arrive through the mapped columns.
+const SELECTED_CONTENT = ['benefits', 'claims', 'rating', 'rating_count', 'volume'];
+
+function contentSelects() {
+  return SELECTED_CONTENT.flatMap((field) => CONTENT_METAFIELDS[field].map((key, i) =>
+    `mf_${field}_${i}:structured_facts->metafields->"${key}"->${field === 'claims' ? 'json_value' : '>value'}`));
+}
+
+function contentField(row, field) {
+  for (let i = 0; i < CONTENT_METAFIELDS[field].length; i++) {
+    const v = row[`mf_${field}_${i}`];
+    if (v !== null && v !== undefined && v !== '') return v;
+  }
+  return null;
+}
+
+/** « 4.8 » from Shopify's rating JSON ({"value":"4.8","scale_max":"5.0"}), out of 5; null when absent. */
+function ratingOf(value) {
+  try {
+    const r = typeof value === 'string' ? JSON.parse(value) : value;
+    const v = Number(r?.value);
+    const max = Number(r?.scale_max) || 5;
+    return Number.isFinite(v) && v > 0 ? Math.round((v / max) * 5 * 10) / 10 : null;
+  } catch { return null; }
+}
+
 export const PRODUCT_COLUMNS = [
   'id',
   'shopify_product_id',
@@ -30,7 +71,8 @@ export const PRODUCT_COLUMNS = [
   'usage_instructions',
   'product_faqs',
   'variants',
-  'available_stock'
+  'available_stock',
+  ...contentSelects()
 ].join(',');
 
 export const COLLECTION_COLUMNS = 'handle,title,axis,product_ids';
@@ -54,6 +96,11 @@ const ACTIVE_COLLECTION = { is_active: true, deleted_at: { operator: 'is', value
  * @property {string | null} description
  * @property {string | null} keyIngredients
  * @property {string | null} usage
+ * @property {string | null} benefits   its results / benefits text (CONTENT_METAFIELDS)
+ * @property {string[]} claims          short benefit tags (« Anti-taches », « Lissant »)
+ * @property {number | null} rating     out of 5
+ * @property {number | null} ratingCount
+ * @property {string | null} volume     « 100ml »
  * @property {object[]} faqs        published Shopify question/answer pairs, selected per question
  * @property {{ id: string | null, title: string | null, price: number, sku: string | null, compareAt: number | null, inStock: boolean | null }[]} variants  compareAt: the « was » price, only when above price; id: Shopify's variant gid (the card's « Ajouter au panier »); inStock: null when the sync did not say
  * @property {string[]} skus
@@ -116,6 +163,12 @@ export function mapProduct(row, collections = []) {
     description: text(row.description),
     keyIngredients: text(row.active_ingredients),
     usage: text(row.usage_instructions),
+    // The routine cards' foldable sections and their stars: shown, never read to the model.
+    benefits: text(contentField(row, 'benefits')),
+    claims: (Array.isArray(contentField(row, 'claims')) ? contentField(row, 'claims') : []).filter((c) => typeof c === 'string' && c.trim()).map((c) => c.trim()).slice(0, 6),
+    rating: ratingOf(contentField(row, 'rating')),
+    ratingCount: Number(contentField(row, 'rating_count')) > 0 ? Math.floor(Number(contentField(row, 'rating_count'))) : null,
+    volume: text(contentField(row, 'volume')),
     faqs: (Array.isArray(row.product_faqs) ? row.product_faqs : [])
       .filter((faq) => faq?.published !== false && text(faq?.question) && text(faq?.answer) && text(faq.answer).length <= 1800)
       .map((faq, i) => ({ id: faq.faq_id ?? `${row.id}:faq:${i}`, canonical_question: text(faq.question), answer: text(faq.answer), aliases: [], keywords: keywords(text(faq.question)), topic: 'product', locale: 'fr', active: true, updated_at: faq.updated_at ?? null })),

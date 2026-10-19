@@ -196,3 +196,23 @@ test('a curated range collection is the membership of « la gamme X »; titles a
   // No curated range for Rosée d'Aube: the titles decide.
   assert.equal(resolveProducts('la gamme Rosée d’Aube', { index }).range.source, 'titles');
 });
+
+test('a range not in the title still names the product, from the product knowledge (owner, 2026-10-19)', () => {
+  // « Contour des Yeux … - Voile Regard Polaire » is a Brume Polaire product its title does not say.
+  const rows = [...ROWS, row('p11', 'Contour des Yeux Lissant - Voile Regard Polaire', 'V400')];
+  const catalogue = buildCatalogue(rows, []);
+  const withRanges = buildResolutionIndex(catalogue, { ranges: new Map([['p11', 'Brume Polaire'], ['p2', 'Brume Polaire'], ['p3', 'Brume Polaire']]) });
+  const r = resolveProducts('le contour des yeux brume polaire et la crème rosée d’aube', { index: withRanges });
+  assert.deepEqual(r.products.map((p) => p.id).sort(), ['p11', 'p7']);
+  // Without the knowledge, the eye contour is not a candidate at all.
+  const without = resolveProducts('le contour des yeux brume polaire', { index: buildResolutionIndex(catalogue) });
+  assert.ok(!without.products.some((p) => p.id === 'p11'));
+  assert.ok(!without.candidates.some((c) => c.options?.some((o) => o.id === 'p11')));
+});
+
+test('« …Brume Polaire riche et la Light »: the short second mention borrows the line just named', () => {
+  assert.deepEqual(ids(resolve('comparer la crème Voile Brume Polaire riche et la Light')), ['p2', 'p3']);
+  assert.deepEqual(ids(resolve('compare the Brume Polaire rich cream and the Light')), ['p2', 'p3']);
+  // Alone, « la light » stays plain words.
+  assert.deepEqual(ids(resolve('la light')), []);
+});

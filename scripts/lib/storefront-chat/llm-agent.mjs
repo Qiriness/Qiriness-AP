@@ -37,13 +37,14 @@ import { buildStorefrontSystemPrompt } from './system-prompt.mjs';
 import { knowledgeToolDefinitions, KNOWLEDGE_TOOL_NAMES, runKnowledgeTool, getPolicy } from './knowledge-tools.mjs';
 import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
-import { promotionsForProduct } from './shopping-evaluator.mjs';
+import { promotionsForProduct, routineReward } from './shopping-evaluator.mjs';
+import { buildRoutineView } from './routine-view.mjs';
 import { displayLanguage, languageContext, validReplyLanguage } from './conversation-language.mjs';
 import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
 import { ORDER_TOOL, orderToolDefinition, runOrderTool } from './order-tools.mjs';
 import { USE_SKILL, activeSkill, skillBlock, skillNamed, useSkillDefinition } from './skills.mjs';
 import { GET_PAST_PURCHASES } from './skills/routine-builder.mjs';
-import { CART_CHOICE, FLOW_CHOICE, anchorFor, beforeAdvice, cartDoneText, cartToAdd, emptyFlow, followUpFor, followUpNote } from './routine-flow.mjs';
+import { CART_CHOICE, FLOW_CHOICE, anchorFor, beforeAdvice, cartDoneText, cartNoText, cartToAdd, emptyFlow, followUpFor, followUpNote, routineReadyText } from './routine-flow.mjs';
 import { cleanPurchaseState, customerRanges, describePurchases, mayBeRunningLow, emptyPurchaseState, mentionsPastPurchase, parsePurchaseChoice, purchaseChoices, purchaseItems, purchaseToAsk, recordAnswer } from './purchase-turn.mjs';
 import { READER_TIMEOUT_MS, mentionsSkin, readProfile, shouldRead } from './profile-reader.mjs';
 import { isBuiltRoutine, routineRecord } from '../advisory/routine-record.mjs';
@@ -97,6 +98,13 @@ const FINAL_ROUND_NOTE =
 
 export class StorefrontAgentError extends Error {}
 
+/** handle → range, from the product knowledge (product-knowledge.mjs records). */
+function rangesByHandle(knowledge) {
+  const out = new Map();
+  for (const [handle, record] of knowledge ?? []) if (typeof record?.range === 'string' && record.range.trim()) out.set(handle, record.range.trim());
+  return out;
+}
+
 /**
  * @param {{
  *   client: { completeWithTools: Function },
@@ -107,6 +115,7 @@ export class StorefrontAgentError extends Error {}
  *   readProductPolicies?: Function | null,
  *   readShopping?: Function | null,
  *   readPublicPromotions?: Function | null,
+ *   readRoutineCode?: Function | null,
  *   catalogueShopDomain?: string | null,
  *   currency?: string,
  *   productBaseUrl?: string | null,
@@ -139,6 +148,7 @@ export function createLlmAgent({
   readProductPolicies = null,
   readShopping = null,
   readPublicPromotions = null,
+  readRoutineCode = null,
   catalogueShopDomain = null,
   currency = 'EUR',
   productBaseUrl = null,
@@ -165,7 +175,8 @@ export function createLlmAgent({
     return list.length ? list : null;
   };
   const linkBase = productLinkBase(productBaseUrl);
-  const resolutionIndex = catalogue ? buildResolutionIndex(catalogue) : null;
+  // The ranges from the product knowledge: a range the title does not say still names the product.
+  const resolutionIndex = catalogue ? buildResolutionIndex(catalogue, { ranges: rangesByHandle(productKnowledge) }) : null;
 
   return {
     name: STOREFRONT_AGENT_NAME,
@@ -251,7 +262,10 @@ export function createLlmAgent({
           })
         : null;
       const opening = knowledge ? retrieveKnowledge({ message, knowledge, resolution, context, history, currency }) : null;
-      const shopping = readShopping ? createShoppingTurn({ readShopping: (domain) => withDeadline(readShopping(domain), 2500), readPublicPromotions: readPublicPromotions ? (domain) => withDeadline(readPublicPromotions(domain), 2500) : null, shopDomain, cart, context, message, history, resolvedProducts: [...resolvedIds].map(byId).filter(Boolean), baseCurrency: shopDomain === catalogueShopDomain ? currency : null }) : null;
+      // THE ROUTINE DISCOUNT (owner, 2026-10-17): applied with a finished routine, never named; the
+      // shopping data the model reads says « remise routine » in its place.
+      const routineDiscount = advisor?.routineDiscount ?? null;
+      const shopping = readShopping ? createShoppingTurn({ readShopping: (domain) => withDeadline(readShopping(domain), 2500), readPublicPromotions: readPublicPromotions ? (domain) => withDeadline(readPublicPromotions(domain), 2500) : null, shopDomain, cart, context, message, history, resolvedProducts: [...resolvedIds].map(byId).filter(Boolean), baseCurrency: shopDomain === catalogueShopDomain ? currency : null, hiddenCodes: routineDiscount ? [routineDiscount] : [] }) : null;
       const shoppingOpening = shopping ? await shopping.opening() : null;
       const retrievalMs = Date.now() - retrievalStarted;
 
@@ -312,10 +326,12 @@ export function createLlmAgent({
       }
       // What « add to cart » would add: the routine's products, or the one product shown; never
       // a choice between top choices (« this » would be ambiguous).
+      // A routine's products in several sizes: the one their skin type calls for (variant_choice).
+      const variantFor = (p) => cartVariant(p, variantPreference(advisor?.variantChoice, advisorTurn?.profile));
       const cartableFor = (a, namedCounts = true) => {
         const recommended = a?.status === 'recommended' ? a.steps : [];
         const ids = recommended.some((s) => s.top_choices) ? [] : recommended.length ? recommended.map((s) => s.product_id) : namedCounts && resolvedIds.size === 1 ? [...resolvedIds] : [];
-        return ids.map(byId).filter((p) => p?.inStock).map((p) => ({ product_id: p.id, variant_id: cartVariant(p), name: p.name }));
+        return ids.map(byId).filter((p) => p?.inStock).map((p) => ({ product_id: p.id, variant_id: recommended.length ? variantFor(p) : cartVariant(p), name: p.name }));
       };
       // THE FOLLOW-UP MESSAGE (routine-flow.mjs): the routine offer, the purchase
       // question, the card of what they are running low on, or a treat. Its
@@ -326,6 +342,8 @@ export function createLlmAgent({
       if (advisorTurn) {
         const builder = advisorTurn.mode === 'routine_builder';
         const lang = displayLanguage(language, locale);
+        // A new routine asked for after one: its treat and cart question come again.
+        if (advisorTurn.restarted) flow = { ...flow, treat_offered: false, routine_ref: null, cart: { pending: [], asked: [] } };
         // Entering the builder without an offer (« construisez-moi une routine »): the product they came for still counts.
         if (builder && !flow.anchor) {
           const anchor = anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds] });
@@ -336,14 +354,16 @@ export function createLlmAgent({
         // A budget treat already is the treat: never another one, never the routine offer after it.
         const budgetTreat = finalAdvice?.playbook?.key === 'treat';
         // The treat follows a routine: right away, or after the answer to « shall I add it to your cart? ».
-        const routineCartAnswered = Boolean(flowStart.cart) && cartPending.length > 1;
+        const routineCartAnswered = Boolean(flowStart.cart) && (cartPending.length > 1 || Boolean(flowStart.flow.routine_ref));
         const treatDue = !budgetTreat && !flow.treat_offered && (flowStart.answer === 'no' || routineCartAnswered || (builder && finalAdvice?.status === 'recommended'));
         const treat = treatDue
           ? advisor.treat({ profile: advisorTurn.profile, exclude: [...(finalAdvice?.steps ?? []).flatMap((s) => [s.product_id]), ...cartPending.map((x) => x.id), ...purchaseState.around] })
           : null;
         const otherTopic = Boolean(shoppingOpening) || ['general_policy', 'general_faq', 'product_and_policy'].includes(opening?.route);
         // What « add to cart » would add: the routine's products, or the one product shown; never
-        // a choice between top choices (« this » would be ambiguous).
+        // a choice between top choices (« this » would be ambiguous). Under the routine cards the
+        // question stays (owner, 2026-10-18: « the agent should still ask »); its « Oui » adds what
+        // the cards include, the widget's choice, and the treat follows either answer.
         const cartable = cartableFor(finalAdvice, !otherTopic);
         const decided = followUpFor({
           flow,
@@ -351,14 +371,16 @@ export function createLlmAgent({
           builder,
           answer: flowStart.answer,
           advice: finalAdvice,
-          showsProducts: !otherTopic && !budgetTreat && (finalAdvice?.status === 'recommended' || resolvedIds.size > 0 || Boolean(pageProduct)),
+          // Not while a question about which product is pending (« laquelle souhaitez-vous comparer ? »).
+          showsProducts: !otherTopic && !budgetTreat && !resolution?.clarification && (finalAdvice?.status === 'recommended' || resolvedIds.size > 0 || Boolean(pageProduct)),
           anchor: anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds], advice: finalAdvice }),
           purchaseAsk,
           runningLow,
           treat,
           purchaseChoices: (item) => purchaseChoices(item, lang),
           cartable,
-          cart: flowStart.cart
+          cart: flowStart.cart,
+          discount: Boolean(routineDiscount) && isBuiltRoutine(finalAdvice, advisorTurn.mode)
         });
         flow = decided.flow;
         followUp = decided.followUp;
@@ -399,8 +421,20 @@ export function createLlmAgent({
       const routineCartFor = (a) => {
         if (a?.status !== 'recommended' || a.steps.length < 2 || a.steps.some((s) => s.top_choices)) return null;
         const items = a.steps.map((s) => byId(s.product_id)).filter((p) => p?.inStock);
-        const add = items.filter((p) => cartVariant(p)).map((p) => ({ product_id: p.id, variant_id: cartVariant(p) }));
-        return add.length ? { add, needs_size: items.filter((p) => !cartVariant(p)).map((p) => p.name) } : null;
+        const add = items.filter((p) => variantFor(p)).map((p) => ({ product_id: p.id, variant_id: variantFor(p) }));
+        return add.length ? { add, needs_size: items.filter((p) => !variantFor(p)).map((p) => p.name) } : null;
+      };
+      // THE ROUTINE CARDS (owner, 2026-10-18): both moments, the content, the saving. The discount
+      // only with a routine the builder finished, its value from the synced Shopify rule.
+      const routineViewFor = async (finalAdvice) => {
+        if (!routine) return null;
+        const discountRule = routineDiscount ? advisor?.routineDiscountRule ?? { code: routineDiscount } : null;
+        const reward = discountRule && readRoutineCode && shopDomain
+          ? routineReward(await withDeadline(readRoutineCode(shopDomain, discountRule.code), 1500).catch(() => null), discountRule.code)
+          : null;
+        const view = buildRoutineView({ advice: finalAdvice, profile: advisorTurn.profile, byId, money, cartVariant: variantFor, labels: advisor?.routineLabels ?? {}, locale: displayLanguage(language, locale), currency, linkBase, ref: routine.ref, discount: discountRule, reward });
+        if (view) trace.routine_view = { chosen: view.chosen, steps: view.moments.map((x) => x.steps.length), saving: view.discount?.percentage ?? null };
+        return view;
       };
       let describedAdvice = advice ? advisorTurn.describe() : null;
       // ONE PRODUCT PROPOSED, WITH ITS OFFER (owner, 2026-10-13; the foundation
@@ -428,6 +462,7 @@ export function createLlmAgent({
         : REPLY_SCHEMA;
 
       const system = buildStorefrontSystemPrompt({
+        routineDiscount: Boolean(routineDiscount),
         company,
         language,
         context,
@@ -478,13 +513,17 @@ export function createLlmAgent({
       // « OUI, AJOUTER »: the code's own turn (no model call). The reply tells the
       // widget what to add; the widget adds it to the shop's cart on that click.
       if (flowStart.cart === 'yes' && cartPending.length) {
-        const toAdd = cartToAdd(flowStart.flow, (id) => byId(id)?.name ?? null);
+        // A finished routine (its ref still in the flow) brings the routine discount with it.
+        // Under the routine cards, the widget adds what they include (by `routine_ref`); `add` is the fallback.
+        const toAdd = { ...cartToAdd(flowStart.flow, (id) => byId(id)?.name ?? null), ...(routineAdded ? { routine_ref: routineAdded } : {}), ...(routineAdded && routineDiscount ? { discount_code: routineDiscount } : {}) };
         trace.model_skipped = 'cart_add';
         trace.cart = { add: toAdd.add.length, needs_size: toAdd.needs_size.length };
         if (followUp) trace.follow_up = followUp.kind;
         const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
         return {
-          text: cartDoneText(displayLanguage(language, locale), toAdd.add.map((x) => byId(x.product_id)?.name).filter(Boolean), toAdd.needs_size),
+          text: routineAdded
+            ? cartDoneText(displayLanguage(language, locale), [], [], { routine: true })
+            : cartDoneText(displayLanguage(language, locale), toAdd.add.map((x) => byId(x.product_id)?.name).filter(Boolean), toAdd.needs_size, { discount: Boolean(toAdd.discount_code) }),
           replyLanguage: displayLanguage(language, locale),
           products: [],
           choices: [],
@@ -495,6 +534,29 @@ export function createLlmAgent({
           refs: { recommended: [], mentioned: [] },
           cart: toAdd,
           ...(routineAdded ? { routineAdded } : {}),
+          ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUp.choices } } : {}),
+          ...(advisorTurn ? { advisor: advisorState_(advisorTurn.nextState()), events: [] } : {})
+        };
+      }
+
+      // « JE CHERCHE ENCORE »: the code's own turn too (owner, 2026-10-18: « it should just propose a
+      // petit plaisir »). Sent to the model, it answered with products again, from the earlier routine.
+      // The button, or the few words alone; a longer message (« pas encore, un sérum pour les rides ? ») is a request.
+      const justNo = flowStart.cart === 'no' && cartPending.length && (flowChoice || (!resolvedIds.size && message.trim().split(/\s+/).length <= 4));
+      if (justNo) {
+        trace.model_skipped = 'cart_no';
+        if (followUp) trace.follow_up = followUp.kind;
+        const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
+        return {
+          text: cartNoText(displayLanguage(language, locale)),
+          replyLanguage: displayLanguage(language, locale),
+          products: [],
+          choices: [],
+          model,
+          usage: usage.inputTokens || usage.outputTokens ? usage : null,
+          trace,
+          resolution: null,
+          refs: { recommended: [], mentioned: [] },
           ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUp.choices } } : {}),
           ...(advisorTurn ? { advisor: advisorState_(advisorTurn.nextState()), events: [] } : {})
         };
@@ -525,13 +587,16 @@ export function createLlmAgent({
       // its own sentence (routine settings `questions.text`) with its buttons. A
       // typed answer still goes to the model, which may need to answer it.
       const builderQuestion = advisorTurn?.mode === 'routine_builder' ? advisorTurn.advice?.next_question : null;
-      if (builderQuestion?.text && (profileChoice || flowStart.startBuilder || action === 'build_routine') && !followUp && !resolution?.clarification) {
+      // A routine asked for again (« refaire ma routine ») is its first question too.
+      if (builderQuestion?.text && (profileChoice || flowStart.startBuilder || action === 'build_routine' || advisorTurn.restarted) && !followUp && !resolution?.clarification) {
         trace.model_skipped = 'builder_question';
         return {
           text: builderQuestion.text,
           replyLanguage: displayLanguage(language, locale),
           products: [],
           choices: advisorTurn.choices(),
+          // Routine mode: the widget opens wide (owner, 2026-10-18), the customer can still collapse it.
+          layout: 'routine',
           model,
           usage: usage.inputTokens || usage.outputTokens ? usage : null,
           trace,
@@ -540,6 +605,36 @@ export function createLlmAgent({
           advisor: advisorState_(advisorTurn.nextState()),
           events: conversationRef ? advisorTurn.events({ conversationRef, firstTurn: !history.length }) : []
         };
+      }
+
+      // THE FINISHED ROUTINE, FROM THE CODE (owner, 2026-10-18: « no need for the text reply »): the
+      // cards say it all, so no model call and one short sentence above them; the cart question follows.
+      if (advisorTurn?.mode === 'routine_builder' && routine && advisorTurn.advice?.moments && !resolution?.clarification && followUp?.kind !== 'purchase') {
+        const routineView = await routineViewFor(advisorTurn.advice);
+        if (routineView) {
+          trace.model_skipped = 'routine_cards';
+          trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace };
+          if (followUp) trace.follow_up = followUp.kind;
+          const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
+          const ids = [...new Set(routineView.moments.flatMap((m) => m.steps.map((x) => x.product_id)))];
+          return {
+            text: routineReadyText(displayLanguage(language, locale)),
+            replyLanguage: displayLanguage(language, locale),
+            products: [],
+            choices: [],
+            layout: 'routine',
+            model,
+            usage: usage.inputTokens || usage.outputTokens ? usage : null,
+            trace,
+            resolution: null,
+            refs: { recommended: ids, mentioned: [...new Set([...resolvedIds, ...ids])] },
+            routine,
+            routineView,
+            ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUp.choices } } : {}),
+            advisor: advisorState_(advisorTurn.nextState()),
+            events: conversationRef ? advisorTurn.events({ conversationRef, firstTurn: !history.length }) : []
+          };
+        }
       }
 
       // THE PRODUCT'S APPROVED FAQ, READ BY THE CODE (owner, 2026-10-16). Left
@@ -714,7 +809,7 @@ export function createLlmAgent({
         // A routine the model built itself through `advise` this turn (customer batch, EN): the
         // follow-up was decided before it existed, so the cart question is added now.
         if (!followUp && advisorTurn?.mode === 'routine_builder' && advisorTurn.advice?.status === 'recommended' && advice?.status !== 'recommended') {
-          const late = followUpFor({ flow, lang: displayLanguage(language, locale), builder: true, answer: null, advice: advisorTurn.advice, showsProducts: false, anchor: null, purchaseAsk: null, runningLow: null, treat: null, purchaseChoices: () => [], cartable: cartableFor(advisorTurn.advice, false), cart: null });
+          const late = followUpFor({ flow, lang: displayLanguage(language, locale), builder: true, answer: null, advice: advisorTurn.advice, showsProducts: false, anchor: null, purchaseAsk: null, runningLow: null, treat: null, purchaseChoices: () => [], cartable: cartableFor(advisorTurn.advice, false), cart: null, discount: Boolean(routineDiscount) && isBuiltRoutine(advisorTurn.advice, advisorTurn.mode) });
           if (late.followUp?.kind === 'cart') { followUp = late.followUp; flow = late.flow; }
         }
         // …and kept, like one built before the model.
@@ -744,8 +839,10 @@ export function createLlmAgent({
         const followUpChoices = followUp ? (followUp.choices.length ? followUp.choices : engineChoices) : [];
         const advisorChoices = followUp ? [] : engineChoices;
         const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
+        // A routine the model built itself: its cards too, and the short sentence in place of its text.
+        const routineView = await routineViewFor(finalAdvice);
         return {
-          text: shopping ? shopping.sanitizeReply(parsed.text, parsed.replyLanguage ?? language.previous_language ?? 'fr') : parsed.text,
+          text: routineView ? routineReadyText(displayLanguage(language, locale)) : shopping ? shopping.sanitizeReply(parsed.text, parsed.replyLanguage ?? language.previous_language ?? 'fr') : parsed.text,
           replyLanguage: parsed.replyLanguage ?? null,
           products,
           // Chips: the resolver's clarification first (which product?), else the
@@ -761,9 +858,13 @@ export function createLlmAgent({
           refs: { recommended: cardIds, mentioned: [...new Set([...resolvedIds, ...cardIds])] },
           ...(contact ? { contact } : {}),
           // « Ajouter la routine au panier »: a routine of several products, one button under it.
-          ...(routineCartFor(finalAdvice) ? { routineCart: { ...routineCartFor(finalAdvice), ...(routine ? { routine_ref: routine.ref } : {}) } } : {}),
+          // A finished routine carries its ref, and the routine discount the widget applies with it.
+          ...(routineCartFor(finalAdvice) ? { routineCart: { ...routineCartFor(finalAdvice), ...(routine ? { routine_ref: routine.ref, ...(routineDiscount ? { discount_code: routineDiscount } : {}) } : {}) } } : {}),
           // The routine built this turn, for advisor_routines (anonymous: no session, no words).
           ...(routine ? { routine } : {}),
+          // Its cards: the widget draws them in place of the product cards and the routine button.
+          ...(routineView ? { routineView } : {}),
+          ...(advisorTurn?.mode === 'routine_builder' || routineView ? { layout: 'routine' } : {}),
           ...(orderLookups ? { orderLookups } : {}),
           // The app's own second message (routine-flow.mjs): its text, cards and buttons.
           ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUpChoices } } : {}),
@@ -809,11 +910,48 @@ export function parseReply(content) {
  * Cards for the widget, from the catalogue, never from the model's words: the
  * model contributes a handle and a rationale; name, price and link are ours.
  */
-/** The one variant a card may add to the cart: the product's only purchasable size, in stock. */
-export function cartVariant(product) {
+/**
+ * The one variant a card may add to the cart: the product's only purchasable size, in stock.
+ * With several, a routine passes its `preference` (preferredVariant); without one, none: the
+ * customer picks the size on the product page.
+ */
+export function cartVariant(product, preference = null) {
   if (!product?.inStock) return null;
-  const buyable = (product.variants ?? []).filter((v) => v.inStock !== false && v.price > 0);
-  return buyable.length === 1 && buyable[0].id ? buyable[0].id : null;
+  const buyable = (product.variants ?? []).filter((v) => v.inStock !== false && v.price > 0 && v.id);
+  if (buyable.length === 1) return buyable[0].id;
+  return preference ? preferredVariant(buyable, preference)?.id ?? null : null;
+}
+
+const plain = (v) => String(v ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+// A whole word of the variant's name, accents and case aside (« Légère 50 ml » has « legere »).
+const named = (variant, word) => plain(variant.title).split(/[^\p{L}\p{N}]+/u).includes(plain(word));
+
+/**
+ * A ROUTINE PRODUCT'S SIZE, CHOSEN FOR THE CUSTOMER (owner, 2026-10-18: « between normale and riche,
+ * normale should have been chosen »). The texture their skin type calls for (Rules tab), found by
+ * the routine settings' `variant_choice` words in the variant's name, else the default texture; never
+ * a refill while another variant exists. No single match: none (the size is theirs to choose).
+ * @param {{ id: string, title: string | null }[]} variants  the buyable ones
+ * @param {{ texture?: string | null, textures?: Record<string, string[]>, default?: string | null, avoid?: string[] }} preference
+ */
+export function preferredVariant(variants, preference) {
+  const avoid = preference.avoid ?? [];
+  const kept = variants.filter((v) => !avoid.some((w) => named(v, w)));
+  const pool = kept.length ? kept : variants;
+  if (pool.length === 1) return pool[0];
+  const withTexture = (t) => (t ? pool.filter((v) => (preference.textures?.[t] ?? []).some((w) => named(v, w))) : []);
+  for (const t of [preference.texture, preference.default]) {
+    const found = withTexture(t);
+    if (found.length === 1) return found[0];
+  }
+  return null;
+}
+
+/** The routine's size preference for this customer: their skin type's texture (null without a rule). */
+export function variantPreference(choice, profile) {
+  if (!choice?.textures) return null;
+  const skin = profile?.skin_type?.value ?? null;
+  return { ...choice, texture: (skin && choice.skin_texture?.[skin]) || null };
 }
 
 // « montrez-le-moi », « le lien », "show me": the customer asks to see a product again.

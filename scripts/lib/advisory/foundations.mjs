@@ -235,10 +235,26 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     return true;
   }
 
-  function score(x, step, f, c, ranges) {
+  /**
+   * The products for a step. ONE PRODUCT FOR A NEED (owner, 2026-10-18: « skin type is not a priority,
+   * the concern is; skin type helps narrow down between multiple products »): when nothing for their
+   * need suits their skin type, the products for the need still count, marked; the skin type then only
+   * ranks. Sensitivity and the ingredients they avoid stay hard. A routine keeps the skin type hard.
+   */
+  function targetedPool(step, f, c, used, scope) {
+    const pool = products.filter((x) => eligible(x, step, f, c, used));
+    if (pool.length || scope !== 'targeted' || !c.skin) return pool;
+    const relaxed = products.filter((x) => eligible(x, step, f, { ...c, skin: null }, used));
+    relaxed.skinRelaxed = true;
+    return relaxed;
+  }
+
+  function score(x, step, f, c, ranges, skinRelaxed = false) {
     const k = x.k;
     const reasons = [];
     let s = 0;
+    // Not made for their skin type (the step had nothing that is): ranked lower, and said.
+    if (skinRelaxed && c.skin && k.skin?.[c.skin] === 'unsuitable') { s += WEIGHTS.textureMismatch; reasons.push(`${FIT.SKIN_TYPE_MISMATCH}:${c.skin}`); }
     const targets = [k.primary_concern, ...k.other_concerns];
     const primary = c.primary && !eyeConcerns.has(c.primary) || step.type === 'eye' ? c.primary : null;
     if (primary && k.primary_concern === primary) { s += WEIGHTS.primary; reasons.push(`${FIT.PRIMARY_CONCERN}:${primary}`); }
@@ -341,11 +357,11 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         keptForConcern = true;
       }
       const pin = wanted.find((x) => fillsStep(x.k, step.type) && !used.has(x.id));
-      const pool = products.filter((x) => eligible(x, step, f, c, used));
+      const pool = targetedPool(step, f, c, used, scope);
       // A man: his range first among the suitable products (owner: « ranked first, others still
       // possible »); a sensitive-skin cleanser outscored the men's one in the customer batch.
       const menFirst = (x) => (c.men && x.k.men ? 1 : 0);
-      const ranked = pool.map((x) => ({ x, ...score(x, step, f, c, ranges) }))
+      const ranked = pool.map((x) => ({ x, ...score(x, step, f, c, ranges, pool.skinRelaxed) }))
         .sort((a, b) => menFirst(b.x) - menFirst(a.x) || b.s - a.s || (a.x.product.priceFrom ?? 0) - (b.x.product.priceFrom ?? 0) || a.x.name.localeCompare(b.x.name));
       if (pin) {
         const at = ranked.findIndex((r) => r.x.id === pin.id);
@@ -406,7 +422,8 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       const others = f.steps
         // A cleanser is a top choice only where the foundation says it treats the need (Imperfections).
         .filter((s) => s.frequency === 'daily' && s.type !== steps[0].type && !c.owned.includes(s.type) && (s.type !== 'cleanser' || s.targets === 'primary'))
-        .map((s) => products.filter((x) => eligible(x, { ...s, targets: 'primary' }, f, c, used)).map((x) => ({ x, ...score(x, s, f, c, ranges) })).filter((r) => [r.x.k.primary_concern, ...r.x.k.other_concerns].includes(c.primary))
+        .map((s) => { const pool = targetedPool({ ...s, targets: 'primary' }, f, c, used, scope); return pool.map((x) => ({ x, ...score(x, s, f, c, ranges, pool.skinRelaxed) })).filter((r) => [r.x.k.primary_concern, ...r.x.k.other_concerns].includes(c.primary)); })
+          .map((list) => list
           .sort((a, b) => b.s - a.s || a.x.product.priceFrom - b.x.product.priceFrom)[0])
         .filter(Boolean)
         .sort((a, b) => b.s - a.s)
@@ -573,12 +590,14 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         }
         if (!ranked.length) { skipped.push({ slot, kind, part, reason: SKIPPED.NO_ELIGIBLE_PRODUCT, optional: false }); continue; }
         const [top] = ranked;
-        if (shown.has(top.x.id)) { skipped.push({ slot, kind, part, reason: SKIPPED.ALSO_IN_DAY_ROUTINE, product_id: top.x.id, handle: top.x.handle }); continue; }
+        if (shown.has(top.x.id)) { skipped.push({ slot, kind, part, reason: SKIPPED.ALSO_IN_DAY_ROUTINE, product_id: top.x.id, handle: top.x.handle, type: top.x.k.functional_type, ...(top.x.k.ritual_stage ? { stage: top.x.k.ritual_stage } : {}), reason_codes: top.codes }); continue; }
         shown.add(top.x.id);
         // The serum's range is the routine's: the eye care and the cream follow it.
         if (step.chosen_by.includes('range') && top.x.k.range) current = top.x.k.range;
         steps.push({
           slot, kind, type: top.x.k.functional_type, part, optional: false,
+          // Its ritual stage (Products tab « Étape du rituel »): the reply names the step by it (owner, 2026-10-17).
+          ...(top.x.k.ritual_stage ? { stage: top.x.k.ritual_stage } : {}),
           product_id: top.x.id, handle: top.x.handle,
           alternatives: ranked.slice(1).filter((r) => !shown.has(r.x.id)).slice(0, 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })),
           reason_codes: top.codes,
@@ -591,6 +610,39 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     for (const x of wanted) if (!placed.some((p) => p.product_id === x.id)) placed.push({ product_id: x.id, handle: x.handle, status: PINNED.NO_STEP });
     const budget = c.budgetMax ? withinBudget(steps, skipped, plan, c.budgetMax) : null;
     return { f, scope: time, steps, skipped, pinned: placed, c, budget, range: current };
+  }
+
+  /**
+   * The morning and the evening, whole (owner, 2026-10-18: « it should also show the routine day and
+   * the routine night even if they didnt select jour et nuit »). A « jour et nuit » build's night
+   * leaves out what the day has; here it is put back, marked `also_in: 'day'`, so the evening shows
+   * every step and which ones they already have.
+   */
+  function momentsOf(r) {
+    const out = { day: [], night: [] };
+    const shared = r.skipped.filter((k) => k.reason === SKIPPED.ALSO_IN_DAY_ROUTINE)
+      .map((k) => ({ slot: k.slot, kind: k.kind, part: k.part, type: k.type, ...(k.stage ? { stage: k.stage } : {}), product_id: k.product_id, handle: k.handle, reason_codes: k.reason_codes ?? [], also_in: 'day' }));
+    for (const s of [...r.steps, ...shared]) out[s.part]?.push(s);
+    const order = (s) => Number(String(s.slot).split('_').pop()) || 0;
+    for (const part of Object.keys(out)) out[part].sort((a, b) => order(a) - order(b));
+    return out;
+  }
+
+  /** The routine's two moments: the chosen one as built, the other from a « jour et nuit » build of the same answers. */
+  function bothMoments(result, profile, mode, history) {
+    if (!routineSteps || !['day', 'night', 'both'].includes(result.scope)) return null;
+    if (result.scope === 'both') return { chosen: 'both', ...momentsOf(result) };
+    const both = evaluate(withAnswer(profile, 'routine_time', 'both'), mode, history);
+    if (!both?.steps) return null;
+    const all = momentsOf(both);
+    const other = result.scope === 'day' ? 'night' : 'day';
+    const mine = new Set(result.steps.map((s) => s.product_id));
+    return {
+      chosen: result.scope,
+      [result.scope]: result.steps,
+      // Its steps they already have from the chosen moment are marked, the rest would complete the routine.
+      [other]: all[other].map(({ also_in: _a, ...s }) => (mine.has(s.product_id) ? { ...s, also_in: result.scope } : s)),
+    };
   }
 
   const priceOf = (s) => byId.get(s.product_id)?.product.priceFrom ?? 0;
@@ -652,12 +704,21 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     return [{ slot: `${type}_cheaper`, kind: KIND[type] ?? type, type, optional: false, product_id: top.x.id, handle: top.x.handle, alternatives: rest.slice(0, 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })), reason_codes: [code, ...top.reasons], merchandised: null, scores: { suitability: top.s, routine_fit: 0, total: top.s } }];
   }
 
+  /**
+   * What may be a « petit plaisir »: the settings' treat types when set (owner, 2026-10-18: « only
+   * mask, masque tissu and kits »), else the sheet's « Petit plaisir » column.
+   */
+  function isTreat(k) {
+    const types = routines.treats?.types;
+    return Array.isArray(types) && types.length ? types.includes(k.functional_type) : Boolean(k.treat);
+  }
+
   /** A « petit plaisir » for their concern, instead of a routine (owner): within the ceiling when there is one. */
   function budgetTreat(c, max) {
     const ceiling = Math.min(routines.treats?.max_price ?? Infinity, max ?? Infinity);
     const fit = (x) => [x.k.primary_concern, ...x.k.other_concerns].filter((t) => c.concerns.includes(t)).length;
     const pool = products
-      .filter((x) => x.k.treat && x.product.inStock && x.k.status !== 'do_not_advise' && (!x.k.men || c.men) && x.product.priceFrom <= ceiling)
+      .filter((x) => isTreat(x.k) && x.product.inStock && x.k.status !== 'do_not_advise' && (!x.k.men || c.men) && x.product.priceFrom <= ceiling)
       .sort((a, b) => fit(b) - fit(a) || a.product.priceFrom - b.product.priceFrom || a.name.localeCompare(b.name));
     if (!pool.length) return null;
     const [top, ...rest] = pool;
@@ -739,7 +800,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     return QUESTION_OPTIONS[field] ?? [];
   }
 
-  /** A chip question; the age ranges and moments labelled by their Rules tab rows, each moment with its price. */
+  /** A chip question; the age ranges and moments labelled by their Rules tab rows. No price on the moments (owner, 2026-10-17: the cards show them). */
   function chipQuestion(field, values, locale, profile, history) {
     const q = question(field, values, locale, 'changes_recommendation');
     const rows = field === 'age_band' ? ageRanges : field === 'routine_time' ? routines.routine_times ?? [] : [];
@@ -747,10 +808,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     const own = field === 'eye_concern' ? questions.eye_concern?.labels?.[en ? 'en' : 'fr'] ?? questions.eye_concern?.labels?.fr ?? {} : {};
     q.options = q.options.map((o) => {
       const row = rows.find((r) => r.key === o.value);
-      const labelled = row ? { ...o, label: (en ? row.label_en : row.label_fr) ?? row.label_fr } : own[o.value] ? { ...o, label: own[o.value] } : o;
-      if (field !== 'routine_time') return labelled;
-      const r = evaluate(withAnswer(profile, field, o.value), 'routine_builder', history);
-      return r?.steps?.length ? { ...labelled, total: totalOf(r.steps) } : labelled;
+      return row ? { ...o, label: (en ? row.label_en : row.label_fr) ?? row.label_fr } : own[o.value] ? { ...o, label: own[o.value] } : o;
     });
     return withText(q, locale);
   }
@@ -837,19 +895,34 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         ...(result.pinned.length ? { pinned: result.pinned } : {}),
         // Their age range, the brand's (a chip, or their age in years): kept with the routine.
         ...(result.c?.age ? { age_range: result.c.age } : {}),
+        // The builder's routine: both moments, for the routine cards (never read to the model).
+        ...(mode === 'routine_builder' && result.steps.length ? { moments: bothMoments(result, profile, mode, history) ?? undefined } : {}),
       };
     },
 
-    /** One « petit plaisir » (§ 3.4): never with a small budget, never in the routine. */
+    /**
+     * One « petit plaisir » (§ 3.4): never with a small budget, never in the routine. It treats one of
+     * their concerns and suits their skin (owner, 2026-10-17: an anti-blemish patch followed an
+     * anti-age routine for dry skin); none fits, no treat.
+     */
     treat({ profile = {}, exclude = [] } = {}) {
       const c = read(profile);
       // With a budget the advice already is the treat, or a routine cut to fit: nothing more.
       if (c.budget === 'small' || c.budgetMax) return null;
       const skip = new Set(exclude);
       const max = routines.treats?.max_price ?? Infinity;
-      const pool = products.filter((x) => x.k.treat && x.product.inStock && x.k.status !== 'do_not_advise' && !skip.has(x.id) && (!x.k.men || c.men) && x.product.priceFrom <= max);
-      const fit = (x) => [x.k.primary_concern, ...x.k.other_concerns].filter((t) => c.concerns.includes(t)).length;
-      const best = pool.sort((a, b) => fit(b) - fit(a) || a.product.priceFrom - b.product.priceFrom || a.name.localeCompare(b.name))[0];
+      // The eye routine's other eye concern counts too.
+      const concerns = [...new Set([...c.concerns, ...(c.eye && c.eye !== 'none' ? [concernOf(c.eye)] : [])])];
+      const fit = (x) => [x.k.primary_concern, ...x.k.other_concerns].filter((t) => concerns.includes(t)).length;
+      // Its area is the routine's: the eyes for the eye routine, the face or the eyes otherwise; never
+      // the body (a body and hands coffret followed the eye routine).
+      const choice = chooseFoundation(c);
+      const areas = choice.key === 'eyes' || foundations.get(choice.key)?.area === 'eyes' ? ['eyes'] : ['face', 'eyes'];
+      const pool = products.filter((x) => isTreat(x.k) && x.product.inStock && x.k.status !== 'do_not_advise' && !skip.has(x.id) && (!x.k.men || c.men) && x.product.priceFrom <= max
+        && areas.includes(x.k.area ?? 'face')
+        && fit(x) > 0 && !(c.skin && x.k.skin?.[c.skin] === 'unsuitable') && !(c.sensitive && x.k.sensitive === 'avoid') && !excluded(x, c));
+      const skinFor = (x) => skinFit(x.k, c).score;
+      const best = pool.sort((a, b) => fit(b) - fit(a) || skinFor(b) - skinFor(a) || a.product.priceFrom - b.product.priceFrom || a.name.localeCompare(b.name))[0];
       return best ? { product_id: best.id, handle: best.handle, reasons: [] } : null;
     },
   };

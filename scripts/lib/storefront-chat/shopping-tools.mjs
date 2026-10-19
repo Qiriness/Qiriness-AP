@@ -23,7 +23,13 @@ const CODE_FILLER = new Set([
   'FOR', 'ON', 'IN', 'AT', 'IT', 'YOU', 'AND', 'OR', 'TO', 'WAS', 'WASN', 'CAN', 'CANNOT', 'CANT', 'WILL', 'STILL', 'ALSO'
 ]);
 
-export function createShoppingTurn({ readShopping, readPublicPromotions = null, shopDomain, cart, context = {}, message = '', history = [], resolvedProducts = [], baseCurrency = null }) {
+export function createShoppingTurn({ readShopping, readPublicPromotions = null, shopDomain, cart, context = {}, message = '', history = [], resolvedProducts = [], baseCurrency = null, hiddenCodes = [] }) {
+  // CODES NEVER NAMED (owner, 2026-10-17: the routine discount): the shopping data says « remise
+  // routine » in their place, and the reply backstop removes them whoever wrote them.
+  // A code the customer typed in the conversation is theirs: named back like any other (owner,
+  // 2026-10-17: « thats fine if the customer types it »).
+  const typedByCustomer = [message, ...history.filter((h) => h.role === 'user').map((h) => h.content ?? '')].join(' ').toUpperCase();
+  const hidden = new Set(hiddenCodes.map((c) => String(c).toUpperCase()).filter((c) => !new RegExp(`(?<![A-Z0-9_-])${c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![A-Z0-9_-])`).test(typedByCustomer)));
   let source;
   // THE NAME OF A PUBLIC AUTOMATIC OFFER IS NOT A CODE. « TEST02 » looks like
   // one (capitals and a digit), and the code backstop replaced it with « ce
@@ -95,7 +101,7 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
       .map((p) => p.promotion_id);
   }
   async function run(name, args = {}) {
-    const result = await execute(name, args);
+    const result = hidden.size ? hideCodes(await execute(name, args), hidden) : await execute(name, args);
     for (const p of result.promotions ?? []) if (p.code) returnedCodes.add(p.code.toUpperCase());
     for (const code of result.applied_codes ?? []) returnedCodes.add(code.toUpperCase());
     for (const set of [result.best, ...(result.alternatives ?? [])]) for (const o of set?.offers ?? []) if (o.code) returnedCodes.add(o.code.toUpperCase());
@@ -115,7 +121,7 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
     sanitizeReply(text, replyLanguage = 'fr') {
       const placeholder = replyLanguage?.startsWith('en') ? 'that code' : replyLanguage?.startsWith('es') ? 'ese código' : 'ce code';
       const typedNow = new Set((message.match(/(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]{2,79}(?![A-Za-z0-9_-])/g) ?? []).filter((w) => /\d/.test(w)).map((w) => w.toUpperCase()));
-      const candidates = new Set([...(cart?.codes ?? []), ...(cart?.discounts ?? []).filter((d) => d.type === 'code').map((d) => d.title), ...requestedCodes()]);
+      const candidates = new Set([...(cart?.codes ?? []), ...(cart?.discounts ?? []).filter((d) => d.type === 'code').map((d) => d.title), ...requestedCodes(), ...hidden]);
       for (const body of [text, ...history.map((h) => h.content ?? '')]) {
         for (const m of body.matchAll(/\bcode\s+(?:promo\s+)?[«"']?([A-Z][A-Z0-9_-]{2,79})\b/g)) candidates.add(m[1]);
         for (const m of body.match(/\b(?=[A-Z0-9_-]*\d)[A-Z][A-Z0-9_-]{2,79}\b/g) ?? []) candidates.add(m);
@@ -123,7 +129,7 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
       for (const code of candidates) {
         // A code the customer typed in THIS message is theirs: repeating it back
         // discloses nothing (« le code ce code » read as broken, 2026-10-07).
-        if (!/^[A-Za-z0-9_-]{1,80}$/.test(code) || returnedCodes.has(code.toUpperCase()) || offerNames.has(code.toUpperCase()) || typedNow.has(code.toUpperCase())) continue;
+        if (!/^[A-Za-z0-9_-]{1,80}$/.test(code) || (!hidden.has(code.toUpperCase()) && (returnedCodes.has(code.toUpperCase()) || offerNames.has(code.toUpperCase()) || typedNow.has(code.toUpperCase())))) continue;
         const escaped = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         text = text.replace(new RegExp('(?<![A-Za-z0-9_-])' + escaped + '(?![A-Za-z0-9_-])', 'gi'), placeholder);
       }
@@ -229,4 +235,22 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
     })) } : result;
     return [...results.map((r) => r.tool === 'evaluate_promotions_for_cart' ? { ...r, result: annotate(r.result) } : r), { tool: 'simulate_offers', result: best }];
   }
+}
+
+/** A shopping result with the hidden codes taken out: their offers and cart discounts named « remise routine », codes dropped. */
+export function hideCodes(value, hidden) {
+  const isHidden = (c) => typeof c === 'string' && hidden.has(c.toUpperCase());
+  const walk = (v) => {
+    if (Array.isArray(v)) return v.filter((x) => !isHidden(x)).map(walk);
+    if (!v || typeof v !== 'object') return v;
+    const out = {};
+    const named = isHidden(v.code) || isHidden(v.name) || isHidden(v.title);
+    for (const [k, x] of Object.entries(v)) {
+      if (named && (k === 'code' || k === 'codes')) out[k] = k === 'codes' ? [] : null;
+      else if (named && (k === 'name' || k === 'title')) out[k] = 'remise routine';
+      else out[k] = isHidden(x) ? null : walk(x);
+    }
+    return out;
+  };
+  return walk(value);
 }

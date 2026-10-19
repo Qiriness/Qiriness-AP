@@ -126,7 +126,8 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # product-resolver (WHICH products: SKU →
 |       |                                # commercial name → type → description →
 |       |                                # conversation → page; vocabulary derived from
-|       |                                # titles; clarification, never a pick) ·
+|       |                                # titles + the knowledge's ranges; clarification,
+|       |                                # never a pick) ·
 |       |                                # conversation-refs (« les deux », « ça »; the
 |       |                                # memory folded from context.refs/resolution) ·
 |       |                                # conversation-language (neutral replies retain session
@@ -148,13 +149,18 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # routine-flow (the routine offer, the builder's
 |       |                                # purchase question, the anchor, the treat: the
 |       |                                # follow-up message, words and buttons from code) ·
+|       |                                # routine-view (a finished routine → the widget's
+|       |                                # routine cards: both moments, each product's content
+|       |                                # and « Pourquoi pour vous ? », the saving; never
+|       |                                # read to the model) ·
 |       |                                # purchase-turn (when to read, which purchase to
 |       |                                # ask about, the FR/EN chips, the prompt view) ·
 |       |                                # knowledge-repository (active policies + parameters,
 |       |                                # approved general FAQs; lazy product-id-scoped guidance) ·
 |       |                                # shopping-repository (signed-shop-scoped public promotions,
 |       |                                # variants and synced collection membership; separate public
-|       |                                # brand-offer preview for allowed unsynced shops; 30s cache) ·
+|       |                                # brand-offer preview for allowed unsynced shops; the routine
+|       |                                # code's own rule read apart, createRoutineCodeReader; 30s cache) ·
 |       |                                # shopping-evaluator (cart whitelist, quantity stock,
 |       |                                # deterministic eligibility/stacking; Shopify's per-line,
 |       |                                # Buy X Get Y and per-class minimum rules; no mutations) ·
@@ -336,7 +342,7 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |   |-- backend/shopify.web.toml # lets `shopify app dev` start web/ behind its tunnel
 |   `-- extensions/storefront-advisor/  # theme app extension: blocks/advisor-embed.liquid
 |                                # (app embed, target body; settings + JSON config)
-|                                # · assets/advisor.js (loader: launcher only) ·
+|                                # · assets/advisor.js (loader: launcher + routine banner) ·
 |                                # advisor-panel.js (panel, fetched on first open;
 |                                # chips up to 8; card-click beacon to /event)
 |                                # advisor-cart.js (shared cart whitelist incl. observed product/

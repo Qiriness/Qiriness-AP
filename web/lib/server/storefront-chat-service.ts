@@ -37,7 +37,7 @@ import { loadCompany } from "../../../scripts/lib/company.mjs";
 import { createMockAgent } from "../../../scripts/lib/storefront-chat/agent.mjs";
 import { loadCatalogue } from "../../../scripts/lib/storefront-chat/product-repository.mjs";
 import { loadKnowledge, createProductPolicyReader, KNOWLEDGE_TTL_MS } from "../../../scripts/lib/storefront-chat/knowledge-repository.mjs";
-import { createShoppingReader, createPublicPromotionReader } from "../../../scripts/lib/storefront-chat/shopping-repository.mjs";
+import { createShoppingReader, createPublicPromotionReader, createRoutineCodeReader } from "../../../scripts/lib/storefront-chat/shopping-repository.mjs";
 import { parseAllowedShops } from "../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
 import { refsFromHistory } from "../../../scripts/lib/storefront-chat/conversation-refs.mjs";
 import { advisorStateFromHistory } from "../../../scripts/lib/storefront-chat/advisor-state.mjs";
@@ -121,6 +121,41 @@ export interface StorefrontCartItems {
   needs_size: string[];
   /** The routine these products are (advisor_routines.ref): the widget reports it added. */
   routine_ref?: string;
+  /** A finished routine's discount: the widget applies it to the cart with the products, never shows it. */
+  discount_code?: string;
+}
+
+/** A routine card's product (scripts/lib/storefront-chat/routine-view.mjs): the widget draws it, the model never reads it. */
+export interface StorefrontRoutineStep {
+  product_id: string;
+  handle: string;
+  title: string;
+  url: string;
+  variant_id: string | null;
+  in_stock: boolean;
+  price: string | null;
+  price_value: number | null;
+  volume: string | null;
+  rating: number | null;
+  rating_count: number | null;
+  stage: "prepare" | "activate" | "optimise" | "regenerate" | null;
+  type: string | null;
+  why: { tags: string[]; text: string | null };
+  claims: string[];
+  ingredients: string | null;
+  benefits: string | null;
+  usage: string | null;
+  owned?: true;
+}
+
+/** The routine cards: both moments, the chosen one included, and the routine discount's saving (its code applied, never shown). */
+export interface StorefrontRoutineView {
+  ref?: string;
+  chosen: "day" | "night" | "both";
+  locale: "fr" | "en";
+  currency: string;
+  moments: { part: "day" | "night"; chosen: boolean; steps: StorefrontRoutineStep[] }[];
+  discount: { code: string; min_products: number; percentage?: number } | null;
 }
 
 /** The contact form link under the reply: a path on the shop's site (the `contact_form_path` parameter). */
@@ -129,7 +164,7 @@ export interface StorefrontContact {
 }
 
 export type StorefrontChatResult =
-  | { ok: true; sessionId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[]; followUp?: StorefrontFollowUp; contact?: StorefrontContact; routineCart?: StorefrontCartItems; cart?: StorefrontCartItems } }
+  | { ok: true; sessionId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[]; followUp?: StorefrontFollowUp; contact?: StorefrontContact; routineCart?: StorefrontCartItems; routineView?: StorefrontRoutineView; cart?: StorefrontCartItems; layout?: "routine" } }
   | { ok: false; status: 429; code: "session_limit" | "daily_limit" }
   | { ok: false; status: 503; code: "unavailable" };
 
@@ -344,6 +379,7 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
     knowledge,
     readProductPolicies: toolsOn && shop ? await productPolicyReader(reader, shop.id, devCatalogue, catalogue) : null,
     readShopping: toolsOn ? createShoppingReader(reader) : null,
+    readRoutineCode: toolsOn ? createRoutineCodeReader(reader) : null,
     readPublicPromotions: toolsOn && shop ? createPublicPromotionReader(reader, { shopId: shop.id, catalogueShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain, allowedShops: parseAllowedShops(process.env.STOREFRONT_CHAT_ALLOWED_SHOPS) }) : null,
     // The shop whose prices the catalogue holds, so its currency is known:
     // Buy X Get Y spend thresholds carry none of their own. Left at the
@@ -484,7 +520,8 @@ export async function handleStorefrontChat(
   const contact = ("contact" in reply && reply.contact ? reply.contact : null) as StorefrontContact | null;
   const routineCart = ("routineCart" in reply && reply.routineCart ? reply.routineCart : null) as StorefrontCartItems | null;
   const cart = ("cart" in reply && reply.cart ? reply.cart : null) as StorefrontCartItems | null;
-  return { ok: true, sessionId: session.session_token, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}), ...(routineCart ? { routineCart } : {}), ...(cart ? { cart } : {}) } };
+  const routineView = ("routineView" in reply && reply.routineView ? reply.routineView : null) as StorefrontRoutineView | null;
+  return { ok: true, sessionId: session.session_token, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}), ...(routineCart ? { routineCart } : {}), ...(routineView ? { routineView } : {}), ...(cart ? { cart } : {}), ...("layout" in reply && reply.layout === "routine" ? { layout: "routine" as const } : {}) } };
 }
 
 /**

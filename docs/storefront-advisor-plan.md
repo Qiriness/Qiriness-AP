@@ -27,6 +27,10 @@ Tick items as they land; move each one's rationale into `docs/decisions/` when i
 - [ ] Restart `cd storefront-app && shopify app dev` (the widget's cart rule changed in `advisor-cart.js`).
 - [ ] Move the chatbot commits (`2830330`, `164ffc9`) to their own branch off `main` before pushing; the current branch also holds compliance and migration work.
 - [ ] Commit the spreadsheet template and this plan.
+- [ ] **Routine settings in the dashboard UI, before production** (owner, 2026-10-18: « these will be set in the dashboard UI along with the chosen promo code »). Per shop, in place of today's file and code:
+  - the routine promo code and its minimum (now `routine_discount` in `data/advisor/qiriness-routine-settings.json`); the code must exist in that shop's Shopify (MAROUTINE20 is on the dev store only);
+  - the metafields the routine cards read: ingredients, benefits, application, claims, rating, size (now `CONTENT_METAFIELDS` in `scripts/lib/storefront-chat/product-repository.mjs`, Qiriness's Accentuate keys);
+  - the variant words that pick a routine product's texture and skip refills (now `variant_choice` in the routine settings).
 
 ---
 

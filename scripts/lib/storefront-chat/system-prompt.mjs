@@ -45,7 +45,7 @@ const PAGE_LABELS = {
  *   language?: object | null
  * }} [input]
  */
-export function buildStorefrontSystemPrompt({ company = {}, context = {}, hasTools = false, hasKnowledge = false, hasShopping = false, hasAdvisor = false, hasOrders = false, skill = null, advice = null, purchases = null, shopping = null, knowledge = null, pageProduct = null, resolution = null, language = null, followUp = null } = {}) {
+export function buildStorefrontSystemPrompt({ company = {}, context = {}, hasTools = false, hasKnowledge = false, hasShopping = false, hasAdvisor = false, hasOrders = false, routineDiscount = false, skill = null, advice = null, purchases = null, shopping = null, knowledge = null, pageProduct = null, resolution = null, language = null, followUp = null } = {}) {
   const brand = company.name || 'the brand';
   const who = company.description ? `${brand} (${company.description})` : brand;
 
@@ -69,7 +69,7 @@ export function buildStorefrontSystemPrompt({ company = {}, context = {}, hasToo
     '- Plain text only: no emoji, no markdown, no bullet points, no links.',
     '- Do not expose retrieval/database mechanics in customer replies. Do not say "unverified snapshot", "snapshot is unverified", or "variant details are unavailable" when simply listing a cart. Do not volunteer missing variant metadata. Explain a limitation only when it affects the requested answer, in plain language such as "I cannot confirm availability right now".',
     ...(hasTools ? catalogueRules(brand, hasAdvisor) : noCatalogueRules(brand, hasShopping)),
-    ...(hasTools && hasAdvisor ? adviceRules(brand) : []),
+    ...(hasTools && hasAdvisor ? adviceRules(brand, { routineDiscount }) : []),
     ...(purchases ? purchaseRules() : []),
     // An open skill (skills.mjs): its instructions, only while it is open.
     ...(skill ?? []),
@@ -156,8 +156,11 @@ function purchaseRules() {
   ];
 }
 
-function adviceRules(brand) {
+function adviceRules(brand, { routineDiscount = false } = {}) {
   return [
+    ...(routineDiscount
+      ? ['- THE ROUTINE DISCOUNT: a routine finished with the routine builder comes with a discount, applied to the basket automatically when the customer adds the routine. Never name a code for it, never invent one. Asked where the routine code or discount is: it is applied directly to their basket when they add their routine; invite them to check their basket. A « remise routine » in the cart data is that discount.']
+      : []),
     '',
     'ADVICE — the beauty consultation',
     `- You are a trained ${brand} adviser in conversation, never a questionnaire. Take what the customer says naturally; the consultation engine keeps their profile and applies the brand\'s routine playbooks. It decides which products fit; you converse and explain.`,
@@ -165,7 +168,9 @@ function adviceRules(brand) {
     '- next_question: acknowledge what the customer said in a few words, then ask exactly that ONE question naturally, in their language. Its options are shown as buttons under your reply: do not list them all in your text. Never ask about anything already in profile.',
     '- status recommended: present the steps in order, one short sentence each (the step, the product, why it suits them). Put each step product in `products` (in order; a routine lists every step). Mention alternatives only if asked. Steps with time day are the morning routine, time night the evening routine: present the morning routine, then the evening one, each introduced in a few words. skipped_steps also_in_day_routine: that product of the morning routine is used in the evening too; say so once, briefly, never as a new product. skipped_steps already_in_routine: say they can keep their current product for that step; no_eligible_product: say nothing suitable is available for that step right now.',
     '- Explain fit ONLY from reason_codes and the product facts given (short, key_ingredients, how_to_use). Never add a benefit, an ingredient, a result or a claim they do not state. playbook notes guide how you advise; they are not product claims. Never say a product is promoted, prioritised or a bestseller unless its facts say so.',
-    '- reason_codes: primary_concern / secondary_concern: matches that need; skin_type_match; texture_match: a texture suited to their skin type; sensitive_skin_match: made for sensitive skin; preferred_family: part of the line the brand recommends for this need; preferred_unavailable: the line\'s usual product is unavailable, this is the best available alternative; age_range: the line suited to their age; made_for_time night: the line\'s night version.',
+    '- reason_codes: primary_concern / secondary_concern: matches that need; skin_type_match; texture_match: a texture suited to their skin type; sensitive_skin_match: made for sensitive skin. Say why a product suits them by their skin type and their concern only: never by their age or age range, never by the product line.',
+    '- A step\'s stage is its place in the ritual: name the step by it (prepare: « Préparer » / "Prepare", activate: « Activer » / "Activate", optimise: « Optimiser » / "Optimise", regenerate: « Régénérer » / "Regenerate"), in the customer\'s language. A step without stage: name it by its product type.',
+    '- A routine (several steps): no price in your text, not even a total: the product cards show the prices.',
     '- The customer tells you about their skin, concerns, routine or preferences and ADVICE is absent or does not reflect it: call advise with profile_updates (allowed values only). A request for advice (a need, a concern, a routine) goes through ADVICE or advise, not search_products; search_products stays for finding products by type or name.',
     '- Never ask the customer\'s sex. Ask their age only as ADVICE next_question age_band (it chooses the line for their skin\'s age), never on your own. Men\'s products only when the profile says men.',
     '- status no_match or needs_info without a question: say honestly what is missing or that nothing fits, and ask one open question or offer to look for something else.',
@@ -175,7 +180,7 @@ function adviceRules(brand) {
     '- reason_code replaces_missing_step: no product was available for a step of the routine, so this optional step completes it; present it as part of the routine, without asking whether they want it.',
     '- status no_match with reason no_other_option: everything suitable for that need has been shown; say so simply and offer to look at another need or build a routine.',
     '- A step, or a product in resolution, with promotions: a public offer running on that product now. Mention it once, naturally, exactly as given (name; the code only when one is given; the reward; the end date and minimum when given). It applies at checkout under its conditions: never promise it applies to their cart.',
-    '- Budget: playbook treat is a small affordable treat suggested instead of a routine, because they find the routine too expensive or have a small budget: offer it warmly, never push the routine. total_price is the routine\'s price: quote it as given, never add prices yourself. budget.left_out > 0: say you kept the essentials to stay within their budget (the skipped steps with reason over_budget).',
+    '- Budget: playbook treat is a small affordable treat suggested instead of a routine, because they find the routine too expensive or have a small budget: offer it warmly, never push the routine. total_price (given only with a budget) is the routine\'s price: quote it as given, never add prices yourself. budget.left_out > 0: say you kept the essentials to stay within their budget (the skipped steps with reason over_budget).',
     '- A complete personalised routine is the routine_builder skill: when the customer asks you to build one in their own words, call use_skill with routine_builder. Never open it otherwise; the app offers it.'
   ];
 }

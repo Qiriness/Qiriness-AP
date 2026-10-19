@@ -26,7 +26,7 @@ export default {
     eyes: /\b(eyes?|eye area|eye contour|under ?eyes?|eyelids?|eye bags|around (my|the) eyes)\b/,
     // Not « after the shower »: « my skin feels tight after showering » is about the face too.
     body: /\b(body|legs?|arms?|my back)\b/,
-    face: /\b(face|facial|forehead|cheeks?|chin)\b/
+    face: /\b(faces?|facial|forehead|cheeks?|chin)\b/
   },
 
   concerns: {
@@ -92,6 +92,12 @@ export default {
     moisturiser: /\b(moisturi[sz]er|cream|day cream|face cream)\b/
   },
 
+  // "my main concern is wrinkles": the concern they name is the main one.
+  // "what can I do about wrinkles", "how do I get rid of dark spots": asking for a concern.
+  asksFor: /\b(what (can|should|do) i (do|use|try)|how (do|can|should) i (get rid of|treat|reduce|fade|remove|fight|prevent|deal with|fix)|how to (get rid of|treat|reduce|fade|remove|fight|prevent|deal with|fix)|something (for|against)|anything (for|against)|a product (for|against)|(and|but) (for|what about)|what about|what works for|help with)\b/,
+  // "also", "as well": another concern beside the main one.
+  additive: /\b(also|as well|too|in addition|additionally|on top of that)\b/,
+  concernIs: /\b(my )?(main )?(concern|worry|problem|issue)s? (is|are)\b/,
   wants: /\b(i m looking for|looking for|i need|i want|i d like|i would like|can you recommend|could you recommend|recommend me|do you have|which (serum|cream))\b/,
   desired: {
     serum: /\b(a|the|my) (serum|elixir)\b/,
@@ -135,6 +141,6 @@ export default {
   age: [/\b(?:i am|i m|im) (\d{2})\b/, /\b(\d{2}) (?:years? old|yo|y o)\b/],
   ageWords: [[/\b(twenties|20s)\b/, 25], [/\b(thirties|30s)\b/, 35], [/\b(forties|40s)\b/, 45], [/\b(fifties|50s)\b/, 55], [/\b(sixties|seventies|60s|70s)\b/, 65]],
 
-  routineBuilder: /\b((build|create|make|put together|design|set up|help me (build|create|make|put together)) (me )?(together )?(a |an |my |our )?((full|complete|whole|personali[sz]ed|daily|new|skin ?care) )*routine|routine builder)\b/,
+  routineBuilder: /\b((build|create|make|put together|design|set up|help me (build|create|make|put together)) (me )?(together )?(a |an |my |our )?((full|complete|whole|personali[sz]ed|daily|new|skin ?care) )*routine|routine builder|(redo|restart|retry|rebuild|start over( with)?|start again( with)?) (my |the |a )?(routine|quiz|questionnaire)|new routine)\b/,
   dontKnow: /\b(i don t know|i do not know|no idea|not sure|dunno|i m not sure)\b/
 };

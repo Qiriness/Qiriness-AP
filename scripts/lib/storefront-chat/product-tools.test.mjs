@@ -56,7 +56,9 @@ test('the repository reads named columns of live products only, never the raw pa
   assert.equal(catalogue.products.length, 3);
   const products = calls.find((c) => c.table === 'products');
   assert.equal(products.columns, PRODUCT_COLUMNS);
-  assert.doesNotMatch(PRODUCT_COLUMNS, /raw_shopify_payload|structured_facts|\*/);
+  assert.doesNotMatch(PRODUCT_COLUMNS, /raw_shopify_payload|(^|,)structured_facts(,|$)|\*/);
+  // Named content metafields only, never the whole set (the review badge HTML lives there).
+  assert.ok(PRODUCT_COLUMNS.split(',').filter((c) => c.includes('structured_facts')).every((c) => /^mf_\w+:structured_facts->metafields->"[a-z_.-]+"->>?(value|json_value)$/.test(c)));
   assert.equal(products.filters.status, 'active');
   assert.deepEqual(products.filters.published_at, { operator: 'not.is', value: 'null' });
   assert.deepEqual(products.filters.deleted_at, { operator: 'is', value: 'null' });

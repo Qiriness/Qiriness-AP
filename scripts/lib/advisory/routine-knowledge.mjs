@@ -53,7 +53,7 @@ function ageBounds(key) {
 
 /**
  * @param {object[]} rows  the Rules tab, keyed by its (key) names, with `_row`
- * @returns {{ concerns: object[], foundations: object[], age_ranges: object[], routine_times: object[], skin_type_texture: object, errors: object[] }}
+ * @returns {{ concerns: object[], foundations: object[], age_ranges: object[], routine_times: object[], skin_type_texture: object, skin_labels: object, errors: object[] }}
  */
 export function parseRuleRows(rows) {
   const errors = [];
@@ -63,6 +63,7 @@ export function parseRuleRows(rows) {
   const ageRanges = [];
   const routineTimes = [];
   const skinTypeTexture = {};
+  const skinLabels = {};
   for (const row of rows) {
     const key = text(row.key);
     const sectionName = text(row.section);
@@ -100,9 +101,10 @@ export function parseRuleRows(rows) {
       const texture = ENUMS.texture[text(row.effect)];
       if (!texture) bad(row, 'effect', text(row.effect));
       else skinTypeTexture[SKIN_KEY.exec(key)[1]] = texture;
+      if (labels.label_fr) skinLabels[SKIN_KEY.exec(key)[1]] = { fr: labels.label_fr, en: labels.label_en };
     }
   }
-  return { concerns, foundations, age_ranges: ageRanges, routine_times: routineTimes, skin_type_texture: skinTypeTexture, errors };
+  return { concerns, foundations, age_ranges: ageRanges, routine_times: routineTimes, skin_type_texture: skinTypeTexture, skin_labels: skinLabels, errors };
 }
 
 /**
