@@ -1,10 +1,11 @@
 // The storefront's only reader of policies, parameters and approved FAQ sections.
-// Read-only named columns; no chunks/vectors, customer records or support rules.
+// Read-only named columns; no chunks/vectors, customer records or support rules; only the
+// policies switched on for the storefront (company_policies.storefront).
 import { toParameterMap } from '../parameters.mjs';
 import { faqRecords } from './faq-matcher.mjs';
 
 export const KNOWLEDGE_TTL_MS = 5 * 60 * 1000;
-export const POLICY_COLUMNS = 'policy_key,name,content,active,version,updated_at';
+export const POLICY_COLUMNS = 'policy_key,name,purpose,content,active,version,updated_at';
 export const PARAMETER_COLUMNS = 'parameter_key,value,updated_at';
 export const FAQ_COLUMNS = 'id,title,category,locale,sections,product_ids,approval_status,core_topic,deleted_at,updated_at';
 const APPROVED = { approval_status: 'approved', deleted_at: { operator: 'is', value: 'null' }, core_topic: { operator: 'is', value: 'null' } };
@@ -12,7 +13,8 @@ const APPROVED = { approval_status: 'approved', deleted_at: { operator: 'is', va
 export async function loadKnowledge(db, shopId) {
   if (!shopId) throw new Error('loadKnowledge needs the catalogue shop id.');
   const [policies, rows, documents] = await Promise.all([
-    db.selectAll('company_policies', { shop_id: shopId, active: true }, POLICY_COLUMNS),
+    // Only the policies switched on for the chat (`storefront`): most are written for the support agent.
+    db.selectAll('company_policies', { shop_id: shopId, active: true, storefront: true }, POLICY_COLUMNS),
     db.selectAll('support_parameters', { shop_id: shopId }, PARAMETER_COLUMNS),
     db.selectAll('knowledge_documents', { shop_id: shopId, ...APPROVED, product_ids: { operator: 'eq', value: '{}' }, category: { operator: 'not.in', value: '(brand_story,product,product_stock,cosmetovigilance)' } }, FAQ_COLUMNS)
   ]);

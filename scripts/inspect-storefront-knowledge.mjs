@@ -8,7 +8,7 @@ const db = createSupabaseClient(loadConfig(env));
 const [shop] = await supabaseSelect(db, 'shops', { shop_domain: env.SHOPIFY_STORE_DOMAIN }, 'id');
 if (!shop) throw new Error('Catalogue shop not found.');
 const [policies, documents, parameters] = await Promise.all([
-  supabaseSelectAll(db, 'company_policies', { shop_id: shop.id, active: true }, 'policy_key,name,purpose,content,version'),
+  supabaseSelectAll(db, 'company_policies', { shop_id: shop.id, active: true, storefront: true }, 'policy_key,name,purpose,content,version'),
   supabaseSelectAll(db, 'knowledge_documents', { shop_id: shop.id, approval_status: 'approved', deleted_at: { operator: 'is', value: 'null' } }, 'id,title,category,locale,core_topic,sections,product_ids'),
   supabaseSelectAll(db, 'support_parameters', { shop_id: shop.id }, 'parameter_key,value')
 ]);

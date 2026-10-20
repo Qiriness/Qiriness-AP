@@ -126,3 +126,16 @@ test('the drafting instruction keeps a policy\'s possibilities possible', async 
   const { POLICY_INSTRUCTION } = await import('./company-policies.mjs');
   assert.match(POLICY_INSTRUCTION, /comme une possibilité, jamais comme une certitude/);
 });
+
+test('the storefront switch: off for a new policy unless set, saved without a new version', async () => {
+  // 2026-10-20: the storefront chat reads only the policies switched on (company_policies.storefront).
+  const created = recorder({ current: null });
+  await createCompanyPolicyRecord({}, { shopId: 's', transport: created.transport }).create({ key: 'ranges_policy', name: 'Gammes', content: 'Texte' });
+  assert.equal(created.calls.find((c) => c.kind === 'insert').rows[0].storefront, false);
+  const on = recorder();
+  await createCompanyPolicyRecord({}, { shopId: 's', transport: on.transport }).save('delivery_time_policy', { storefront: true }, {});
+  const patch = on.calls.find((c) => c.kind === 'update').patch;
+  assert.equal(patch.storefront, true);
+  assert.equal(patch.version, 2);
+  assert.equal(on.calls.filter((c) => c.kind === 'insert').length, 0);
+});

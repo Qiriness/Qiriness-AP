@@ -172,7 +172,7 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # shopping-tools (lazy opening + five read-only tools,
 |       |                                # simulate_offers included) ·
 |       |                                # shopping-cases (French deterministic expectations) ·
-|       |                                # knowledge-topics (topic/key bindings, country context) ·
+|       |                                # knowledge-topics (topic/key bindings, the brand's own policies, country context) ·
 |       |                                # faq-matcher (runtime section records; exact → alias →
 |       |                                # keywords/topic → fuzzy, no vectors) · knowledge-tools
 |       |                                # (get_policy, search_faqs, get_product_policy) ·

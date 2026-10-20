@@ -16,13 +16,13 @@ async function send<T>(url: string, init: RequestInit, pick: (body: any) => T): 
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-export function createPolicy(input: { key: string; name: string; purpose: string; content: string; active: boolean }): Promise<CompanyPolicy> {
+export function createPolicy(input: { key: string; name: string; purpose: string; content: string; active: boolean; storefront: boolean }): Promise<CompanyPolicy> {
   return send("/api/company-policies", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(input) }, (b) => b.policy);
 }
 
 export function savePolicy(
   key: string,
-  input: { name?: string; purpose?: string; content?: string; active?: boolean; expectedVersion?: number }
+  input: { name?: string; purpose?: string; content?: string; active?: boolean; storefront?: boolean; expectedVersion?: number }
 ): Promise<CompanyPolicy> {
   return send(`/api/company-policies/${encodeURIComponent(key)}`, { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify(input) }, (b) => b.policy);
 }

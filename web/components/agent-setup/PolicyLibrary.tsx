@@ -10,9 +10,9 @@ import type { CompanyPolicy, CompanyPolicyTargets } from "@/lib/types";
 
 import styles from "./PolicyLibrary.module.css";
 
-type Draft = { key: string; name: string; purpose: string; content: string; active: boolean };
+type Draft = { key: string; name: string; purpose: string; content: string; active: boolean; storefront: boolean };
 
-const EMPTY: Draft = { key: "", name: "", purpose: "", content: "", active: true };
+const EMPTY: Draft = { key: "", name: "", purpose: "", content: "", active: true, storefront: false };
 
 /**
  * The company's policies, each written once.
@@ -87,6 +87,7 @@ export function PolicyLibrary({
           purpose: draft.purpose,
           content: draft.content,
           active: draft.active,
+          storefront: draft.storefront,
           expectedVersion: selected.version,
         });
         setPolicies((prev) => prev.map((p) => (p.key === saved.key ? saved : p)));
@@ -178,6 +179,10 @@ export function PolicyLibrary({
             <input type="checkbox" checked={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.checked })} />
             <span>{t("setup.policies.active")}</span>
           </label>
+          <label className={styles.toggle}>
+            <input type="checkbox" checked={draft.storefront} onChange={(e) => setDraft({ ...draft, storefront: e.target.checked })} />
+            <span>{t("setup.policies.storefront")}</span>
+          </label>
 
           {error && <p className={styles.error}>{error}</p>}
           {notice && <p className={styles.notice}>{notice}</p>}
@@ -217,9 +222,9 @@ export function PolicyLibrary({
 }
 
 function toDraft(policy: CompanyPolicy): Draft {
-  return { key: policy.key, name: policy.name, purpose: policy.purpose, content: policy.content, active: policy.active };
+  return { key: policy.key, name: policy.name, purpose: policy.purpose, content: policy.content, active: policy.active, storefront: policy.storefront };
 }
 
 function sameDraft(a: Draft, b: Draft): boolean {
-  return a.name === b.name && a.purpose === b.purpose && a.content === b.content && a.active === b.active;
+  return a.name === b.name && a.purpose === b.purpose && a.content === b.content && a.active === b.active && a.storefront === b.storefront;
 }

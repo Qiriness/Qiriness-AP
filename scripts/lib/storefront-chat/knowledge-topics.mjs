@@ -11,6 +11,17 @@ export const POLICY_KEYS = {
   order_changes: ['address_change_policy', 'order_modification_policy']
 };
 export const POLICY_TOPICS = Object.keys(POLICY_KEYS);
+const BOUND_KEYS = new Set(Object.values(POLICY_KEYS).flat());
+
+/**
+ * The brand's own policies: every one the chat reads (active, switched on for the storefront in the
+ * dashboard) that no topic above names (owner, 2026-10-20: a policy on the ranges, « Gamme
+ * Qiriness »). Each is its own get_policy topic, by its key; its purpose, written in the dashboard,
+ * tells the model when to fetch it. A new policy needs no code.
+ */
+export function ownPolicies(knowledge) {
+  return (knowledge?.policies ?? []).filter((p) => p.active && !BOUND_KEYS.has(p.policy_key) && String(p.content ?? '').trim());
+}
 
 // French and English, the languages of about 99 % of customers: a topic missing
 // in one of them is a bug (knowledge.test.mjs runs every case in both).

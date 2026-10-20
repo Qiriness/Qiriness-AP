@@ -1,7 +1,7 @@
 import { PARAMETERS, days, amount, text, fillParameters, placeholdersIn } from '../parameters.mjs';
 import { matchFaqs, keywords } from './faq-matcher.mjs';
 import { KNOWLEDGE_TTL_MS } from './knowledge-repository.mjs';
-import { POLICY_TOPICS, POLICY_KEYS, policyTopics, deliveryKeys, validCountry, countriesIn, normalise, productTopic } from './knowledge-topics.mjs';
+import { POLICY_TOPICS, POLICY_KEYS, ownPolicies, policyTopics, deliveryKeys, validCountry, countriesIn, normalise, productTopic } from './knowledge-topics.mjs';
 
 export const KNOWLEDGE_TOOL_NAMES = ['get_policy', 'search_faqs', 'get_product_policy'];
 const PARAMETER_FIELDS = {
@@ -25,9 +25,11 @@ export function knowledgeToolDefinitions(knowledge = null) {
   // FAQs' own languages, from the data, tell the model what to search in.
   const faqLanguages = [...new Set((knowledge?.faqs ?? []).map((r) => String(r.locale || '').slice(0, 2)).filter(Boolean))];
   const queryLanguage = faqLanguages.length ? ` FAQ entries are written in ${faqLanguages.join(', ')}: write query in ${faqLanguages.length > 1 ? 'one of those languages' : 'that language'}, translating the customer's words when they wrote in another.` : '';
+  const own = ownPolicies(knowledge);
+  const ownTopics = own.length ? ` The brand's own policies are topics too, by key: ${own.map((p) => `${p.policy_key} (${p.name}${p.purpose ? `: ${p.purpose}` : ''})`).join('; ')}. A question one of them covers: fetch it and answer from it.` : '';
   return [
-    definition('get_policy', 'Authoritative general shop policy and referenced parameter facts. Preserve all conditions and possibilities. A delivery time does not establish that a country is served; a threshold does not establish a current offer. Missing facts cannot be inferred.', {
-      topic: { type: 'string', enum: POLICY_TOPICS },
+    definition('get_policy', 'Authoritative general shop policy and referenced parameter facts. Preserve all conditions and possibilities. A delivery time does not establish that a country is served; a threshold does not establish a current offer. Missing facts cannot be inferred.' + ownTopics, {
+      topic: { type: 'string', enum: [...POLICY_TOPICS, ...own.map((p) => p.policy_key)] },
       country: { ...nullableString, description: 'ISO country code if the customer supplied a destination, otherwise null. Never derive it from language.' },
       context: { type: ['object', 'null'], properties: { query: nullableString }, required: ['query'], additionalProperties: false }
     }),
@@ -61,6 +63,15 @@ function relevantPassages(content, query) {
   return { passages, incomplete: paragraphs.some((p, i) => selected.has(i) && p.length > 1800) };
 }
 
+/**
+ * A policy of the brand's own goes whole while it fits: its headings stand as paragraphs of their
+ * own (a range's name, then its text), and a comparison of ranges needs every one.
+ */
+function wholePolicy(content) {
+  const paragraphs = String(content).split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  return paragraphs.join('').length <= 6000 ? { passages: paragraphs, incomplete: false } : null;
+}
+
 function supportedDestination(policy, country) {
   if (!country || !policy) return 'unknown';
   // Only an explicit enumerated destination list is parsed. Other prose stays prose.
@@ -71,11 +82,12 @@ function supportedDestination(policy, country) {
 }
 
 export function getPolicy(knowledge, { topic, country = null, context = null } = {}, { query = '', currency = 'EUR', now = Date.now() } = {}) {
-  if (!POLICY_TOPICS.includes(topic) || (country !== null && !validCountry(country)) || (context !== null && (typeof context !== 'object' || Array.isArray(context))) || (context?.query !== undefined && context.query !== null && typeof context.query !== 'string')) return { status: 'invalid_arguments' };
+  const own = ownPolicies(knowledge).some((p) => p.policy_key === topic);
+  if (!(POLICY_TOPICS.includes(topic) || own) || (country !== null && !validCountry(country)) || (context !== null && (typeof context !== 'object' || Array.isArray(context))) || (context?.query !== undefined && context.query !== null && typeof context.query !== 'string')) return { status: 'invalid_arguments' };
   if (!fresh(knowledge, now)) return { status: 'unavailable', topic, reason: 'knowledge_unavailable_or_expired' };
   query = context?.query ?? query;
   if (query.length > 1000) return { status: 'invalid_arguments' };
-  const keys = topic === 'delivery' ? deliveryKeys(query) : POLICY_KEYS[topic];
+  const keys = own ? [topic] : topic === 'delivery' ? deliveryKeys(query) : [...POLICY_KEYS[topic]];
   if (topic === 'delivery' && country && !keys.includes('delivery_location_policy')) keys.push('delivery_location_policy');
   const candidates = keys.map((key) => knowledge.policies.find((p) => p.active && p.policy_key === key)).filter(Boolean);
   const missing = keys.filter((key) => !candidates.some((p) => p.policy_key === key));
@@ -96,7 +108,7 @@ export function getPolicy(knowledge, { topic, country = null, context = null } =
       missing.push(...invalid.map((key) => `parameter:${key}`));
       continue;
     }
-    const selected = relevantPassages(rendered.text, query);
+    const selected = own ? wholePolicy(rendered.text) ?? relevantPassages(rendered.text, query) : relevantPassages(rendered.text, query);
     if (selected.incomplete || !selected.passages.length) { missing.push(`unbounded_passage:${policy.policy_key}`); continue; }
     const chars = selected.passages.reduce((total, passage) => total + passage.length, 0);
     if (returnedChars + chars > 6000) { missing.push(`response_limit:${policy.policy_key}`); continue; }

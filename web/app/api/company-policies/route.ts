@@ -31,6 +31,7 @@ export async function POST(request: NextRequest) {
         purpose: typeof body.purpose === "string" ? body.purpose : "",
         content: String(body.content ?? ""),
         active: body.active !== false,
+        storefront: body.storefront === true,
       },
       session?.sub ?? null
     );

@@ -234,6 +234,10 @@ test('repository filters by shop, approval and scope, with named columns only', 
     assert.equal(call.filters.shop_id, 'shop-test');
     assert.doesNotMatch(call.columns, /\*|raw_|embedding|updated_by/);
   }
+  // Only the policies switched on for the storefront, with the purpose that says when to fetch them.
+  const policyRead = calls.find((c) => c.table === 'company_policies');
+  assert.deepEqual([policyRead.filters.active, policyRead.filters.storefront], [true, true]);
+  assert.match(policyRead.columns, /(^|,)purpose(,|$)/);
   const faqRead = calls.find((c) => c.table === 'knowledge_documents');
   assert.equal(faqRead.filters.approval_status, 'approved');
   assert.deepEqual(faqRead.filters.product_ids, { operator: 'eq', value: '{}' });
@@ -361,3 +365,42 @@ test('the FAQ tool tells the model which language the FAQs are written in', () =
   assert.match(search(makeKnowledge()), /written in fr: write query in that language/);
   assert.doesNotMatch(search(null), /written in/);
 });
+
+// 2026-10-20: a policy on the ranges, written in the dashboard, was out of the chat's reach.
+const RANGES = { ...policy('ranges_policy', 'Nos gammes :\n\nGamme Aurore :\n\nUne gamme fictive pour l’éclat du matin.\n\nGamme Nocturne :\n\nUne gamme fictive pour la nuit.'), name: 'Nos gammes', purpose: 'Pour une question sur les gammes ou une comparaison' };
+const withRanges = (more = []) => makeKnowledge({ policies: [...POLICIES, RANGES, ...more] });
+
+test('a policy of the brand’s own is a get_policy topic, by key, with its purpose; it returns whole', () => {
+  const knowledge = withRanges([{ ...policy('brand_policy', 'Texte'), active: false }, policy('empty_policy', '  ')]);
+  const getPolicyTool = knowledgeToolDefinitions(knowledge).find((d) => d.function.name === 'get_policy').function;
+  assert.deepEqual(getPolicyTool.parameters.properties.topic.enum.slice(-1), ['ranges_policy']);
+  assert.match(getPolicyTool.description, /ranges_policy \(Nos gammes: Pour une question sur les gammes ou une comparaison\)/);
+  assert.doesNotMatch(getPolicyTool.description, /brand_policy|empty_policy|return_policy \(/);
+  // Each range's name is its own paragraph: the text after it comes too, every range for a comparison.
+  const result = getPolicy(knowledge, { topic: 'ranges_policy', context: { query: 'la gamme Nocturne' } });
+  assert.equal(result.status, 'found');
+  assert.deepEqual(result.sources[0].passages, ['Nos gammes :', 'Gamme Aurore :', 'Une gamme fictive pour l’éclat du matin.', 'Gamme Nocturne :', 'Une gamme fictive pour la nuit.']);
+  assert.equal(getPolicy(knowledge, { topic: 'brand_policy' }).status, 'invalid_arguments');
+  assert.equal(getPolicy(makeKnowledge(), { topic: 'ranges_policy' }).status, 'invalid_arguments');
+  // A topic's own policies are not listed again, and keep their passage choice.
+  assert.equal(getPolicy(knowledge, { topic: 'returns' }).sources[0].policy_key, 'return_policy');
+});
+
+for (const [lang, message] of [['fr', 'Parle-moi de la gamme Nocturne'], ['en', 'Tell me about the Nocturne range']]) {
+  test(`a question on a range fetches the brand’s range policy (${lang})`, async () => {
+    let calls = 0; let seen = '';
+    const agent = createLlmAgent({ catalogue: CATALOGUE, knowledge: withRanges(), client: { completeWithTools: async (input) => {
+      calls += 1;
+      if (calls === 1) {
+        assert.match(input.system, /brand's own policies by key/);
+        assert.ok(input.tools.find((t) => t.function.name === 'get_policy').function.parameters.properties.topic.enum.includes('ranges_policy'));
+        return toolCall('get_policy', { topic: 'ranges_policy', country: null, context: { query: message } });
+      }
+      seen = input.messages.find((m) => m.role === 'tool').content;
+      return answer;
+    } } });
+    await agent.respond({ message, context: { locale: lang } });
+    assert.equal(calls, 2);
+    assert.match(seen, /Une gamme fictive pour la nuit/);
+  });
+}

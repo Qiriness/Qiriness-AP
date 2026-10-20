@@ -2779,6 +2779,8 @@ export interface CompanyPolicy {
   purpose: string;
   content: string;
   active: boolean;
+  /** The storefront chat may read and quote it to a shopper (when active). */
+  storefront: boolean;
   version: number;
   updatedAt: string | null;
   links: CompanyPolicyLink[];

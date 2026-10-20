@@ -14,7 +14,7 @@ interface RouteParams {
 }
 
 /**
- * Save a policy: name, purpose, text, active. A change of text raises the
+ * Save a policy: name, purpose, text, active, read by the storefront chat. A change of text raises the
  * version, and every situation and rule linked to it reads the new text from
  * the next reply on. Refused when someone else saved since the editor loaded.
  */
@@ -30,6 +30,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
         purpose: typeof body.purpose === "string" ? body.purpose : undefined,
         content: typeof body.content === "string" ? body.content : undefined,
         active: typeof body.active === "boolean" ? body.active : undefined,
+        storefront: typeof body.storefront === "boolean" ? body.storefront : undefined,
         expectedVersion: Number.isInteger(body.expectedVersion) ? body.expectedVersion : undefined,
       },
       session?.sub ?? null

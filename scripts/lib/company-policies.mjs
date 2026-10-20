@@ -42,7 +42,7 @@ export const POLICY_INSTRUCTION =
   "(« peut », « notamment », « certains ») se dit au client comme une possibilité, jamais comme une certitude " +
   "sur sa commande, son code ou son offre.";
 
-export const POLICY_COLUMNS = 'id,policy_key,name,purpose,content,active,version,updated_at,updated_by';
+export const POLICY_COLUMNS = 'id,policy_key,name,purpose,content,active,storefront,version,updated_at,updated_by';
 export const LINK_COLUMNS = 'id,policy_id,situation_key,answer_id,created_at';
 
 /**
@@ -150,12 +150,12 @@ export function createCompanyPolicyRecord(supabase, { shopId, transport = REST_T
 
     /**
      * A new policy, version 1, with its first version row.
-     * @param {{ key: string, name: string, purpose?: string, content: string, active?: boolean }} input
+     * @param {{ key: string, name: string, purpose?: string, content: string, active?: boolean, storefront?: boolean }} input
      * @param {{ by?: string | null }} [options]
      */
-    async create({ key, name, purpose = '', content, active = true }, { by = null } = {}) {
+    async create({ key, name, purpose = '', content, active = true, storefront = false }, { by = null } = {}) {
       const [row] = await insert(supabase, T.COMPANY_POLICIES, [
-        { shop_id: shopId, policy_key: key, name: name.trim(), purpose: String(purpose ?? '').trim(), content, active, version: 1, updated_by: by }
+        { shop_id: shopId, policy_key: key, name: name.trim(), purpose: String(purpose ?? '').trim(), content, active, storefront, version: 1, updated_by: by }
       ]);
       await insert(supabase, T.COMPANY_POLICY_VERSIONS, [{ shop_id: shopId, policy_id: row.id, version: 1, content, saved_by: by }]);
       return row;
@@ -166,10 +166,10 @@ export function createCompanyPolicyRecord(supabase, { shopId, transport = REST_T
      * text; the write is conditional on the version the editor read, so two
      * people saving at once cannot silently overwrite each other.
      * @param {string} key
-     * @param {{ name?: string, purpose?: string, content?: string, active?: boolean }} changes
+     * @param {{ name?: string, purpose?: string, content?: string, active?: boolean, storefront?: boolean }} changes
      * @param {{ expectedVersion?: number, by?: string | null }} [options]
      */
-    async save(key, { name, purpose, content, active }, { expectedVersion, by = null } = {}) {
+    async save(key, { name, purpose, content, active, storefront }, { expectedVersion, by = null } = {}) {
       const current = await byKey(key);
       if (!current) return null;
       if (Number.isInteger(expectedVersion) && expectedVersion !== current.version) {
@@ -182,6 +182,7 @@ export function createCompanyPolicyRecord(supabase, { shopId, transport = REST_T
       if (typeof purpose === 'string') patch.purpose = purpose.trim();
       if (contentChanged) patch.content = content;
       if (typeof active === 'boolean') patch.active = active;
+      if (typeof storefront === 'boolean') patch.storefront = storefront;
       const rows = await update(
         supabase,
         T.COMPANY_POLICIES,

@@ -139,6 +139,8 @@ export function buildStorefrontSystemPrompt({ company = {}, context = {}, hasToo
 function knowledgeRules() {
   return [
     '- get_policy supplies existing active policy passages and the parameters they reference. search_faqs supplies approved general FAQs. Opening retrieval below may already answer the question: use it immediately without fetching it again.',
+    // 2026-10-20: a range policy written in the dashboard was out of reach (« je ne peux pas vous en dire davantage »).
+    '- get_policy\'s description also lists the brand\'s own policies by key, each with its purpose (its ranges, the brand itself…). A question one of them covers, a question about the brand or a range included: fetch it first and answer from its passages. Say you cannot tell them more only when none covers it or its passages do not answer.',
     '- An FAQ policy_reference identifies intent; the linked policy supplies changing facts. Never use old FAQ prose instead of an unavailable linked policy.',
     '- Preserve every condition, exception and qualifier: may, typically, occasionally. A free_shipping_threshold is not proof of a current offer. General promotion policy supplies no current code or offer.',
     '- A delivery time does not prove a destination is served. country_support unsupported/unknown must not become a delivery promise. Ask for the country when needed; language never establishes it. Explicit wording beats history and page context.',

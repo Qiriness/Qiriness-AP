@@ -656,7 +656,8 @@
     "version integer not null default 1",
     "created_at timestamp with time zone not null default now()",
     "updated_at timestamp with time zone not null default now()",
-    "updated_by text"
+    "updated_by text",
+    "storefront boolean not null default false"
    ],
    "constraints": [
     "company_policies_key_shape_check: CHECK ((policy_key ~ '^[a-z][a-z0-9_]*$'::text))",
@@ -4123,6 +4124,7 @@
   "column public.cluster_runs.internal_excluded: Messages skipped because the sender directory says they are ours. Recorded so a shrinking map can be told apart from a growing blocklist.",
   "column public.cluster_runs.threshold: The cosine similarity threshold this run used. Corpus-specific and hand-tuned; exposed in the resync dialog because it is the one knob that changes the answer.",
   "column public.company_policies.content: The policy text. May carry {parameter} placeholders (support_parameters keys), filled when the agent reads it, so a number lives in one place.",
+  "column public.company_policies.storefront: True: the storefront chat may read and quote this policy to a shopper (when active). Set in the dashboard's policy editor. The support agent ignores it.",
   "column public.company_policies.version: Raised on every change of content; each version's text is kept in company_policy_versions, and a case file records the version it read.",
   "column public.customers.amount_spent: Lifetime Shopify amount spent from Customer.amountSpent.",
   "column public.customers.default_address_formatted_area: Coarse customer location from the default address. Street address and postcode are intentionally not stored here.",

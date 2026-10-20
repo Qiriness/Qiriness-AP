@@ -33,6 +33,7 @@ type PolicyRow = {
   purpose: string | null;
   content: string;
   active: boolean;
+  storefront: boolean;
   version: number;
   updated_at: string | null;
 };
@@ -50,6 +51,7 @@ function mapPolicy(row: PolicyRow, links: LinkRow[]): CompanyPolicy {
     purpose: row.purpose ?? "",
     content: row.content,
     active: row.active,
+    storefront: row.storefront,
     version: row.version,
     updatedAt: row.updated_at,
     links: links.filter((link) => link.policy_id === row.id).map(mapLink),
@@ -103,6 +105,7 @@ export interface PolicyInput {
   purpose?: string;
   content?: string;
   active?: boolean;
+  storefront?: boolean;
 }
 
 export async function createCompanyPolicy(shopId: string, input: PolicyInput, by: string | null): Promise<CompanyPolicy> {
@@ -113,7 +116,7 @@ export async function createCompanyPolicy(shopId: string, input: PolicyInput, by
     throw new KnowledgeValidationError(`A policy called ${input.key} already exists.`);
   }
   const row = (await policies.create(
-    { key: String(input.key), name: String(input.name), purpose: input.purpose ?? "", content: String(input.content), active: input.active ?? true },
+    { key: String(input.key), name: String(input.name), purpose: input.purpose ?? "", content: String(input.content), active: input.active ?? true, storefront: input.storefront ?? false },
     { by }
   )) as PolicyRow;
   return mapPolicy(row, []);
@@ -138,7 +141,7 @@ export async function saveCompanyPolicy(
   try {
     const row = (await policies.save(
       key,
-      { name: input.name, purpose: input.purpose, content: input.content, active: input.active },
+      { name: input.name, purpose: input.purpose, content: input.content, active: input.active, storefront: input.storefront },
       { expectedVersion: input.expectedVersion, by }
     )) as PolicyRow;
     const { links } = (await policies.load()) as { links: LinkRow[] };
