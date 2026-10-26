@@ -49,7 +49,7 @@ Pending: ORM/DB client for app reads (scripts use `pg` + a Supabase REST client)
 
 **Microsoft Graph application permissions:** `Mail.Read` for ingestion, **`Mail.Send`** for the forwarding pass and for sending replies, and **`Mail.ReadWrite`** for the reply drafts the outbound worker creates before sending (granted 2026-09-28). Without them the affected pass records failures rather than failing quietly; ingestion and categorisation are unaffected.
 
-**Mail layer switches** (all off by default): `OUTBOUND_SEND_ENABLED=true` makes « Approve » in `/tickets` send, through the worker; `OUTBOUND_STOP_BEFORE_SEND=true` stops the worker at a threaded reply draft in the support mailbox's Drafts folder (for testing: send it from Outlook yourself); `DRAFT_ONLY=false` additionally lets eligible drafts send themselves; `MAIL_WEBHOOK_URL` (the public URL of `/api/webhooks/graph`) makes the worker keep Graph change-notification subscriptions. `JOB_CHECK_INTERVAL_MS` (15000) and `MAIL_JOB_MAX_ATTEMPTS` (5) tune the queue; with the webhook set, idle polls back off up to `INGEST_IDLE_POLL_MAX_MS` (600000). `npm run mail:status` (in `agent/`) shows where it all stands.
+**Mail layer switches** (all off by default): `OUTBOUND_SEND_ENABLED=true` makes « Approve » in `/tickets` send, through the worker; `OUTBOUND_STOP_BEFORE_SEND=true` stops the worker at a threaded reply draft in the support mailbox's Drafts folder (for testing: send it from Outlook yourself); `DRAFT_ONLY=false` additionally lets eligible drafts send themselves; `MAIL_WEBHOOK_URL` (the public URL of `/api/webhooks/graph`) makes the worker keep Graph change-notification subscriptions. `JOB_CHECK_INTERVAL_MS` (15000) and `MAIL_JOB_MAX_ATTEMPTS` (5) tune the queue; `SUPABASE_DB_TRANSPORT=pg` with `WORKER_DB_URL` (from `node scripts/set-worker-db-password.mjs`) moves the worker and the nightly off the REST API onto a direct connection, where queued jobs wake the worker by LISTEN and the job check is only the fallback; with the webhook set, idle polls back off up to `INGEST_IDLE_POLL_MAX_MS` (600000). `npm run mail:status` (in `agent/`) shows where it all stands.
 
 **Shopify scopes:** `read_discounts` for promotions; `read_content`/`read_online_store_pages` and `read_legal_policies` for the content catalog; `read_themes` for the theme-template content fallback. Missing optional scopes surface as a clear import error rather than silent failure. For Shopify Dev Dashboard apps, leave `SHOPIFY_ADMIN_API_ACCESS_TOKEN` blank and the scripts request a short-lived Admin token from the client ID/secret at runtime.
 
@@ -138,6 +138,8 @@ below. `llm_usage` holds 2174 calls.
 **Tests:** 2013 from the repo root, 1299 in `agent/`. Both suites pass as of 2026-09-09.
 
 ## Next Steps
+
+**Log ingest (2026-10-26):** deploy the direct connection. Set `WORKER_DB_URL` (in `.env.local`) and `SUPABASE_DB_TRANSPORT=pg` on Render, and add `WORKER_DB_URL` as a GitHub Actions secret. A day later, compare Supabase Usage log ingest (~50 MB/day before; ~19 expected) and close VALIDATION_LOG → Direct connection.
 
 Report changes must also pass `node web/scripts/verify-report-production.mjs` after the web production build; source-only rendering does not catch minification errors in embedded browser functions.
 

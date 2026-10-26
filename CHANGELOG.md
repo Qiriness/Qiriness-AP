@@ -10,6 +10,28 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The worker and the nightly read and write over a direct connection; jobs wake the worker by LISTEN (2026-10-26)
+
+Log ingest was ~50 MB/day against a 1 GB cycle to 2026-11-15 (0.6 GB used). Measured: 26.2k PostgREST requests a day at ≈1.6 kB of log each. Timed polls were ~8.6k, the 15 s job check ~5.6k, the nightly's customer pages ~1.2k. Postgres's own logging is not a factor. With `SUPABASE_DB_TRANSPORT=pg` and `WORKER_DB_URL`, the nine REST helpers run as SQL over a pooled session connection (`scripts/lib/supabase-pg-transport.mjs`, `supabase-pg-sql.mjs`). The callers did not change, and the dashboard stays on REST.
+- Results are Postgres's JSON (`json_agg`), as PostgREST returns them; the 1000-row cap is kept; grammar it does not know throws.
+- TLS is verified against the pinned Supabase Root 2021 CA (`scripts/lib/certs/`).
+- REST is the fallback if the first connection fails (`db.transport_fallback`).
+- New role `qiriness_worker` (migration `direct_worker_connection`, applied, baseline regenerated, `db:check:baseline -- --production` identical): `noinherit`, logs in acting as `service_role` (the owner's choice: today's access), 8 s timeouts. Password from `scripts/set-worker-db-password.mjs`, sent as a SCRAM verifier and written to `.env.local` only. The generator learnt the role (`schema-catalog.mjs`; `search_path` unquoted) and `00_baseline.test.mjs` pins it.
+- Trigger `mail_jobs_notify`: `pg_notify` when a job becomes queued. On PGlite it rings on enqueue, dedupe and failure back-off; it is silent on a claim and on a rolled-back enqueue.
+- `agent/src/lib/job-waker.mjs`: the worker LISTENs, sleeps until `nextDueAt` (`mail-job-record.mjs`: the earliest queued job or lease expiry), re-reads it on every ring or reconnect and at least every 5 min, and falls back to `hasDue` every `JOB_CHECK_INTERVAL_MS` when not listening. A job due before the last poll waits the old interval instead of looping.
+- Nightly workflow: `SUPABASE_DB_TRANSPORT=pg` plus the `WORKER_DB_URL` secret; without the secret it stays on REST.
+
+**Proven, sealed, against production:**
+- a REST-mode worker poll's **227 reads** (one RPC among them) were also run as SQL: **227 identical**;
+- a pg-mode poll made **0 REST requests, 313 queries, 0 errors**, every query rolled back;
+- a nightly capped at 20 rows per stage, in one rolled-back transaction: **132 queries, 0 errors, 0 REST**;
+- a direct-mode script exits 1 ms after its last query;
+- the role logs in through the pooler as `qiriness_worker`, acting as `service_role`.
+
+Tests: `supabase-pg-sql.test.mjs` (15, on PGlite: JSON shapes, every operator in use, upsert, update, delete, RPC kinds, refusals, quoting), `job-waker.test.mjs` (10), `00_baseline.test.mjs` (the role). npm test 3829/3829, agent 2161/2161.
+
+**Not yet seen:** the deployed worker and nightly on the new connection, and the next day's log ingest. Needs `WORKER_DB_URL` + `SUPABASE_DB_TRANSPORT=pg` on Render and `WORKER_DB_URL` as a GitHub secret (VALIDATION_LOG → Direct connection). Expected ~50 → ~19 MB/day; egress does not change.
+
 ## The storefront chat reads the policies switched on for it, « Gamme Qiriness » included (2026-10-20)
 
 « Parle moi de la gamme temps sublime » → « je ne peux pas vous en dire davantage »: the new range policy was out of `get_policy`'s reach. Migration 99 adds `company_policies.storefront` (off by default; on for the eleven policies the chat already read), applied to production, baseline regenerated (`db:check:baseline -- --production` identical). Agent setup → Policies gains the « Chat boutique » switch (`PolicyLibrary.tsx`, `/api/company-policies`, `company-policy-service.ts`, `company-policies.mjs`, messages FR/EN). The chat reads only switched-on policies, now with their purpose (`knowledge-repository.mjs`); each one no topic binds is a `get_policy` topic by key, listed with its purpose (`knowledge-topics.mjs` `ownPolicies`, `knowledge-tools.mjs`), returned whole under 6,000 characters; a prompt rule fetches one before « cannot tell you more » (`system-prompt.mjs`). « Gamme Qiriness » switched on; the support agent's five case policies and the inactive « Notre Marque » stay off. Tests: `knowledge.test.mjs` (the topic, its purpose, whole passages; a range question in FR and EN fetches it; the repository's filter), `company-policies.test.mjs` (the switch). npm test 3803/3803; `eval:storefront-knowledge` 15/15 live; the real policy returns 11 passages, Temps Sublime's text included; web tsc clean. Not seen in the dashboard or on the dev store.

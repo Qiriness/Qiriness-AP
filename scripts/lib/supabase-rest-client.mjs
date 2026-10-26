@@ -1,8 +1,42 @@
+/**
+ * `config.dbTransport === 'pg'` with a `config.dbUrl` gives the client a direct
+ * Postgres connection as well (`supabase-pg-transport.mjs`): every helper below
+ * then runs as SQL instead of an API request, unless the first connection fails.
+ * The connection opens on first use, so a client made and never queried costs nothing.
+ */
 export function createSupabaseClient(config) {
-  return {
+  const client = {
     baseUrl: `${config.supabaseUrl}/rest/v1`,
     key: config.supabaseKey
   };
+  if (config.dbTransport === 'pg' && config.dbUrl) {
+    client.pg = { url: config.dbUrl, applicationName: config.dbApplicationName || 'qiriness-worker' };
+  }
+  return client;
+}
+
+/**
+ * Runs `pgCall` on a client with a direct connection, `restCall` otherwise —
+ * and `restCall` too when the direct connection failed at startup. The
+ * transport module is loaded only here, so a REST-only process (the dashboard)
+ * never imports it.
+ */
+async function viaTransport(client, pgCall, restCall) {
+  if (!client.pg) {
+    return restCall();
+  }
+  const transport = await import('./supabase-pg-transport.mjs');
+  if (!transport.pgUsable(client)) {
+    return restCall();
+  }
+  try {
+    return await pgCall(transport);
+  } catch (error) {
+    if (error.fallback) {
+      return restCall();
+    }
+    throw error;
+  }
 }
 
 export function supabaseHeaders(client, extra = {}) {
@@ -75,6 +109,14 @@ async function supabaseFetch(url, init, attempt = 1) {
 export async function supabaseUpsert(client, table, rows, onConflict, { returning } = {}) {
   const minimal = returning === 'minimal';
   const normalizedRows = normalizeBulkRows(rows);
+  return viaTransport(
+    client,
+    (pg) => (normalizedRows.length === 0 ? [] : pg.pgInsert(client, { table, rows: normalizedRows, onConflict, minimal })),
+    () => restUpsert(client, table, normalizedRows, onConflict, minimal)
+  );
+}
+
+async function restUpsert(client, table, normalizedRows, onConflict, minimal) {
   const response = await supabaseFetch(
     `${client.baseUrl}/${table}?on_conflict=${encodeURIComponent(onConflict)}`,
     {
@@ -102,6 +144,14 @@ export async function supabaseInsert(client, table, rows, { returning } = {}) {
 
   const minimal = returning === 'minimal';
   const normalizedRows = normalizeBulkRows(rows);
+  return viaTransport(
+    client,
+    (pg) => pg.pgInsert(client, { table, rows: normalizedRows, minimal }),
+    () => restInsert(client, table, normalizedRows, minimal)
+  );
+}
+
+async function restInsert(client, table, normalizedRows, minimal) {
   const response = await supabaseFetch(
     `${client.baseUrl}/${table}`,
     {
@@ -126,6 +176,14 @@ export async function supabaseInsert(client, table, rows, { returning } = {}) {
 // query modifiers for batch readers that need a deterministic slice rather than
 // the whole table.
 export async function supabaseSelect(client, table, filters, select = '*', options = {}) {
+  return viaTransport(
+    client,
+    (pg) => pg.pgSelect(client, { table, select, filters, order: options.order, limit: options.limit }),
+    () => restSelect(client, table, filters, select, options)
+  );
+}
+
+async function restSelect(client, table, filters, select, options) {
   const searchParams = new URLSearchParams({ select });
   applyFilters(searchParams, filters);
   if (options.order) {
@@ -192,25 +250,13 @@ export async function supabaseSelectAll(client, table, filters, select = '*', op
   let lastId = null;
 
   for (let from = 0; rows.length < max; ) {
-    const searchParams = new URLSearchParams({ select: requested, order });
-    applyFilters(searchParams, filters);
-    if (keyset && lastId !== null) {
-      searchParams.set('id', `gt.${lastId}`);
-    }
-
-    const response = await supabaseFetch(`${client.baseUrl}/${table}?${searchParams.toString()}`, {
-      method: 'GET',
-      headers: supabaseHeaders(client, {
-        'Range-Unit': 'items',
-        Range: keyset ? `0-${pageSize - 1}` : `${from}-${from + pageSize - 1}`
-      })
-    });
-
-    const payload = await response.json().catch(() => null);
-    if (!response.ok) {
-      const detail = payload?.message || payload?.details || `HTTP ${response.status}`;
-      throw new Error(`Supabase select from ${table} failed: ${detail}`);
-    }
+    const pageFilters = keyset && lastId !== null ? { ...filters, id: { operator: 'gt', value: lastId } } : filters;
+    const offset = keyset ? 0 : from;
+    const payload = await viaTransport(
+      client,
+      (pg) => pg.pgSelect(client, { table, select: requested, filters: pageFilters, order, limit: pageSize, offset }),
+      () => restSelectPage(client, table, pageFilters, requested, order, offset, pageSize)
+    );
     if (!Array.isArray(payload) || payload.length === 0) {
       break;
     }
@@ -226,6 +272,25 @@ export async function supabaseSelectAll(client, table, filters, select = '*', op
   }
 
   return rows.length > max ? rows.slice(0, max) : rows;
+}
+
+async function restSelectPage(client, table, filters, select, order, offset, pageSize) {
+  const searchParams = new URLSearchParams({ select, order });
+  applyFilters(searchParams, filters);
+  const response = await supabaseFetch(`${client.baseUrl}/${table}?${searchParams.toString()}`, {
+    method: 'GET',
+    headers: supabaseHeaders(client, {
+      'Range-Unit': 'items',
+      Range: `${offset}-${offset + pageSize - 1}`
+    })
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const detail = payload?.message || payload?.details || `HTTP ${response.status}`;
+    throw new Error(`Supabase select from ${table} failed: ${detail}`);
+  }
+  return payload;
 }
 
 /** The top-level column list of a PostgREST `select`, ignoring embedded resources' inner lists. */
@@ -255,6 +320,14 @@ function topLevelColumns(select) {
  * rank by embedding is to pull every row and its 1536 floats to the client.
  */
 export async function supabaseRpc(client, functionName, args = {}) {
+  return viaTransport(
+    client,
+    (pg) => pg.pgRpc(client, functionName, args),
+    () => restRpc(client, functionName, args)
+  );
+}
+
+async function restRpc(client, functionName, args) {
   const response = await supabaseFetch(`${client.baseUrl}/rpc/${functionName}`, {
     method: 'POST',
     headers: supabaseHeaders(client, {
@@ -277,6 +350,14 @@ export async function supabaseRpc(client, functionName, args = {}) {
 // updates it gets back a narrower object than it started with.
 export async function supabaseUpdate(client, table, filters, row, { select, returning } = {}) {
   const minimal = returning === 'minimal';
+  return viaTransport(
+    client,
+    (pg) => pg.pgUpdate(client, { table, filters, row, select, minimal }),
+    () => restUpdate(client, table, filters, row, select, minimal)
+  );
+}
+
+async function restUpdate(client, table, filters, row, select, minimal) {
   const searchParams = new URLSearchParams();
   applyFilters(searchParams, filters);
   if (select) {
@@ -307,8 +388,12 @@ export async function supabaseUpdate(client, table, filters, row, { select, retu
 // PATCH downloads the whole row back, which on `tickets` (metadata, context,
 // overrides) is kilobytes per write that most callers never read.
 export async function supabaseUpdateById(client, table, id, row, { returning } = {}) {
-  const searchParams = new URLSearchParams({ id: `eq.${id}` });
   const minimal = returning === 'minimal';
+  if (client.pg) {
+    const payload = await supabaseUpdate(client, table, { id }, row, { returning });
+    return minimal ? undefined : payload[0];
+  }
+  const searchParams = new URLSearchParams({ id: `eq.${id}` });
   const response = await supabaseFetch(
     `${client.baseUrl}/${table}?${searchParams.toString()}`,
     {
@@ -334,6 +419,10 @@ export async function supabaseDeleteWhereIn(client, table, column, values) {
     return;
   }
 
+  if (client.pg) {
+    await supabaseDelete(client, table, { [column]: { operator: 'in', value: `(${values.join(',')})` } }, { returning: 'minimal' });
+    return;
+  }
   const filter = `in.(${values.join(',')})`;
   const response = await supabaseFetch(
     `${client.baseUrl}/${table}?${encodeURIComponent(column)}=${encodeURIComponent(filter)}`,
@@ -354,6 +443,14 @@ export async function supabaseDeleteWhereIn(client, table, column, values) {
 
 export async function supabaseDelete(client, table, filters, { returning } = {}) {
   const minimal = returning === 'minimal';
+  return viaTransport(
+    client,
+    async (pg) => (await pg.pgDelete(client, { table, filters, minimal })) || [],
+    () => restDelete(client, table, filters, minimal)
+  );
+}
+
+async function restDelete(client, table, filters, minimal) {
   const searchParams = new URLSearchParams();
   applyFilters(searchParams, filters);
 

@@ -129,6 +129,13 @@ export function loadConfig(env) {
     knowledgeManualOverridesPath: env.KNOWLEDGE_MANUAL_OVERRIDES_PATH,
     supabaseUrl: env.SUPABASE_URL.replace(/\/$/, ''),
     supabaseKey: env.SUPABASE_SECRET_KEY,
+    // `pg`: reads and writes go over a direct Postgres connection as
+    // `qiriness_worker` instead of the REST API, which writes a Supabase log
+    // line per request (supabase-pg-transport.mjs). Anything else, or no
+    // WORKER_DB_URL, is REST.
+    dbTransport: env.SUPABASE_DB_TRANSPORT === 'pg' ? 'pg' : 'rest',
+    dbUrl: env.WORKER_DB_URL || '',
+    dbApplicationName: 'qiriness-scripts',
     // Optional: only needed by the embedding pipeline. The embedding client
     // throws a clear error if openaiApiKey is missing when actually invoked,
     // so callers that never embed (all the Shopify sync scripts) are unaffected.

@@ -137,6 +137,22 @@ export function createMailJobRecord(supabase, { shopId, transport = REST_TRANSPO
       return rows.length > 0;
     },
 
+    /**
+     * When the next job of these kinds becomes claimable, or null if none will:
+     * the earliest queued `next_attempt_at`, or the earliest running lease to
+     * expire (`claim_mail_jobs` takes those back). In the past means due now.
+     * The direct-connection worker sleeps until then (agent/src/lib/job-waker.mjs).
+     */
+    async nextDueAt({ kinds }) {
+      const kind = { operator: 'in', value: `(${kinds.join(',')})` };
+      const [queued, leased] = await Promise.all([
+        select(supabase, T.MAIL_JOBS, { shop_id: shopId, state: 'queued', kind }, 'next_attempt_at', { order: 'next_attempt_at.asc', limit: 1 }),
+        select(supabase, T.MAIL_JOBS, { shop_id: shopId, state: 'running', kind, locked_until: { operator: 'not.is', value: 'null' } }, 'locked_until', { order: 'locked_until.asc', limit: 1 })
+      ]);
+      const times = [queued[0]?.next_attempt_at, leased[0]?.locked_until].filter(Boolean).map((at) => new Date(at));
+      return times.length ? new Date(Math.min(...times.map((at) => at.getTime()))) : null;
+    },
+
     /** Done. Conditional on `running`, so a job reclaimed meanwhile is not closed under its new holder. */
     async complete(jobId, at = new Date()) {
       return update(

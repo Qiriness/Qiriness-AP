@@ -101,6 +101,32 @@ Supabase logs every request (~1.5 kB each: 164 MB of log ingest that day), and e
 - **What waits longer:** things that move with time alone. A snooze waking or an auto-close can now run up to 10 min late, against hours or days of granularity. If a subscription silently stops delivering, mail waits up to 10 min instead of 60 s. A renewal failure is still logged at error level (§ above).
 - **A sealed run** (fake writes, empty Graph, 10 s base, 40 s cap) waited 10 → 20 → 40 s. Each idle poll was ~47 reads and ~40 kB.
 
+### The worker reads and writes over a direct connection (2026-10-26)
+
+**Measured 2026-10-26** (`pg_stat_statements` over 139 h, after the back-off above): ~26.2k PostgREST requests a day, ≈1.6 kB of log each, about 41 MB of the ~50 MB/day log ingest the owner reported. The quota was 1 GB to 2026-11-15, with 0.6 GB already used. The breakdown:
+- timed polls: ~204/day × ~43 requests = **~8.6k**;
+- the due-job check every 15 s: **~5.6k**, plus the claim RPC at ~600;
+- the nightly's customer upsert: 61k customers in pages of 50, **~1.2k**;
+- the rest: webhooks, the dashboard, the storefront.
+
+Postgres's own logging is not a factor: `log_connections` is off, `log_statement = ddl`, and there is no pg_cron, no pg_net and no realtime publication. A query over a Postgres connection goes through no API gateway and writes no request log. So **the worker and the nightly use one when `SUPABASE_DB_TRANSPORT=pg`**, and only they do: the dashboard stays on REST (serverless, no held connection).
+
+- **The callers did not change.** The nine REST helpers (`scripts/lib/supabase-rest-client.mjs`) choose the transport per client. `supabase-pg-sql.mjs` turns their PostgREST arguments into the SQL PostgREST itself runs: `json_agg` of the rows, `json_populate_recordset` / `json_to_record` for bodies and RPC arguments. Results are therefore Postgres's JSON byte for byte; read as node-postgres rows, timestamps would be Dates and numerics strings. `db-max-rows` (1000) still caps a read and a set-returning RPC. Grammar it does not know (embeds, `or=`, full-text) throws.
+- **Proven against production, sealed.** A REST-mode worker poll had each of its **227 reads** (one RPC among them) also run as SQL: **227 identical**. A pg-mode poll made **0 REST requests and 313 queries with 0 errors**, every query inside a rolled-back transaction. A nightly capped at 20 rows per stage, inside one rolled-back transaction, made **132 queries, 0 errors, 0 REST requests**.
+- **Access is the service key's, by the owner's choice.** `qiriness_worker` is `noinherit`, holds nothing itself, and logs in acting as `service_role` (role settings `role`, `search_path`). Those are not a per-connection `SET`, which node-postgres can only queue (deprecated in pg@9) and a LISTEN connection would miss. It has PostgREST's 8 s statement and lock timeouts. It has its own password, set by `scripts/set-worker-db-password.mjs` as a SCRAM verifier, because `log_statement = ddl` logs every `ALTER ROLE`.
+- **TLS is verified.** The pooler's chain ends in Supabase Root 2021 CA, which no system store carries; that is why the older scripts say `rejectUnauthorized: false`. The transport pins `scripts/lib/certs/supabase-root-2021.crt` (SHA-256 `80:70:25:AD:…:CA:FA`).
+- **The session pooler (port 5432), not the direct host.** Render has no IPv6, and the direct host is IPv6-only. Session mode holds a server connection per client, which LISTEN needs. The pool keeps 3 connections open rather than reconnecting per query.
+- **It falls back only at startup.** If the first connection cannot be made (refused, bad password, bad certificate), the process uses REST from then on and logs `db.transport_fallback` at error level. Mail keeps flowing at the old log cost. Once a connection has worked, failures are retried (connection errors only, 4 attempts) and then thrown, like REST's.
+
+**Waking for jobs: LISTEN, with the queue as the truth** (`agent/src/lib/job-waker.mjs`). A trigger on `mail_jobs` notifies `{shop_id, kind}` when a row becomes `queued`: enqueued, brought forward by the dedupe, or put back after a failure. It does not fire on a claim. A notification is lost if nobody is listening, so it is never the message:
+- on every ring, (re)connect and start, the waker reads `nextDueAt`: the earliest queued job, or the earliest lease to expire, since `claim_mail_jobs` reclaims those;
+- it sleeps until then, at most 5 min;
+- a lost listener rings too, and until it is back the waker asks `hasDue` every `JOB_CHECK_INTERVAL_MS`, as the REST worker does.
+
+**A job that was already due before the last poll does not wake the worker at once.** That poll should have taken it, so something holds it back (a send with sending off, a failing claim), and waking for it would poll in a loop. It waits the old check interval instead.
+
+**Expected:** the worker's ~14.8k requests a day and the nightly's ~1.3k leave the API logs, and the rest of the worker's reads with them. That is ~50 → ~19 MB/day, an estimate until the first full day is measured on the Usage page. Egress does not change: the same rows still leave the database. `pg_stat_statements` now shows the worker as `service_role` with `SELECT coalesce(json_agg(_t) …` statements rather than PostgREST's `WITH pgrst_source …`.
+
 ### Direction: the Inbox is not only inbound
 
 The team's replies land back in it. A message whose sender is the support mailbox is recorded `outbound`. Measured on real mail, 123 of 348 messages; before this they were stored as customer mail and sat at the end of 43% of threads, exactly where the categoriser looks for how the customer currently feels.

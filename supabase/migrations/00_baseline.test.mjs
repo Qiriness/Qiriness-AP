@@ -181,6 +181,17 @@ test('the chat views are readable by the chat role and by nobody else outside th
   assert.ok(CATALOG.chatRole.config.includes('default_transaction_read_only=on'));
 });
 
+test('the worker login role holds nothing itself and acts as service_role, with the REST limits', () => {
+  const role = CATALOG.workerRole;
+  assert.ok(role, 'qiriness_worker is missing (direct_worker_connection migration)');
+  assert.equal(role.rolinherit, false, 'its rights must come only from acting as service_role');
+  assert.deepEqual(role.member_of, ['service_role']);
+  for (const setting of ['role=service_role', 'search_path=public, extensions', 'statement_timeout=8s', 'lock_timeout=8s']) {
+    assert.ok(role.config.includes(setting), `qiriness_worker lacks ${setting}`);
+  }
+  assert.ok(CATALOG.triggers.some((t) => t.includes('mail_jobs_notify') && t.includes("new.state = 'queued'")), 'the mail_jobs doorbell is missing');
+});
+
 test('every table holding a vector carries the determinism quadruple and the same dimension check', () => {
   for (const [name, t] of Object.entries(TABLES)) {
     const columns = t.columns.map((c) => c.split(' ')[0]);

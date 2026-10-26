@@ -32,6 +32,12 @@ export const EXTENSIONS = [
 
 /** The management chat's role: attributes here, settings read from the catalogue. Its password is the operator's. */
 export const CHAT_ROLE = 'mgmt_chat_ro';
+/**
+ * The worker's and the nightly's login role for the direct connection (migration
+ * direct_worker_connection): no rights of its own, a member of `service_role`, which each connection
+ * switches to. Its password is the operator's (scripts/set-worker-db-password.mjs).
+ */
+export const WORKER_ROLE = 'qiriness_worker';
 const APP_ROLES = ['anon', 'authenticated', 'service_role', CHAT_ROLE];
 
 async function rows(client, sql, params) {
@@ -134,7 +140,10 @@ async function readCatalog(client) {
   const chatSchema = (await rows(client, `select nspacl::text[] as acl from pg_namespace where nspname = 'chat'`))[0] ?? null;
   const role = (await rows(client, `select rolcanlogin, rolinherit, rolconnlimit, coalesce(rolconfig, '{}') as config, rolbypassrls
     from pg_roles where rolname = $1`, [CHAT_ROLE]))[0] ?? null;
-  return { tables, columns, constraints, indexes, views, viewColumns, viewDeps, functions, triggers, comments, textSearch, chatSchema, role };
+  const workerRole = (await rows(client, `select r.rolcanlogin, r.rolinherit, r.rolconnlimit, coalesce(r.rolconfig, '{}') as config,
+      array(select g.rolname from pg_auth_members m join pg_roles g on g.oid = m.roleid where m.member = r.oid order by 1)::text[] as member_of
+    from pg_roles r where r.rolname = $1`, [WORKER_ROLE]))[0] ?? null;
+  return { tables, columns, constraints, indexes, views, viewColumns, viewDeps, functions, triggers, comments, textSearch, chatSchema, role, workerRole };
 }
 
 /** An ACL as {grantee: sorted privilege letters}, the owner and grantors dropped. */
@@ -202,6 +211,20 @@ export async function generateBaseline(client, { header = '' } = {}) {
     for (const setting of r.config) {
       const [k, ...v] = setting.split('=');
       out.push(`alter role ${CHAT_ROLE} set ${k} = ${literal(v.join('='))};`);
+    }
+  }
+  if (cat.workerRole) {
+    const r = cat.workerRole;
+    out.push('', `do $$`, `begin`, `  if not exists (select 1 from pg_roles where rolname = ${literal(WORKER_ROLE)}) then`,
+      `    create role ${WORKER_ROLE} ${r.rolcanlogin ? 'login' : 'nologin'} ${r.rolinherit ? 'inherit' : 'noinherit'} connection limit ${r.rolconnlimit};`,
+      `  end if;`, `end`, `$$;`,
+      `-- The password is set by the operator: node scripts/set-worker-db-password.mjs (WORKER_DB_URL)`);
+    for (const group of r.member_of) out.push(`grant ${ident(group)} to ${WORKER_ROLE};`);
+    for (const setting of r.config) {
+      const [k, ...v] = setting.split('=');
+      // A list setting is written as Postgres stores it: quoted whole,
+      // 'public, extensions' would be ONE schema of that name.
+      out.push(`alter role ${WORKER_ROLE} set ${k} = ${k === 'search_path' ? v.join('=') : literal(v.join('='))};`);
     }
   }
   out.push('', `create schema if not exists chat;`);
@@ -308,6 +331,7 @@ export async function describeCatalog(client) {
     textSearch: cat.textSearch.map((ts) => `${ts.schema}.${ts.name} [${ts.parser}] ${ts.mappings.map((m) => `${m.token}:${m.dicts}`).join(' ')}`),
     chatSchemaAcl: cat.chatSchema ? aclMap(cat.chatSchema.acl) : null,
     chatRole: cat.role ? { ...cat.role, config: [...cat.role.config].sort() } : null,
+    workerRole: cat.workerRole ? { ...cat.workerRole, config: [...cat.workerRole.config].sort(), member_of: [...cat.workerRole.member_of].sort() } : null,
   };
 }
 

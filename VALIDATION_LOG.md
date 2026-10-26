@@ -2066,3 +2066,14 @@ Fixture checks passed: scope refusal, exact consent/callback parameters, token r
 Built and verified with synthetic data: dated complete-month adapter, enabled-platform controls, saved band thresholds/ER basis, offline editor and Chromium PDF. No production export has been downloaded in an authenticated session yet.
 
 Check: open Insights → Social → All platforms as Management/Developer, pick an ended month and platforms, download HTML, and reconcile additive totals against provider exports using the same provider clock. Confirm disabled/unselected platforms do not render, saved bands and ER basis match the selected platform, and connected post tables use publication dates with clearly dated lifetime figures rather than treating them as period-only totals. Imported historical-snapshot datasets must still exclude later observations. Verify the single-account Instagram <=30-day unique read when provider permissions allow. Attempt unauthenticated and Contact-role API calls (401/403). Inspect a real exported PDF and reopen a saved revision. Historical post observations, exact follower endpoints, long-period reach and account follower splits may be unavailable under current source retention; this is documented in the report, not filled with estimates.
+
+## Direct connection for the worker and the nightly (2026-10-26) — open
+
+Built and proven sealed against production (CHANGELOG 2026-10-26): reads identical to REST, writes and RPCs executed in rolled-back transactions, 0 REST requests. Not yet run live.
+
+Check, after deploying with `WORKER_DB_URL` + `SUPABASE_DB_TRANSPORT=pg` on Render and the `WORKER_DB_URL` GitHub secret:
+1. Render log: `db.transport` says `pg`, `jobs.listener_up` appears, and there is no `db.transport_fallback`.
+2. New mail: `ingest.woken_by_job` within seconds of the Graph webhook. Click « Sync now » on a social connection, and approve a reply if sending is on.
+3. `pg_stat_activity`: `qiriness-worker` (pool) and `qiriness-worker-listen`.
+4. The next nightly: green, with the usual counts in its log.
+5. A day later: `node scripts/.tmp-egress-diff.mjs tmp-egress/snap-2026-10-26.json --by=calls`. PostgREST requests should fall from ~26k to the dashboard's and webhooks' share. Supabase Usage log ingest should fall from ~50 MB toward ~19 MB.

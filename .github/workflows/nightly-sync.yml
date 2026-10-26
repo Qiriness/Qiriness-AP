@@ -100,6 +100,12 @@ jobs:
           SHOPIFY_API_VERSION: ${{ vars.SHOPIFY_API_VERSION }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+          # Reads and writes over a direct Postgres connection as qiriness_worker,
+          # not the REST API, which Supabase logs per request (~1,200 customer
+          # pages a night). No secret, or a failed first connection: REST, as
+          # before. scripts/lib/supabase-pg-transport.mjs
+          SUPABASE_DB_TRANSPORT: pg
+          WORKER_DB_URL: ${{ secrets.WORKER_DB_URL }}
           # Social and paid media (scripts/lib/social-sync.mjs). This app's own
           # credentials; each shop's token is in Supabase Vault. Unset, that
           # provider is skipped, not failed.

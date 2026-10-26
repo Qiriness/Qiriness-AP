@@ -49,6 +49,9 @@ import {
 import { createOrderContextStore, runOrderContext } from './resolution/order-context-runner.mjs';
 import { createChangeGate, latestUpdateReader } from './lib/change-gate.mjs';
 import { nextPollWait } from './lib/poll-wait.mjs';
+import { createJobListener, createJobWaker } from './lib/job-waker.mjs';
+import { connectionConfig, pgUsable } from '../../scripts/lib/supabase-pg-transport.mjs';
+import pg from 'pg';
 import { createChangeRouterStore, runChangeRouter } from './casework/change-router-runner.mjs';
 import { createForwardingStore } from './routing/forwarding-store.mjs';
 import { runForwarding } from './routing/forward-runner.mjs';
@@ -974,18 +977,31 @@ async function main() {
   // counts only while sending is on: otherwise its jobs wait untouched and
   // would wake every check.
   const wakeKinds = ['sync_mailbox', 'sync_social', ...(config.outboundSendEnabled ? ['send_outbound'] : [])];
-  const waitForNextPoll = async (waitMs, isStopping) => {
-    const deadline = Date.now() + waitMs;
-    while (!isStopping() && Date.now() < deadline) {
-      await sleep(Math.max(1, Math.min(config.jobCheckIntervalMs, deadline - Date.now())), isStopping);
-      if (isStopping()) return;
-      const due = await jobs.hasDue({ kinds: wakeKinds }).catch(() => false);
-      if (due) {
-        logger.info('ingest.woken_by_job', { shopId });
-        return;
-      }
-    }
-  };
+  // Over the direct connection the worker LISTENs for queued jobs and sleeps
+  // until one is due; over REST (or if the direct connection failed at
+  // startup) it asks every `jobCheckIntervalMs`, as before (lib/job-waker.mjs).
+  const direct = Boolean(supabase.pg) && pgUsable(supabase);
+  logger.info('db.transport', { shopId, transport: direct ? 'pg' : 'rest' });
+  const listener = direct
+    ? createJobListener({
+        connect: async () => {
+          const client = new pg.Client(connectionConfig(supabase.pg.url, 'qiriness-worker-listen'));
+          await client.connect();
+          return client;
+        },
+        shopId,
+        kinds: wakeKinds,
+        logger
+      })
+    : null;
+  listener?.start();
+  const waker = createJobWaker({
+    listener,
+    nextDueAt: () => jobs.nextDueAt({ kinds: wakeKinds }),
+    hasDue: () => jobs.hasDue({ kinds: wakeKinds }),
+    checkIntervalMs: config.jobCheckIntervalMs,
+    logger
+  });
 
   logger.info('ingest.start', { shopId, intervalMs: config.pollIntervalMs, idleMaxMs: config.idlePollMaxMs, draftOnly: config.draftOnly });
 
@@ -1003,6 +1019,7 @@ async function main() {
   let waitMs = config.pollIntervalMs;
   while (!stopping) {
     let failed = false;
+    const polledAt = Date.now();
     try {
       await pollWithJobs();
     } catch (error) {
@@ -1018,8 +1035,9 @@ async function main() {
     const nextMs = nextPollWait({ active: moved || failed, previousMs: waitMs, baseMs: config.pollIntervalMs, maxMs: config.idlePollMaxMs });
     if (nextMs !== waitMs) logger.info('ingest.poll_wait', { shopId, waitMs: nextMs });
     waitMs = nextMs;
-    await waitForNextPoll(waitMs, () => stopping);
+    await waker.wait(waitMs, () => stopping, { polledAt });
   }
+  await listener?.stop();
 
   logger.info('ingest.stopped', {});
 }
@@ -1096,20 +1114,6 @@ function parseLimit(argv) {
 function toPositiveInt(value) {
   const n = Number.parseInt(value, 10);
   return Number.isInteger(n) && n > 0 ? n : undefined;
-}
-
-function sleep(ms, isCancelled) {
-  return new Promise((resolve) => {
-    const step = Math.min(ms, 1000);
-    let elapsed = 0;
-    const timer = setInterval(() => {
-      elapsed += step;
-      if (elapsed >= ms || isCancelled?.()) {
-        clearInterval(timer);
-        resolve();
-      }
-    }, step);
-  });
 }
 
 main().catch((error) => {

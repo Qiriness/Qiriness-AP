@@ -7,6 +7,9 @@ The always-on worker package: ingestion, casework, investigation, drafting, life
 |   |-- src/
 |   |   |-- index.mjs config.mjs # entrypoint (--once) · env/tunables + Graph gate
 |   |   |-- lib/ llm/            # logger (JSON, no PII) · shop · openai-client
+|   |   |                        # lib/job-waker: between polls, LISTEN on mail_jobs and
+|   |   |                        # sleep until the next job is due (direct connection);
+|   |   |                        # hasDue every JOB_CHECK_INTERVAL_MS over REST
 |   |   |                        # (records every call's tokens into) usage-sink
 |   |   |                        # -> usage-store (best-effort; never fails a pass)
 |   |   |-- mail/                # THE PROVIDER BOUNDARY. mail-provider (the

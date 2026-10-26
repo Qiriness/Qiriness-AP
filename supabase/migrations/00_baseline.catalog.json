@@ -3841,6 +3841,12 @@
     "service_role": "X"
    }
   },
+  "public.mail_jobs_notify()": {
+   "def": "CREATE OR REPLACE FUNCTION public.mail_jobs_notify()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO ''\nAS $function$\nbegin\n  perform pg_notify('mail_jobs', json_build_object('shop_id', new.shop_id, 'kind', new.kind)::text);\n  return null;\nend\n$function$\n",
+   "acl": {
+    "service_role": "X"
+   }
+  },
   "public.match_knowledge_chunks(query_embedding public.vector, match_shop_id uuid, match_categories text[], match_count integer, min_similarity double precision)": {
    "def": "CREATE OR REPLACE FUNCTION public.match_knowledge_chunks(query_embedding public.vector, match_shop_id uuid, match_categories text[] DEFAULT NULL::text[], match_count integer DEFAULT 5, min_similarity double precision DEFAULT 0)\n RETURNS TABLE(chunk_id uuid, document_id uuid, document_title text, section_heading text, category text, product_ids uuid[], chunk_text text, similarity double precision)\n LANGUAGE sql\n STABLE\n SET search_path TO 'public'\nAS $function$\r\n  select\r\n    kc.id,\r\n    kd.id,\r\n    kd.title,\r\n    kc.section_heading,\r\n    kc.category,\r\n    kc.product_ids,\r\n    kc.chunk_text,\r\n    1 - (kc.embedding <=> query_embedding) as similarity\r\n  from public.knowledge_chunks kc\r\n  join public.knowledge_documents kd on kd.id = kc.knowledge_document_id\r\n  where kc.embedding is not null\r\n    and kd.shop_id = match_shop_id\r\n    and (match_categories is null or kc.category = any (match_categories))\r\n    and 1 - (kc.embedding <=> query_embedding) >= min_similarity\r\n  order by kc.embedding <=> query_embedding\r\n  limit greatest(match_count, 1);\r\n$function$\n",
    "acl": {
@@ -4035,6 +4041,7 @@
   "CREATE TRIGGER integration_events_set_updated_at BEFORE UPDATE ON public.integration_events FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
   "CREATE TRIGGER knowledge_chunks_set_updated_at BEFORE UPDATE ON public.knowledge_chunks FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
   "CREATE TRIGGER knowledge_documents_set_updated_at BEFORE UPDATE ON public.knowledge_documents FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
+  "CREATE TRIGGER mail_jobs_notify AFTER INSERT OR UPDATE OF state, next_attempt_at ON public.mail_jobs FOR EACH ROW WHEN ((new.state = 'queued'::text)) EXECUTE FUNCTION public.mail_jobs_notify()",
   "CREATE TRIGGER mail_jobs_set_updated_at BEFORE UPDATE ON public.mail_jobs FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
   "CREATE TRIGGER mail_subscriptions_set_updated_at BEFORE UPDATE ON public.mail_subscriptions FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
   "CREATE TRIGGER orders_order_lines_insert AFTER INSERT ON public.orders FOR EACH ROW EXECUTE FUNCTION public.order_lines_refresh()",
@@ -4426,6 +4433,7 @@
   "function public.klaviyo_clear_key(p_shop uuid): Deletes the shop's Klaviyo key from Vault and the connection row. Synced figures are kept.",
   "function public.klaviyo_read_key(p_shop uuid): The shop's decrypted Klaviyo private key, for the sync. Service role only; never returned to a browser.",
   "function public.klaviyo_save_key(p_shop uuid, p_key text, p_hint text, p_metric_id text, p_saved_by uuid): Stores (or replaces) the shop's Klaviyo private key in Vault and records the connection. Service role only.",
+  "function public.mail_jobs_notify(): Trigger: pg_notify('mail_jobs', {shop_id, kind}) after a job is queued. A wake-up for the worker, never the job itself.",
   "function public.match_support_exemplars(query_embedding public.vector, match_shop_id uuid, match_categories text[], match_count integer, min_similarity double precision): Vector search over approved exemplar phrasings, returning one row per EXEMPLAR scored by its best-matching phrasing. Returns cosine SIMILARITY (higher is better), not the raw <=> distance. `match_categories` is a caller-supplied list because which subjects are worth searching is policy -- see agent/src/retrieval/exemplar-rules.mjs. Bands are NOT the knowledge bands: a short canonical question scores differently against a long email than a prose chunk does, and they are calibrated separately.",
   "function public.normalise_carrier(value text): Free-text carrier name from a fulfilment record -> one canonical name, by the rows of public.carrier_aliases (first match by position; otherwise upper-cased). Without it one carrier stored three ways reports as three.",
   "function public.open_orders(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_vip_not_channels text[], p_channels text[], p_not_channels text[]): Orders not yet fulfilled (not cancelled, not closed), oldest first, with the buyer's name and email and whether they are a VIP under vip_customers(). Current state as of the last order sync, not ranged.",
@@ -4570,5 +4578,20 @@
    "statement_timeout=10s"
   ],
   "rolbypassrls": false
+ },
+ "workerRole": {
+  "rolcanlogin": true,
+  "rolinherit": false,
+  "rolconnlimit": 10,
+  "config": [
+   "idle_in_transaction_session_timeout=60s",
+   "lock_timeout=8s",
+   "role=service_role",
+   "search_path=public, extensions",
+   "statement_timeout=8s"
+  ],
+  "member_of": [
+   "service_role"
+  ]
  }
 }

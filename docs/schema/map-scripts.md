@@ -25,6 +25,8 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |   |-- sync-shopify-collections.mjs     # collections + membership of active ones;
 |   |                                   #   in the nightly, and behind the Sync button
 |   |-- apply-supabase-migration.mjs     # SQL runner
+|   |-- set-worker-db-password.mjs     # (re)sets qiriness_worker's password (SCRAM verifier),
+|   |                                    # writes WORKER_DB_URL to .env.local
 |   |-- process-shopify-compliance-webhook.mjs
 |   |-- dashboard-users.mjs              # `npm run users -- list|add|set-password|
 |   |                                    # set-role|disable|enable` against Supabase
@@ -34,7 +36,11 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |-- shopify-*-mapper.mjs         # shop/product/metaobject/customer/order/promotion
 |       |-- promotion-mechanic.mjs       # what a promotion does, from Shopify's structure (agent + web)
 |       |-- shopify-sync-mappers.mjs shop-sync-service.mjs
-|       |-- supabase-rest-client.mjs     # REST select/upsert/update/delete/rpc
+|       |-- supabase-rest-client.mjs     # REST select/upsert/update/delete/rpc; per client,
+|       |                                # the same helpers over a direct connection:
+|       |-- supabase-pg-transport.mjs    #   pool as qiriness_worker, pinned TLS (certs/), retries,
+|       |                                #   REST fallback at startup (SUPABASE_DB_TRANSPORT=pg)
+|       |-- supabase-pg-sql.mjs          #   the helpers' PostgREST arguments as PostgREST's SQL
 |       |-- tables.mjs                   # THE SCHEMA CONTRACT: 31 tables, 24 views,
 |       |                                # 34 rpcs, and the recurring projections.
 |                                # + CHAT_T, STOREFRONT_T, KLAVIYO_T/_RPC (incremental)
