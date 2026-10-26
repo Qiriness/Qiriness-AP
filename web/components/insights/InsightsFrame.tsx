@@ -34,6 +34,12 @@ interface FrameApi {
   pending: boolean;
   /** Merge into the query string; a null removes the key. */
   navigate: (patch: Record<string, string | null>) => void;
+  /**
+   * Render that same address in the background, so a click on it finds the
+   * page already there (Next keeps a full prefetch for 5 minutes). For the
+   * moment a pointer reaches a filter: the 100–300 ms before the click.
+   */
+  prefetch: (patch: Record<string, string | null>) => void;
   /** Go to another panel, keeping the spinner and the dim. */
   go: (href: string, label?: string) => void;
   /** Re-read the database for the same URL. */
@@ -43,6 +49,7 @@ interface FrameApi {
 const FrameContext = createContext<FrameApi>({
   pending: false,
   navigate: () => {},
+  prefetch: () => {},
   go: () => {},
   refresh: () => {},
 });
@@ -74,7 +81,8 @@ export function InsightsFrame({
     if (!pending) setLabel(null);
   }, [pending]);
 
-  const navigate = useCallback(
+  // One address for a patch, so what is prefetched is exactly what a click opens.
+  const hrefFor = useCallback(
     (patch: Record<string, string | null>) => {
       const next = new URLSearchParams(params?.toString() ?? "");
       for (const [key, value] of Object.entries(patch)) {
@@ -82,9 +90,25 @@ export function InsightsFrame({
         else next.set(key, value);
       }
       const query = next.toString();
-      startTransition(() => router.push(query ? `${pathname}?${query}` : pathname, { scroll: false }));
+      return query ? `${pathname}?${query}` : pathname;
     },
-    [params, pathname, router]
+    [params, pathname]
+  );
+
+  const navigate = useCallback(
+    (patch: Record<string, string | null>) => {
+      const href = hrefFor(patch);
+      startTransition(() => router.push(href, { scroll: false }));
+    },
+    [hrefFor, router]
+  );
+
+  const prefetch = useCallback(
+    (patch: Record<string, string | null>) => {
+      const href = hrefFor(patch);
+      if (href !== hrefFor({})) router.prefetch(href);
+    },
+    [hrefFor, router]
   );
 
   const go = useCallback(
@@ -96,7 +120,7 @@ export function InsightsFrame({
   );
 
   const refresh = useCallback(() => startTransition(() => router.refresh()), [router]);
-  const api = useMemo(() => ({ pending, navigate, go, refresh }), [pending, navigate, go, refresh]);
+  const api = useMemo(() => ({ pending, navigate, prefetch, go, refresh }), [pending, navigate, prefetch, go, refresh]);
 
   return (
     <FrameContext.Provider value={api}>

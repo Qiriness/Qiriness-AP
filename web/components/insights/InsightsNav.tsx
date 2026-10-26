@@ -2,12 +2,19 @@
 
 import { useEffect, useState, type MouseEvent } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { InsightsPanel } from "@/lib/types";
 import { INSIGHTS_PANELS } from "@/lib/types";
 import { useT } from "@/lib/i18n/client";
 import { useInsightsFrame } from "./InsightsFrame";
 import styles from "./InsightsHeader.module.css";
+
+/**
+ * After a panel has settled, the other tabs are rendered in the background one
+ * at a time: the first after SETTLE_MS, then one every STAGGER_MS.
+ */
+const SETTLE_MS = 3_000;
+const STAGGER_MS = 2_000;
 
 /** The query keys a panel switch carries over, so the range survives a tab change. */
 const KEPT = ["range", "from", "to", "month", "platform"];
@@ -25,14 +32,20 @@ const KEPT = ["range", "from", "to", "month", "platform"];
  * navigation catches up. Modified clicks (a new tab, a middle click) are left
  * to the browser, which is the point of keeping real links.
  *
- * THE OTHER TABS ARE PRE-LOADED. Each link prefetches its panel in full once the
- * bar is on screen, so a click shows a page already rendered. Every figure it
- * reads comes from the shared Insights cache (insights/shared.ts), which is what
- * makes rendering seven panels nobody has clicked yet affordable.
+ * THE OTHER TABS ARE PRE-LOADED, BUT AFTER THIS ONE, AND ONE AT A TIME. A click
+ * then shows a page already rendered. They used to be prefetched all at once
+ * the moment the bar appeared, which is on every range change too: measured
+ * 2026-10-26, a switch to 1 year rendered all seven at once (Sales 9 s,
+ * Marketing 10 s, Fulfilment 14 s). That ran Marketing's Shopify queries against
+ * the same minute as this panel's, and Overview's money cards, and so the
+ * switch, waited 18 s. Now they start SETTLE_MS after the panel has arrived,
+ * STAGGER_MS apart, and a range changed meanwhile starts the queue again. A
+ * pointer on a tab prefetches that tab at once. Next keeps each for 5 minutes.
  */
 export function InsightsNav({ active, panels }: { active: InsightsPanel; panels: InsightsPanel[] }) {
   const t = useT();
   const params = useSearchParams();
+  const router = useRouter();
   const { go, pending } = useInsightsFrame();
   const [target, setTarget] = useState<InsightsPanel | null>(null);
 
@@ -49,6 +62,15 @@ export function InsightsNav({ active, panels }: { active: InsightsPanel; panels:
   }
   const suffix = kept.toString() ? `?${kept.toString()}` : "";
   const current = target ?? active;
+  const others = INSIGHTS_PANELS.filter((panel) => panels.includes(panel.id) && panel.id !== active)
+    .map((panel) => `${panel.href}${suffix}`)
+    .join(" ");
+
+  useEffect(() => {
+    if (pending || !others) return;
+    const timers = others.split(" ").map((href, i) => setTimeout(() => router.prefetch(href), SETTLE_MS + i * STAGGER_MS));
+    return () => timers.forEach(clearTimeout);
+  }, [others, pending, router]);
 
   return (
     <nav className={styles.nav} aria-label={t("insights.shell.panelsLabel")}>
@@ -60,7 +82,9 @@ export function InsightsNav({ active, panels }: { active: InsightsPanel; panels:
             <li key={panel.id}>
               <Link
                 href={href}
-                prefetch={panel.id === active ? undefined : true}
+                prefetch={false}
+                onPointerEnter={panel.id === active ? undefined : () => router.prefetch(href)}
+                onFocus={panel.id === active ? undefined : () => router.prefetch(href)}
                 className={`${styles.tab} ${isCurrent ? styles.tabActive : ""}`}
                 aria-current={isCurrent ? "page" : undefined}
                 onClick={(event: MouseEvent<HTMLAnchorElement>) => {

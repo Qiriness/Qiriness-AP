@@ -38,7 +38,7 @@ export function FilterBar({
 }) {
   const t = useT();
   const shop = useShop();
-  const { navigate, pending } = useInsightsFrame();
+  const { navigate, prefetch, pending } = useInsightsFrame();
   const fromDay = range.from.slice(0, 10);
   const today = range.now.slice(0, 10);
   // A month or week bucket ends after today; the box shows the data's real end.
@@ -64,6 +64,7 @@ export function FilterBar({
       <div className={styles.presets} role="group" aria-label={t("insights.filter.dateRange")} title={rangeTitle}>
         {RANGE_PRESETS.map((preset) => {
           const active = scope.range && range.preset === preset.id;
+          const patch = { range: preset.id, month: null, from: null, to: null };
           return (
             <button
               key={preset.id}
@@ -71,7 +72,11 @@ export function FilterBar({
               className={`${styles.preset} ${active ? styles.presetActive : ""}`}
               aria-pressed={active}
               disabled={!scope.range}
-              onClick={() => navigate({ range: preset.id, month: null, from: null, to: null })}
+              // On intent, not on load: five ranges rendered up front would spend
+              // Shopify's minute on ranges nobody picks (2026-10-26).
+              onPointerEnter={active ? undefined : () => prefetch(patch)}
+              onFocus={active ? undefined : () => prefetch(patch)}
+              onClick={() => navigate(patch)}
             >
               {t(`insights.range.preset.${preset.id}`)}
             </button>

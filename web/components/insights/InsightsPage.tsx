@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { canSeePanel, fallbackPath } from "../../../scripts/lib/dashboard-auth.mjs";
 import { AppShell } from "@/components/app-shell/AppShell";
@@ -12,6 +12,23 @@ import { INSIGHTS_PANELS, type InsightsPanel, type InsightsScope } from "@/lib/t
 import { InsightsFrame } from "./InsightsFrame";
 import { InsightsHeader } from "./InsightsHeader";
 import { PanelError } from "./InsightsKit";
+
+/** The URL keys that choose the period and platform: the panel's identity. */
+const PERIOD_KEYS = ["range", "month", "from", "to", "platform"];
+
+/**
+ * A NEW PERIOD IS A NEW PANEL, not an update of the old one. Under the same key,
+ * React keeps a Suspense boundary that is already showing content, so a range
+ * switch waited for the slowest Shopify card before anything moved (1 year:
+ * 18 s, 2026-10-26, against 0.9 s of the panel's own reads). Under a new key the
+ * switch lands with the database figures and each Shopify card shows its loading
+ * state until it answers. Only the period keys: a filter inside a panel (the
+ * product picked on Sales) keeps the panel and its search box as they are.
+ */
+function periodKey(searchParams: SearchParams): string {
+  const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value) ?? "";
+  return PERIOD_KEYS.map((key) => `${key}=${first(searchParams[key])}`).join("&");
+}
 
 /**
  * What every Insights route is: the shell, the header, and one panel rendered
@@ -88,7 +105,7 @@ export async function InsightsPage({
           />
         }
       >
-        {error ? <PanelError message={error} /> : body}
+        {error ? <PanelError message={error} /> : <Fragment key={periodKey(searchParams)}>{body}</Fragment>}
       </InsightsFrame>
     </AppShell>
   );
