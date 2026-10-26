@@ -11,6 +11,7 @@ import { ManualMetricCell } from "./ManualMetricCell";
 import { applySavedPostMetrics } from '../../../scripts/lib/social-post-manual.mjs';
 import t from "./tables.module.css";
 import styles from "./SocialView.module.css";
+import { useInsightsFrame } from "./InsightsFrame";
 
 type MetricKey = "views" | "reach" | "engagementRate" | "likes" | "comments" | "shares" | "follows" | "engagement" | "nonFollowersPct";
 type SortKey = "published" | MetricKey;
@@ -44,6 +45,7 @@ export function SocialPostsTable({
   tags: SocialTag[];
   links: SocialTagLink[];
 }) {
+  const { api } = useInsightsFrame();
   const tr = useT();
   const locale = useLocale();
   const router = useRouter();
@@ -104,7 +106,7 @@ export function SocialPostsTable({
   async function call(url: string, init: RequestInit): Promise<Record<string, unknown> | null> {
     setError(null);
     try {
-      const response = await fetch(url, { ...init, headers: { "Content-Type": "application/json" } });
+      const response = await fetch(api(url), { ...init, headers: { "Content-Type": "application/json" } });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body?.error ?? `HTTP ${response.status}`);
       return body;

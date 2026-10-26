@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requestShop } from "@/lib/server/insights/request-shop";
 import { isUuid, setPostTag } from "@/lib/server/social-tags-service";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: "accountId, postId and tagged are required" }, { status: 400, headers: NO_STORE });
     }
     if (!isUuid(params.id)) return NextResponse.json({ error: "No such tag or post" }, { status: 404, headers: NO_STORE });
-    const found = await setPostTag(params.id, accountId, postId, tagged);
+    const found = await setPostTag(params.id, accountId, postId, tagged, (await requestShop(request)).id);
     if (!found) return NextResponse.json({ error: "No such tag or post" }, { status: 404, headers: NO_STORE });
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (error) {

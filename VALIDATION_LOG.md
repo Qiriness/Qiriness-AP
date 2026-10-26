@@ -2077,3 +2077,23 @@ Check, after deploying with `WORKER_DB_URL` + `SUPABASE_DB_TRANSPORT=pg` on Rend
 3. `pg_stat_activity`: `qiriness-worker` (pool) and `qiriness-worker-listen`.
 4. The next nightly: green, with the usual counts in its log.
 5. A day later: `node scripts/.tmp-egress-diff.mjs tmp-egress/snap-2026-10-26.json --by=calls`. PostgREST requests should fall from ~26k to the dashboard's and webhooks' share. Supabase Usage log ingest should fall from ~50 MB toward ~19 MB.
+
+## Barbara Gould in Insights (2026-10-26) — open
+
+Built and unit-tested (CHANGELOG 2026-10-26); nothing seen against Barbara Gould's store yet.
+
+Check:
+1. ~~Install the Qiriness app on Barbara Gould's store.~~ Done 2026-10-26: the app's client-credentials token reads the shop (`gurkk8-er.myshopify.com`, « Barbara Gould », Europe/Paris).
+2. Set `DASHBOARD_SHOPS=qiriness.myshopify.com,gurkk8-er.myshopify.com` on Vercel and as a GitHub Actions repository **variable**.
+3. Run the nightly by hand (workflow_dispatch). Both shops' groups should be green in the log, and Barbara Gould's `shops` row should exist.
+4. In the dashboard:
+   - the switcher shows both names;
+   - Barbara Gould has no Support or AI agent tab;
+   - its Overview, Sales and Customers figures match its Shopify admin, not Qiriness's;
+   - switching back shows Qiriness's figures unchanged.
+5. Place or update an order on Barbara Gould's store. The webhook should write it under Barbara Gould's `shop_id`, and Qiriness's orders should not move.
+6. A day later, the log ingest change should be ≈ +1–3 MB a day.
+
+## Insights time-frame switching speed (2026-10-26) — open
+
+Check: on a production build (`PAGE_TIMING=1`), repeat the 11-step click sequence (Overview 30 d → 7 d → 24 h → 6 m → 1 yr → 30 d → Sales → 7 d → Customers → Marketing → Overview). The switch to 1 yr should change the page in ~1–2 s with Shopify cards filling in after, not 18 s. Tabs should still feel instant once prefetched.

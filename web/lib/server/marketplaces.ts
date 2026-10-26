@@ -18,11 +18,12 @@ import { getShop } from "./shop";
 
 export type Marketplaces = typeof NO_MARKETPLACES;
 
-export const getMarketplaces = cache(async (): Promise<Marketplaces> => {
+/** One shop's marketplaces: pass `shopId` for an Insights shop, nothing for the support desk's. */
+export const getMarketplaces = cache(async (shopId?: string): Promise<Marketplaces> => {
   try {
-    const shop = await getShop();
-    if (!shop) return NO_MARKETPLACES;
-    return await loadMarketplaces(createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>)), shop.id);
+    const id = shopId ?? (await getShop())?.id;
+    if (!id) return NO_MARKETPLACES;
+    return await loadMarketplaces(createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>)), id);
   } catch (error) {
     console.warn("sales_channels unreadable", (error as Error).message);
     return NO_MARKETPLACES;

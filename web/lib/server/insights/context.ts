@@ -21,7 +21,8 @@ import type { Freshness, FreshnessItem, InsightsRange, PlatformId } from "../../
 import { unstable_cache } from "next/cache";
 import { supabaseRpc } from "../../../../scripts/lib/supabase-rest-client.mjs";
 import { CACHE_TAGS } from "../cache-tags";
-import { getShop } from "../shop";
+import { dashboardShops, shopForSlug } from "../../../../scripts/lib/dashboard-shops.mjs";
+import { getShopByDomain } from "../shop";
 import { getSupabaseClient, INSIGHTS_TTL_SECONDS } from "./shared";
 
 async function freshnessRowLive(shopId: string): Promise<Record<string, string | null> | null> {
@@ -42,6 +43,12 @@ const cachedFreshness = unstable_cache(
 
 export interface InsightsContext {
   shopId: string;
+  /** The shop's store domain: what ShopifyQL is asked on (`.myshopify.com`). */
+  shopDomain: string;
+  /** The shop's slug, as the URL carries it (`?shop=`). */
+  shopSlug: string;
+  /** True for the support desk's shop: only it has Support and Agent. */
+  supportDesk: boolean;
   tz: string;
   /** True when the shop has no timezone yet and days are cut in UTC. */
   tzFallback: boolean;
@@ -76,11 +83,25 @@ export async function readFreshnessItems(shopId: string, now: Date = new Date())
 
 const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
 
+/**
+ * The shop a URL names (`?shop=`, which the middleware always sets on an
+ * Insights page), or the SUPPORT DESK'S shop when it names none. Never the
+ * first listed: the worker's monthly report asks with no shop and must stay the
+ * desk shop's whatever order DASHBOARD_SHOPS lists. Never a shop outside
+ * DASHBOARD_SHOPS: an unknown slug is the desk shop, not an error.
+ */
+export function insightsShopFor(searchParams: SearchParams = {}) {
+  const env = process.env;
+  const shop = shopForSlug(first(searchParams.shop), env) ?? dashboardShops(env).find((s: { desk: boolean }) => s.desk) ?? null;
+  if (!shop) throw new Error(`No shop configured: set SHOPIFY_STORE_DOMAIN.`);
+  return shop as { slug: string; domain: string; desk: boolean };
+}
+
 export async function resolveInsightsContext(searchParams: SearchParams = {}): Promise<InsightsContext> {
-  const shop = await getShop();
+  const selected = insightsShopFor(searchParams);
+  const shop = await getShopByDomain(selected.domain);
   if (!shop) {
-    const config = loadConfig(process.env as Record<string, string | undefined>);
-    throw new Error(`No shop record found for ${config.shopDomain}. Run a Shopify sync first.`);
+    throw new Error(`No shop record found for ${selected.domain}. Run a Shopify sync first.`);
   }
 
   const tzFallback = !isValidTimeZone(shop.ianaTimezone);
@@ -91,7 +112,7 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
   // this row knows. It needs nothing from the range, so the order costs nothing.
   const [{ row: freshnessRow, readAt }, marketplaces] = await Promise.all([
     cachedFreshness(shop.id),
-    getMarketplaces(),
+    getMarketplaces(shop.id),
   ]);
 
   const range = resolveRange(
@@ -106,6 +127,9 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
 
   return {
     shopId: shop.id,
+    shopDomain: selected.domain,
+    shopSlug: selected.slug,
+    supportDesk: selected.desk,
     tz,
     tzFallback,
     range,

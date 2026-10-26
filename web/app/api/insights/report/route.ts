@@ -1,8 +1,8 @@
 import { canAccessPath } from "../../../../../scripts/lib/dashboard-auth.mjs";
+import { requestShop } from "@/lib/server/insights/request-shop";
 import { lastCompleteMonth } from "../../../../../scripts/lib/insights-range.mjs";
 import { renderSalesReport, reportFileName } from "../../../../../scripts/lib/sales-report.mjs";
 import { getSession } from "@/lib/server/auth";
-import { getShop } from "@/lib/server/shop";
 import { ReportMonthError, buildSalesReport } from "@/lib/server/insights/report-service";
 
 export const dynamic = "force-dynamic";
@@ -26,10 +26,12 @@ export async function GET(request: Request) {
   }
 
   try {
-    const requested = new URL(request.url).searchParams.get("month");
-    const shop = await getShop();
-    const month = requested ?? lastCompleteMonth({ tz: shop?.ianaTimezone ?? "UTC" });
-    const html = renderSalesReport(await buildSalesReport(month));
+    const params = new URL(request.url).searchParams;
+    const requested = params.get("month");
+    // The Insights shop the download was asked from.
+    const shop = await requestShop(request);
+    const month = requested ?? lastCompleteMonth({ tz: shop.ianaTimezone ?? "UTC" });
+    const html = renderSalesReport(await buildSalesReport(month, params.get("shop") ?? undefined));
     return new Response(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",

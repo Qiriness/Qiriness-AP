@@ -64,9 +64,9 @@ export function checkTagName(value: unknown): { ok: true; name: string } | { ok:
 }
 
 /** Creates the tag, or returns the existing one of the same name (case ignored). */
-export async function createSocialTag(name: string): Promise<SocialTag> {
+export async function createSocialTag(name: string, forShop?: string): Promise<SocialTag> {
   const supabase = getSupabaseClient();
-  const shopId = await getShopId();
+  const shopId = forShop ?? (await getShopId());
   const existing = (await supabaseSelectAll(supabase, SOCIAL_TAG_T.TAGS, { shop_id: shopId }, "id,name", { order: "name.asc" })) as SocialTag[];
   const same = existing.find((t) => t.name.toLowerCase() === name.toLowerCase());
   if (same) return { id: same.id, name: same.name };
@@ -75,8 +75,8 @@ export async function createSocialTag(name: string): Promise<SocialTag> {
 }
 
 /** Deletes a tag and, through the cascade, every place it was applied. False when the shop has no such tag. */
-export async function deleteSocialTag(tagId: string): Promise<boolean> {
-  const deleted = await supabaseDelete(getSupabaseClient(), SOCIAL_TAG_T.TAGS, { id: tagId, shop_id: await getShopId() });
+export async function deleteSocialTag(tagId: string, forShop?: string): Promise<boolean> {
+  const deleted = await supabaseDelete(getSupabaseClient(), SOCIAL_TAG_T.TAGS, { id: tagId, shop_id: forShop ?? (await getShopId()) });
   return deleted.length > 0;
 }
 
@@ -84,9 +84,9 @@ export async function deleteSocialTag(tagId: string): Promise<boolean> {
  * Puts a tag on a post or takes it off. False when the tag is not the shop's or
  * the post is not stored for the shop, so nothing is written for a stray id.
  */
-export async function setPostTag(tagId: string, accountId: string, postId: string, tagged: boolean): Promise<boolean> {
+export async function setPostTag(tagId: string, accountId: string, postId: string, tagged: boolean, forShop?: string): Promise<boolean> {
   const supabase = getSupabaseClient();
-  const shopId = await getShopId();
+  const shopId = forShop ?? (await getShopId());
   const [tag, post] = await Promise.all([
     supabaseSelect(supabase, SOCIAL_TAG_T.TAGS, { id: tagId, shop_id: shopId }, "id", { limit: 1 }),
     supabaseSelect(supabase, SOCIAL_T.POSTS, { account_id: accountId, external_id: postId, shop_id: shopId }, "external_id", { limit: 1 }),

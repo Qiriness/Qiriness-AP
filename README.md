@@ -139,6 +139,8 @@ below. `llm_usage` holds 2174 calls.
 
 ## Next Steps
 
+**Barbara Gould in Insights (2026-10-26):** app installed (`gurkk8-er.myshopify.com`); set `DASHBOARD_SHOPS` on Vercel and as a GitHub variable. Run the nightly once, then work through VALIDATION_LOG → Barbara Gould in Insights.
+
 **Log ingest (2026-10-26):** deploy the direct connection. Set `WORKER_DB_URL` (in `.env.local`) and `SUPABASE_DB_TRANSPORT=pg` on Render, and add `WORKER_DB_URL` as a GitHub Actions secret. A day later, compare Supabase Usage log ingest (~50 MB/day before; ~19 expected) and close VALIDATION_LOG → Direct connection.
 
 Report changes must also pass `node web/scripts/verify-report-production.mjs` after the web production build; source-only rendering does not catch minification errors in embedded browser functions.

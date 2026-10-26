@@ -9,7 +9,6 @@ export const en = {
   "common.language": "Language",
   "common.signOut": "Sign out",
   "common.signingOut": "Signing out…",
-  "shop.switch": "Switch shop",
   "nav.home": "Home",
   "nav.insights": "Insights",
   "nav.tickets": "Tickets",

@@ -8,6 +8,10 @@
  * short rather than permanent — a newly set zone reaches the panels within
  * minutes, not at the next restart.
  *
+ * ONE MEMORY PER SHOP. `getShop()` is the support desk's shop (SHOPIFY_STORE_DOMAIN),
+ * which every page outside Insights reads; Insights reads the shop its URL names
+ * through `getShopByDomain` (scripts/lib/dashboard-shops.mjs).
+ *
  * A FAILURE IS NEVER REMEMBERED. A missing row ("run a sync first") or a failed
  * read is retried on the next request, so the fix is seen as soon as it lands.
  *
@@ -29,33 +33,37 @@ export interface ShopRow {
 
 const TTL_MS = 5 * 60 * 1000;
 
-let remembered: { at: number; shop: Promise<ShopRow | null> } | null = null;
+const remembered = new Map<string, { at: number; shop: Promise<ShopRow | null> }>();
 
-/** The shop row, or null when no shop has been synced for this domain. */
+/** The support desk's shop row, or null when no shop has been synced for its domain. */
 export function getShop(): Promise<ShopRow | null> {
-  if (remembered && Date.now() - remembered.at < TTL_MS) return remembered.shop;
+  return getShopByDomain(loadConfig(process.env as Record<string, string | undefined>).shopDomain);
+}
 
-  const entry = { at: Date.now(), shop: readShop() };
-  remembered = entry;
+/** One shop's row by its store domain, or null when that shop has not been synced yet. */
+export function getShopByDomain(domain: string): Promise<ShopRow | null> {
+  const hit = remembered.get(domain);
+  if (hit && Date.now() - hit.at < TTL_MS) return hit.shop;
+
+  const entry = { at: Date.now(), shop: readShop(domain) };
+  remembered.set(domain, entry);
   // Concurrent requests share the one read in flight; a failure or a missing
   // row is dropped so the next request asks again.
-  entry.shop.then(
-    (shop) => {
-      if (!shop && remembered === entry) remembered = null;
-    },
-    () => {
-      if (remembered === entry) remembered = null;
-    }
-  );
+  const forget = () => {
+    if (remembered.get(domain) === entry) remembered.delete(domain);
+  };
+  entry.shop.then((shop) => {
+    if (!shop) forget();
+  }, forget);
   return entry.shop;
 }
 
-async function readShop(): Promise<ShopRow | null> {
+async function readShop(domain: string): Promise<ShopRow | null> {
   const config = loadConfig(process.env as Record<string, string | undefined>);
   const rows = (await supabaseSelect(
     createSupabaseClient(config),
     T.SHOPS,
-    { shop_domain: config.shopDomain },
+    { shop_domain: domain },
     "id,iana_timezone,shop_name,storefront_url"
   )) as { id: string; iana_timezone: string | null; shop_name: string | null; storefront_url: string | null }[];
   const row = rows?.[0];

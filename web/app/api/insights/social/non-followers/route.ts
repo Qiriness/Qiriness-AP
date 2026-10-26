@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requestShop } from "@/lib/server/insights/request-shop";
 import { checkPercent, setNonFollowers } from "@/lib/server/social-post-manual-service";
 import { isUuid } from "@/lib/server/social-tags-service";
 
@@ -16,7 +17,7 @@ export async function PUT(request: Request) {
     }
     const checked = checkPercent(body?.percent);
     if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400, headers: NO_STORE });
-    const found = await setNonFollowers(accountId, postId, checked.percent);
+    const found = await setNonFollowers(accountId, postId, checked.percent, (await requestShop(request)).id);
     if (!found) return NextResponse.json({ error: "No such post" }, { status: 404, headers: NO_STORE });
     return NextResponse.json({ ok: true, percent: checked.percent }, { headers: NO_STORE });
   } catch (error) {

@@ -1,4 +1,5 @@
 import {NextResponse} from 'next/server';
+import { requestShop } from "@/lib/server/insights/request-shop";
 import {checkAudienceEntries,validAudienceDate,AUDIENCE_DIMENSIONS} from '../../../../../../scripts/lib/social-audience-manual.mjs';
 import {audienceWriteContext,saveManualAudience} from '@/lib/server/social-audience-manual-service';
 import type {OrganicKind,AudienceDimension} from '@/lib/social-types';
@@ -6,7 +7,7 @@ export const dynamic='force-dynamic';
 const headers={'Cache-Control':'no-store'};
 export async function PUT(request:Request) {
   try {
-    const {shopId,asOf}=await audienceWriteContext();
+    const {shopId,asOf}=await audienceWriteContext(await requestShop(request));
     const body=await request.json().catch(()=>({}));
     if(!['instagram','facebook','tiktok'].includes(body.kind)||!AUDIENCE_DIMENSIONS.includes(body.dimension))return NextResponse.json({error:'Choose an organic platform and audience graph'},{status:400,headers});
     const checked=body.entries===null?{ok:true as const,entries:null}:checkAudienceEntries(body.dimension,body.entries);

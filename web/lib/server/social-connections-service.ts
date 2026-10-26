@@ -53,9 +53,10 @@ export function appOrigin(requestOrigin: string): string {
   return socialAppConfig(process.env).publicUrl ?? requestOrigin;
 }
 
-export async function getSocialConnections(): Promise<SocialConnectionsStatus> {
+/** `forShop`: the Insights shop. Settings (connecting accounts) is the support desk's shop. */
+export async function getSocialConnections(forShop?: string): Promise<SocialConnectionsStatus> {
   const config = socialAppConfig(process.env);
-  const shopId = await getShopId();
+  const shopId = forShop ?? (await getShopId());
   const { connections, accounts } = await readSocialStatus(getSupabaseClient(), shopId);
   const queued = await queuedProviders(shopId);
 
@@ -174,9 +175,9 @@ export async function setTracked(accountId: string, enabled: boolean): Promise<b
  * platform, so it is written on every account of that kind. False for a kind or
  * a basis the app does not offer.
  */
-export async function setEngagementBasis(kind: unknown, basis: unknown): Promise<boolean> {
+export async function setEngagementBasis(kind: unknown, basis: unknown, forShop?: string): Promise<boolean> {
   if (!(ORGANIC_KINDS as string[]).includes(kind as string) || !(ENGAGEMENT_BASES as string[]).includes(basis as string)) return false;
-  const rows = await supabaseUpdate(getSupabaseClient(), SOCIAL_T.ACCOUNTS, { shop_id: await getShopId(), kind: kind as string }, { engagement_basis: basis }, { select: "id" });
+  const rows = await supabaseUpdate(getSupabaseClient(), SOCIAL_T.ACCOUNTS, { shop_id: forShop ?? (await getShopId()), kind: kind as string }, { engagement_basis: basis }, { select: "id" });
   return rows.length > 0;
 }
 

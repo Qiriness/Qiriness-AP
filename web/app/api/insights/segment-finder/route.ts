@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getShopId } from "@/lib/server/knowledge-service";
+import { requestShop } from "@/lib/server/insights/request-shop";
 import { findSegment } from "@/lib/server/insights/segment-finder-service";
 import type { SegmentDefinition } from "@/lib/types";
 import { validateSegment } from "../../../../../scripts/lib/segment-finder.mjs";
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     if (!checked.ok) {
       return NextResponse.json({ error: checked.error }, { status: 400, headers: NO_STORE });
     }
-    const shopId = await getShopId();
+    const shopId = (await requestShop(request)).id;
     const result = await findSegment(shopId, checked.segment as SegmentDefinition);
     return NextResponse.json(result, { headers: NO_STORE });
   } catch (error) {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useT } from "@/lib/i18n/client";
 import type { EngagementBasis, OrganicKind } from "@/lib/social-types";
 import styles from "./SocialView.module.css";
+import { useInsightsFrame } from "./InsightsFrame";
 
 const BASES: EngagementBasis[] = ["reach", "followers", "views"];
 
@@ -14,6 +15,7 @@ const BASES: EngagementBasis[] = ["reach", "followers", "views"];
  * is saved at once and the page re-reads, so every rate on it follows.
  */
 export function EngagementBasisSelect({ kind, basis }: { kind: OrganicKind; basis: EngagementBasis }) {
+  const { api } = useInsightsFrame();
   const tr = useT();
   const router = useRouter();
   const [value, setValue] = useState(basis);
@@ -26,7 +28,7 @@ export function EngagementBasisSelect({ kind, basis }: { kind: OrganicKind; basi
     setSaving(true);
     setError(null);
     try {
-      const response = await fetch("/api/insights/social/engagement-basis", {
+      const response = await fetch(api("/api/insights/social/engagement-basis"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind, basis: next }),

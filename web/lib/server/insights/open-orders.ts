@@ -53,7 +53,7 @@ export async function getOpenOrders(ctx: InsightsContext): Promise<{ orders: Ope
   });
 
   const now = Date.now();
-  const adminBase = adminOrdersUrl();
+  const adminBase = adminOrdersUrl(ctx.shopDomain);
 
   return {
     vipRuleSet: Boolean(rule),
@@ -86,11 +86,14 @@ export async function getOpenOrders(ctx: InsightsContext): Promise<{ orders: Ope
   };
 }
 
-/** `https://<shop>.myshopify.com/admin/orders` — Shopify redirects it to the current admin. */
-export function adminOrdersUrl(): string | null {
+/**
+ * `https://<shop>.myshopify.com/admin/orders` — Shopify redirects it to the current
+ * admin. `shopDomain`: the Insights shop; without it, the support desk's.
+ */
+export function adminOrdersUrl(shopDomain?: string): string | null {
   try {
-    const { shopDomain } = loadConfig(process.env as Record<string, string | undefined>);
-    return shopDomain ? `https://${shopDomain}/admin/orders` : null;
+    const domain = shopDomain ?? loadConfig(process.env as Record<string, string | undefined>).shopDomain;
+    return domain ? `https://${domain}/admin/orders` : null;
   } catch {
     return null;
   }

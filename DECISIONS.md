@@ -17,7 +17,7 @@ grep -rn "^### <heading>" docs/decisions/
 | Section | File | Entries | ~Tokens |
 | --- | --- | ---: | ---: |
 | Taxonomy | `docs/decisions/taxonomy.md` | 3 | 1,109 |
-| Ingestion | `docs/decisions/ingestion.md` | 15 | 5,500 |
+| Ingestion | `docs/decisions/ingestion.md` | 16 | 6,400 |
 | Spam gate | `docs/decisions/spam-gate.md` | 4 | 1,353 |
 | Categorisation | `docs/decisions/categorisation.md` | 5 | 918 |
 | Customer resolution | `docs/decisions/customer-resolution.md` | 2 | 941 |
@@ -39,8 +39,8 @@ grep -rn "^### <heading>" docs/decisions/
 | Management chat | `docs/decisions/management-chat.md` | 10 | 2,439 |
 | Agent test chat | `docs/decisions/agent-test-chat.md` | 9 | 2,764 |
 | Migrations | `docs/decisions/migrations.md` | 6 | 2,349 |
-| Insights | `docs/decisions/insights.md` | 57 | 40,780 |
-| Page speed | `docs/decisions/page-speed.md` | 4 | 2,556 |
+| Insights | `docs/decisions/insights.md` | 58 | 41,800 |
+| Page speed | `docs/decisions/page-speed.md` | 5 | 3,200 |
 | Interface language | `docs/decisions/interface-language.md` | 3 | 1,031 |
 | Storefront advisor | `docs/decisions/storefront-advisor.md` | 49 | 25,500 |
 | Social report (2026-10-09) | `docs/decisions/social-report.md` | 5 | 1,477 |

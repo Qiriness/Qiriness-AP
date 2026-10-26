@@ -10,8 +10,6 @@ export interface Me {
   displayName: string | null;
   role: string;
   roleLabel: string;
-  /** The deployments listed in SHOP_LINKS; empty when the switcher is not configured. */
-  shops?: { name: string; url: string; current: boolean }[];
 }
 
 function initials(me: Me): string {
@@ -60,7 +58,6 @@ export function UserMenu({ me }: { me: Me | null }) {
   if (!me) return <span className={styles.placeholder} aria-hidden />;
 
   const name = me.displayName?.trim() || me.email;
-  const others = (me.shops ?? []).filter((shop) => !shop.current);
   return (
     <div className={styles.root} ref={root}>
       <button
@@ -84,19 +81,6 @@ export function UserMenu({ me }: { me: Me | null }) {
             <span className={styles.menuEmail}>{me.email}</span>
             <span className={styles.menuRole}>{t(`role.${me.role}`)}</span>
           </div>
-          {/* Other shops are separate dashboards with their own accounts, so each
-              is a plain link: you land on that one's sign-in. Only drawn when
-              SHOP_LINKS names someone other than this deployment. */}
-          {others.length > 0 ? (
-            <div className={styles.shops}>
-              <span className={styles.shopsLabel}>{t("shop.switch")}</span>
-              {others.map((shop) => (
-                <a key={shop.url} role="menuitem" className={styles.menuItem} href={shop.url}>
-                  {shop.name}
-                </a>
-              ))}
-            </div>
-          ) : null}
           <LanguageSwitch onBusyChange={setSwitching} />
           <button type="button" role="menuitem" className={styles.menuItem} onClick={signOut} disabled={leaving}>
             {leaving ? t("common.signingOut") : t("common.signOut")}

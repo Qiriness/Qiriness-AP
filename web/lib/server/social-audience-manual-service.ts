@@ -9,8 +9,9 @@ const TABLE='social_audience_manual';
 export async function readManualAudience(shopId:string):Promise<ManualAudienceRow[]> {
   return supabaseSelectAll(getSupabaseClient(),TABLE,{shop_id:shopId},'kind,dimension,captured_on,entries',{order:'kind.asc,dimension.asc'}) as Promise<ManualAudienceRow[]>;
 }
-export async function audienceWriteContext() {
-  const shop=await getShop();
+/** `forShop`: the Insights shop's row; without it, the support desk's. */
+export async function audienceWriteContext(forShop?: { id: string; ianaTimezone: string | null } | null) {
+  const shop=forShop ?? (await getShop());
   if(!shop)throw new Error('No shop record.');
   return {shopId:shop.id as string,asOf:dateInZone(new Date(),(shop.ianaTimezone as string|null)??'UTC')};
 }

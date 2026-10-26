@@ -7,14 +7,53 @@ import { getLocale, getT } from "@/lib/i18n/server";
 import { compareLabel, monthLabelL, rangeLabel } from "@/lib/insights-labels";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { timed } from "@/lib/server/timing";
-import { resolveInsightsContext, type InsightsContext, type SearchParams } from "@/lib/server/insights/context";
-import { INSIGHTS_PANELS, type InsightsPanel, type InsightsScope } from "@/lib/types";
+import { insightsShopFor, resolveInsightsContext, type InsightsContext, type SearchParams } from "@/lib/server/insights/context";
+import { getMarketplaces } from "@/lib/server/marketplaces";
+import { getShopByDomain } from "@/lib/server/shop";
+import { ShopProvider, type ShopInfo } from "@/lib/shop-context";
+import { DESK_ONLY_PANELS, INSIGHTS_PANELS, type InsightsPanel, type InsightsScope } from "@/lib/types";
+import { dashboardShops } from "../../../scripts/lib/dashboard-shops.mjs";
 import { InsightsFrame } from "./InsightsFrame";
 import { InsightsHeader } from "./InsightsHeader";
 import { PanelError } from "./InsightsKit";
+import type { SwitcherShop } from "./ShopSwitcher";
 
-/** The URL keys that choose the period and platform: the panel's identity. */
-const PERIOD_KEYS = ["range", "month", "from", "to", "platform"];
+const EMPTY_SHOP: ShopInfo = { name: null, storefrontUrl: null, marketplaces: [] };
+
+/** Each shop the switcher offers, named by Shopify's shop name once synced (its slug before). */
+async function switcherShops(): Promise<SwitcherShop[]> {
+  const shops = dashboardShops(process.env) as { slug: string; domain: string; desk: boolean }[];
+  if (shops.length < 2) return [];
+  return Promise.all(
+    shops.map(async (shop) => ({
+      slug: shop.slug,
+      desk: shop.desk,
+      label: (await getShopByDomain(shop.domain).catch(() => null))?.shopName ?? shop.slug,
+    }))
+  );
+}
+
+/**
+ * The selected shop as the browser's components need it (its name, storefront
+ * and marketplaces), so the platform filter and every « {store} » follow the
+ * switcher. Never fails a page: an unread shop is an empty one.
+ */
+async function shopInfo(ctx: InsightsContext | null): Promise<ShopInfo | null> {
+  if (!ctx) return null;
+  try {
+    const [shop, marketplaces] = await Promise.all([getShopByDomain(ctx.shopDomain), getMarketplaces(ctx.shopId)]);
+    return {
+      name: shop?.shopName ?? null,
+      storefrontUrl: shop?.storefrontUrl ?? null,
+      marketplaces: marketplaces.list.map((m) => ({ key: m.key, label: m.label })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** The URL keys that choose the shop, period and platform: the panel's identity. */
+const PERIOD_KEYS = ["shop", "range", "month", "from", "to", "platform"];
 
 /**
  * A NEW PERIOD IS A NEW PANEL, not an update of the old one. Under the same key,
@@ -54,7 +93,15 @@ export async function InsightsPage({
   const session = await getSession();
   if (!session) redirect("/login");
   if (!canSeePanel(session.role, active)) redirect(fallbackPath(session.role));
-  const panels = INSIGHTS_PANELS.filter((panel) => canSeePanel(session.role, panel.id)).map((panel) => panel.id);
+  // A shop without the support desk has no mail to read: no Support or AI agent
+  // tab, and a link to one opens its Overview instead.
+  const selected = insightsShopFor(searchParams);
+  const deskPanel = (DESK_ONLY_PANELS as string[]).includes(active);
+  if (deskPanel && !selected.desk) redirect(`/insights/overview?shop=${encodeURIComponent(selected.slug)}`);
+  const panels = INSIGHTS_PANELS.filter(
+    (panel) => canSeePanel(session.role, panel.id) && (selected.desk || !(DESK_ONLY_PANELS as string[]).includes(panel.id))
+  ).map((panel) => panel.id);
+  const shopsRead = switcherShops();
 
   // Started, not awaited: the sidebar badges are read beside the panel rather
   // than before it. navBadgeCounts never throws.
@@ -86,27 +133,34 @@ export async function InsightsPage({
     error = e instanceof Error ? e.message : getT()("insights.shell.loadFailed");
   }
   const badges = await badgesRead;
+  const [shops, info] = await Promise.all([shopsRead, shopInfo(ctx)]);
+  const panel = error ? <PanelError message={error} /> : <Fragment key={periodKey(searchParams)}>{body}</Fragment>;
 
   return (
     <AppShell activeHref="/insights" {...badges}>
-      <InsightsFrame
-        panel={active}
-        header={
-          <InsightsHeader
-            active={active}
-            panels={panels}
-            scope={scope}
-            range={ctx?.range ?? null}
-            platform={ctx?.platform ?? "all"}
-            freshness={ctx?.freshness ?? null}
-            renderedAt={ctx?.renderedAt ?? null}
-            tzFallback={ctx?.tzFallback ?? false}
-            months={ctx?.months ?? []}
-          />
-        }
-      >
-        {error ? <PanelError message={error} /> : <Fragment key={periodKey(searchParams)}>{body}</Fragment>}
-      </InsightsFrame>
+      {/* The selected shop for everything inside, header filters included. */}
+      <ShopProvider shop={info ?? EMPTY_SHOP}>
+        <InsightsFrame
+          panel={active}
+          header={
+            <InsightsHeader
+              active={active}
+              panels={panels}
+              scope={scope}
+              range={ctx?.range ?? null}
+              platform={ctx?.platform ?? "all"}
+              freshness={ctx?.freshness ?? null}
+              renderedAt={ctx?.renderedAt ?? null}
+              tzFallback={ctx?.tzFallback ?? false}
+              months={ctx?.months ?? []}
+              shops={shops}
+              shop={selected.slug}
+            />
+          }
+        >
+          {panel}
+        </InsightsFrame>
+      </ShopProvider>
     </AppShell>
   );
 }

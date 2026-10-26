@@ -1464,6 +1464,9 @@ export const INSIGHTS_PANELS: { id: InsightsPanel; label: string; href: string }
   { id: "agent", label: "AI agent", href: "/insights/agent" },
 ];
 
+/** Panels read from the support desk's mail: a shop without the desk (no mailbox) has none of them. */
+export const DESK_ONLY_PANELS: InsightsPanel[] = ["support", "agent"];
+
 export type Grain = "hour" | "day" | "week" | "month";
 
 /**

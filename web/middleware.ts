@@ -7,6 +7,7 @@ import {
   fallbackPath,
   needsRefresh,
 } from "../scripts/lib/dashboard-auth.mjs";
+import { SHOP_COOKIE, defaultShop, shopForSlug } from "../scripts/lib/dashboard-shops.mjs";
 import { clearSession, writeSession, type SupabaseSession } from "./lib/session-cookies";
 
 /**
@@ -100,15 +101,53 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(fallbackPath(session.user.role), request.url));
   }
 
-  if (!refreshed) return NextResponse.next();
+  const shop = insightsShop(request);
+  if (shop.redirect) {
+    if (refreshed) writeSession(shop.redirect, refreshed);
+    return shop.redirect;
+  }
 
-  // The new tokens go on the request too, so the page rendering behind this
-  // middleware reads the fresh session rather than the one that just expired.
-  request.cookies.set(ACCESS_COOKIE, refreshed.access_token);
-  request.cookies.set(REFRESH_COOKIE, refreshed.refresh_token);
-  const response = NextResponse.next({ request: { headers: request.headers } });
-  writeSession(response, refreshed);
+  let response: NextResponse;
+  if (!refreshed) {
+    response = NextResponse.next();
+  } else {
+    // The new tokens go on the request too, so the page rendering behind this
+    // middleware reads the fresh session rather than the one that just expired.
+    request.cookies.set(ACCESS_COOKIE, refreshed.access_token);
+    request.cookies.set(REFRESH_COOKIE, refreshed.refresh_token);
+    response = NextResponse.next({ request: { headers: request.headers } });
+    writeSession(response, refreshed);
+  }
+  if (shop.remember) {
+    response.cookies.set(SHOP_COOKIE, shop.remember, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "lax",
+      secure: request.nextUrl.protocol === "https:",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  }
   return response;
+}
+
+/**
+ * EVERY INSIGHTS PAGE NAMES ITS SHOP IN ITS ADDRESS (`?shop=`). The address is
+ * what the browser keeps a prefetched page under, so a shop known only from a
+ * cookie would let Sales for one shop be shown from the other's prefetch. A page
+ * without a shop the dashboard serves is sent to the one last looked at (the
+ * cookie), or the first; a page with one remembers it. Pages outside Insights
+ * are the support desk's shop and are left alone. scripts/lib/dashboard-shops.mjs
+ */
+function insightsShop(request: NextRequest): { redirect?: NextResponse; remember?: string } {
+  const { pathname, searchParams } = request.nextUrl;
+  if (!pathname.startsWith("/insights/")) return {};
+  const named = shopForSlug(searchParams.get("shop"), process.env);
+  if (named) return { remember: named.slug };
+  const fallback = defaultShop(request.cookies.get(SHOP_COOKIE)?.value, process.env);
+  if (!fallback) return {};
+  const url = request.nextUrl.clone();
+  url.searchParams.set("shop", fallback.slug);
+  return { redirect: NextResponse.redirect(url) };
 }
 
 function refuse(request: NextRequest, isApi: boolean, message: string | null) {

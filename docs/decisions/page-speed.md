@@ -78,3 +78,23 @@ The changes:
 - **Old clears move over once.** What an older page left in localStorage is posted to the server on the next visit, then the key is removed.
 
 **Not done, deliberately: no timed warm-up job.** The stale-while-recompute behaviour already makes every panel and range opened before instant. A job would only speed the first-ever view of a range, at the cost of Shopify and Supabase traffic every 15 minutes through the night.
+
+### A period switch shows at once; the other tabs are prefetched after it, one at a time (2026-10-26)
+
+The owner's complaint was the wait when switching time frame, the left-hand presets especially. It was measured on a production build against the production database, starting from an empty cache. The click → screen times and the server log of each read agreed:
+- 1 year took **18 s**, though Overview's own reads took 0.9 s;
+- 7 d / 24 h / 6 m took 1–2 s;
+- going back to 30 d took 3 s;
+- tab switches were instant.
+
+**Three causes, three changes:**
+- **The prefetch storm.** Every range change made the tab bar prefetch all seven other panels at once, for the new range. At 1 year that was Sales 9 s, Marketing 10 s and Fulfilment 14 s. Their setup reads took 2–4 s, against ~0.2 s alone. Marketing's Shopify queries also ran against the same throttled minute as Overview's money cards.
+  - Now the other tabs are prefetched **3 s after the panel has arrived, one every 2 s**, and the queue restarts if the range changes meanwhile. A pointer on a tab prefetches it at once (`InsightsNav`).
+  - Tabs stayed instant in the measurement, which is why prefetching was rescheduled rather than dropped.
+- **The transition waited for Shopify.** Under the same React key, a Suspense boundary already showing content is kept rather than shown loading, so a range switch waited for the slowest Shopify card. The panel is now keyed by its shop, period and platform (`InsightsPage` `periodKey`): the switch lands with the database figures and each Shopify card fills in on its own.
+  - Only those keys: a filter inside a panel (Sales' product) keeps the panel and its search box.
+- **Fulfilment rebuilt the ticket queue on every render** to ring orders that have a ticket: 3.4–6 s, cached or not. The marks (order number → band, count; nothing about a person) are now shared for 60 s under the `tickets` tag (`order-ticket-marks.ts`), like the sidebar badges; a dashboard ticket change clears them.
+
+**A preset is prefetched on hover** (`FilterBar` → `useInsightsFrame().prefetch`). Next keeps a full prefetch for 5 minutes, so going back to a range is instant too. `staleTimes.dynamic: 0` stays, for Agent Setup's sake.
+
+Not prefetched up front: five ranges rendered on load would spend Shopify's minute on ranges nobody picks.

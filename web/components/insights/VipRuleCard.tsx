@@ -31,7 +31,7 @@ export function VipRuleCard({
 }) {
   const t = useT();
   const { integer } = useFormat();
-  const { refresh } = useInsightsFrame();
+  const { refresh, api } = useInsightsFrame();
   const [minSpend, setMinSpend] = useState(rule ? String(rule.minSpend) : "");
   const [minOrders, setMinOrders] = useState(rule ? String(rule.minOrders) : "");
   const [windowMonths, setWindowMonths] = useState(rule ? String(rule.windowMonths) : "12");
@@ -59,7 +59,7 @@ export function VipRuleCard({
     const timer = window.setTimeout(async () => {
       const params = new URLSearchParams({ minSpend, minOrders, windowMonths });
       try {
-        const response = await fetch(`/api/insights/vip-rule?${params.toString()}`);
+        const response = await fetch(api(`/api/insights/vip-rule?${params.toString()}`));
         const payload = await response.json();
         if (id !== request.current) return;
         if (!response.ok) {
@@ -74,13 +74,13 @@ export function VipRuleCard({
       }
     }, 350);
     return () => window.clearTimeout(timer);
-  }, [minSpend, minOrders, windowMonths, complete, t]);
+  }, [minSpend, minOrders, windowMonths, complete, t, api]);
 
   const save = async (clear = false) => {
     setSaving(true);
     setSaved(false);
     try {
-      const response = await fetch("/api/insights/vip-rule", {
+      const response = await fetch(api("/api/insights/vip-rule"), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(clear ? { clear: true } : { minSpend, minOrders, windowMonths }),

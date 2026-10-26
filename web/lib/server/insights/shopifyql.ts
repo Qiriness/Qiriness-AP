@@ -15,6 +15,12 @@
  * totals, and flipping 30 days -> 6 months -> 30 days should not ask 30 days
  * twice. The cache key is the query text itself.
  *
+ * ONE OF EVERYTHING PER SHOP. Two shops' "net sales, last 30 days" are the same
+ * query text, so the answer is kept under the shop's domain and the query, never
+ * the query alone, or one shop's figures would be served as the other's. Each
+ * shop also has its own client, queue and throttle gate: Shopify's bucket is
+ * per store, so one shop's busy minute must not hold the other's cards.
+ *
  * Nothing here throws synchronously; each promise rejects with a reason the
  * cards print. Server-only.
  */
@@ -58,63 +64,77 @@ interface Job {
   reject: (error: Error) => void;
 }
 
-const cache = new Map<string, { at: number; value: Promise<Row[]> }>();
-const queue: Job[] = [];
-let inFlight = 0;
-let seq = 0;
-/** Nothing is sent before this instant: the bucket said it was empty until then. */
-let gateUntil = 0;
-let timer: ReturnType<typeof setTimeout> | null = null;
+/** One shop's queue: its answers, its waiting jobs, its gate and its Shopify client. */
+interface ShopQueue {
+  domain: string;
+  cache: Map<string, { at: number; value: Promise<Row[]> }>;
+  queue: Job[];
+  inFlight: number;
+  seq: number;
+  /** Nothing is sent before this instant: the bucket said it was empty until then. */
+  gateUntil: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  client: Promise<{ endpoint: string; token: string }> | null;
+}
 
-let shopifyClient: Promise<{ endpoint: string; token: string }> | null = null;
+const shops = new Map<string, ShopQueue>();
 
-/**
- * One Shopify client for the process: without an admin token, creating one is
- * an OAuth exchange, and that should not sit in front of every card.
- */
-function client() {
-  if (!shopifyClient) {
-    shopifyClient = createShopifyClient(loadConfig(process.env as Record<string, string | undefined>)).catch(
-      (error: unknown) => {
-        shopifyClient = null;
-        throw error;
-      }
-    );
+function shopQueue(domain: string): ShopQueue {
+  let state = shops.get(domain);
+  if (!state) {
+    state = { domain, cache: new Map(), queue: [], inFlight: 0, seq: 0, gateUntil: 0, timer: null, client: null };
+    shops.set(domain, state);
   }
-  return shopifyClient;
+  return state;
 }
 
 /**
- * The rows for one ShopifyQL query. Rejects on a refusal (Shopify saying the
- * query is wrong, never "the store was quiet"), an error, or the deadline.
+ * One Shopify client per shop for the process: without an admin token, creating
+ * one is an OAuth exchange, and that should not sit in front of every card. The
+ * same app's credentials, minted for this shop's domain.
  */
-export function shopifyql(query: string, priority: number, deadlineMs = DEADLINE_MS): Promise<Row[]> {
-  return sharedAnswer(query, priority, deadlineMs);
+function client(state: ShopQueue) {
+  if (!state.client) {
+    const config = { ...loadConfig(process.env as Record<string, string | undefined>), shopDomain: state.domain };
+    state.client = createShopifyClient(config).catch((error: unknown) => {
+      state.client = null;
+      throw error;
+    });
+  }
+  return state.client;
 }
 
 /**
- * IN FRONT OF THE QUEUE, THE SHARED CACHE: one answer per query for every
- * Vercel instance, kept as long as the other Insights reads (15 minutes, the ↻
- * button clears it). The per-instance cache below only spared a warm instance.
- * On serverless most renders land on a cold one, which asked Shopify again.
- * A refusal or a timeout rejects, and a rejection is never cached.
+ * The rows for one ShopifyQL query on one shop. Rejects on a refusal (Shopify
+ * saying the query is wrong, never "the store was quiet"), an error, or the deadline.
+ */
+export function shopifyql(shopDomain: string, query: string, priority: number, deadlineMs = DEADLINE_MS): Promise<Row[]> {
+  return sharedAnswer(shopDomain, query, priority, deadlineMs);
+}
+
+/**
+ * IN FRONT OF THE QUEUE, THE SHARED CACHE: one answer per shop and query for
+ * every Vercel instance, kept as long as the other Insights reads (15 minutes,
+ * the ↻ button clears it). The per-instance cache below only spared a warm
+ * instance. On serverless most renders land on a cold one, which asked Shopify
+ * again. A refusal or a timeout rejects, and a rejection is never cached.
  */
 const sharedAnswer = unstable_cache(
-  (query: string, priority: number, deadlineMs: number) => answerLive(query, priority, deadlineMs),
-  ["insights-shopifyql"],
+  (shopDomain: string, query: string, priority: number, deadlineMs: number) => answerLive(shopQueue(shopDomain), query, priority, deadlineMs),
+  ["insights-shopifyql-by-shop"],
   { revalidate: INSIGHTS_TTL_SECONDS, tags: [CACHE_TAGS.insights] }
 );
 
-function answerLive(query: string, priority: number, deadlineMs: number): Promise<Row[]> {
-  const hit = cache.get(query);
+function answerLive(state: ShopQueue, query: string, priority: number, deadlineMs: number): Promise<Row[]> {
+  const hit = state.cache.get(query);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
 
   const value = new Promise<Row[]>((resolve, reject) => {
-    queue.push({ query, priority, seq: seq++, deadline: Date.now() + deadlineMs, resolve, reject });
-    pump();
+    state.queue.push({ query, priority, seq: state.seq++, deadline: Date.now() + deadlineMs, resolve, reject });
+    pump(state);
   });
   const entry = { at: Date.now(), value };
-  cache.set(query, entry);
+  state.cache.set(query, entry);
   value.then(
     // Fresh from the moment it was ANSWERED, not asked: a query that waited a
     // minute for the bucket should not be stale a minute early.
@@ -123,51 +143,47 @@ function answerLive(query: string, priority: number, deadlineMs: number): Promis
     },
     // A failure is not kept: the next render asks again.
     () => {
-      if (cache.get(query) === entry) cache.delete(query);
+      if (state.cache.get(query) === entry) state.cache.delete(query);
     }
   );
   return value;
 }
 
-function pump() {
+function pump(state: ShopQueue) {
   const now = Date.now();
   // A job whose deadline falls before the bucket reopens cannot be answered in
   // time; saying so now beats making the card wait to be told.
-  for (let i = queue.length - 1; i >= 0; i--) {
-    const job = queue[i];
-    if (job.deadline <= Math.max(now, gateUntil)) {
-      queue.splice(i, 1);
-      job.reject(
-        new Error(
-          "insights.blocked.rateLimit"
-        )
-      );
+  for (let i = state.queue.length - 1; i >= 0; i--) {
+    const job = state.queue[i];
+    if (job.deadline <= Math.max(now, state.gateUntil)) {
+      state.queue.splice(i, 1);
+      job.reject(new Error("insights.blocked.rateLimit"));
     }
   }
-  if (gateUntil > now) {
-    if (!timer) {
-      timer = setTimeout(() => {
-        timer = null;
-        pump();
-      }, gateUntil - now);
+  if (state.gateUntil > now) {
+    if (!state.timer) {
+      state.timer = setTimeout(() => {
+        state.timer = null;
+        pump(state);
+      }, state.gateUntil - now);
     }
     return;
   }
-  queue.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
-  while (inFlight < CONCURRENCY && queue.length > 0 && gateUntil <= Date.now()) {
-    const job = queue.shift()!;
-    inFlight += 1;
-    send(job).finally(() => {
-      inFlight -= 1;
-      pump();
+  state.queue.sort((a, b) => a.priority - b.priority || a.seq - b.seq);
+  while (state.inFlight < CONCURRENCY && state.queue.length > 0 && state.gateUntil <= Date.now()) {
+    const job = state.queue.shift()!;
+    state.inFlight += 1;
+    send(state, job).finally(() => {
+      state.inFlight -= 1;
+      pump(state);
     });
   }
 }
 
-async function send(job: Job) {
+async function send(state: ShopQueue, job: Job) {
   let answer;
   try {
-    answer = await postShopifyql(await client(), job.query);
+    answer = await postShopifyql(await client(state), job.query);
   } catch (error) {
     job.reject(new Error(`Shopify Analytics could not be read: ${error instanceof Error ? error.message : String(error)}`));
     return;
@@ -181,9 +197,9 @@ async function send(job: Job) {
     return;
   }
   if (answer.kind === "throttled") {
-    // Back in the queue in its original place; everything waits for the reset.
-    gateUntil = Math.max(gateUntil, retryAt(answer));
-    queue.push(job);
+    // Back in the queue in its original place; this shop's jobs wait for the reset.
+    state.gateUntil = Math.max(state.gateUntil, retryAt(answer));
+    state.queue.push(job);
     return;
   }
   job.reject(new Error(`Shopify Analytics could not be read: ${String(answer.message ?? "unknown error").slice(0, 200)}`));

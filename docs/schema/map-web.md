@@ -170,7 +170,10 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |   |                            # Tickets · Customer · Destination · Tags cards,
 |   |   |                            # reusing insights Card + Flag)
 |   |   |-- insights/                # InsightsPage (shell + header + one panel) ·
-|   |   |                            # InsightsFrame (URL navigation, pending dim) ·
+|   |   |                            # InsightsFrame (URL navigation, pending dim;
+|   |   |                            # prefetch on hover; api() adds ?shop=) ·
+|   |   |                            # ShopSwitcher (Insights shop, ?shop=; only with
+|   |   |                            # 2+ shops in DASHBOARD_SHOPS) ·
 |   |   |                            # PinBoard (pin a row to the top, 2 max, per
 |   |   |                            # panel in localStorage; Grid pin="id") ·
 |   |   |                            # InsightsHeader + InsightsNav + FilterBar +
@@ -283,10 +286,14 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |                    # auth (getSession, re-checked not trusted) ·
 |   |       |                    # access-log (a data_access_events row per
 |   |       |                    # named-customer view, actor = the user) ·
-|   |       |                    # shop (the shop row: id + timezone, kept 5 min,
-|   |       |                    # failures never kept) · timing (PAGE_TIMING=1
+|   |       |                    # shop (a shop row by domain: id + timezone, kept
+|   |       |                    # 5 min per shop, failures never kept; getShop()
+|   |       |                    # = the support desk's shop) · timing (PAGE_TIMING=1
 |   |       |                    # prints each page read's ms to the console)
 |   |       `-- insights/         # shared (readView + callRpc -- NO paging) ·
+|   |                             # request-shop (an API request's ?shop=, else the
+|   |                             # desk shop) · shop-scoped-reads.test (every cached
+|   |                             # read names its shop) ·
 |   |                             # context (shop, tz, range, platform, freshness
 |   |                             # from the URL) · series (sparse SQL -> points,
 |   |                             # with coverage) · orders (shared by sales +
@@ -315,7 +322,9 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |                             # tabs; Instagram reach read live, <= 30 days)
 |   |-- middleware.ts            # THE GATE: every page + API needs a Supabase
 |   |                            # session; refreshes the hour-old token; role
-|   |                            # rules from dashboard-auth.mjs
+|   |                            # rules from dashboard-auth.mjs; an Insights page
+|   |                            # always names its shop (?shop=, else the cookie
+|   |                            # insights_shop, else the first) and remembers it
 |   |-- next.config.mjs          # loadEnv() from root .env.local; staleTimes 0
 |   `-- tsconfig.json            # allowJs, so services can import scripts/lib/*.mjs
 ```

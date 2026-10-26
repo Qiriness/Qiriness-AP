@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getShopId } from "@/lib/server/knowledge-service";
+import { requestShop } from "@/lib/server/insights/request-shop";
 import { getSupabaseClient } from "@/lib/server/insights/shared";
 import {
   describeVipRule,
@@ -22,7 +22,7 @@ export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
     const supabase = getSupabaseClient();
-    const shopId = await getShopId();
+    const shopId = (await requestShop(request)).id;
 
     const asked = url.searchParams.has("minSpend");
     let rule;
@@ -54,7 +54,7 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     const supabase = getSupabaseClient();
-    const shopId = await getShopId();
+    const shopId = (await requestShop(request)).id;
 
     if (body?.clear === true) {
       await saveVipRule(supabase, shopId, null);

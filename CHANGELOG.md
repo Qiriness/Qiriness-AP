@@ -10,6 +10,48 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Insights serves several shops: a switcher, the shop in the address, per-shop caches and a nightly per shop (2026-10-26)
+
+Barbara Gould joins Qiriness in the same database and deployment, for Insights only. Both are Lap Groupe shops, reached with the same Shopify app. This replaces the separate-project plan of 2026-10-12. Why: DECISIONS → Insights § Several shops, one dashboard.
+- `scripts/lib/dashboard-shops.mjs`: `DASHBOARD_SHOPS` (store domains, in switcher order). `SHOPIFY_STORE_DOMAIN` is the support desk's shop and is always served. Unset changes nothing.
+- **Shop in the address.**
+  - The middleware gives every `/insights/*` page a `?shop=`: the one last looked at (cookie `insights_shop`), else the first.
+  - Tabs carry it, and the panel key includes it.
+  - Panel API calls carry it (`useInsightsFrame().api`). The server reads it (`request-shop.ts`) and falls back to the desk shop.
+- **Server.**
+  - `getShopByDomain`, remembered per shop; `getShop()` stays the desk's.
+  - `InsightsContext` gains `shopDomain`, `shopSlug` and `supportDesk`.
+  - Marketplaces, admin order links and the sales and social reports follow the shop.
+  - Insights social reads and writes (bands, tags, manual metrics and audience, engagement basis), the VIP rule and the segment finder take the request's shop.
+- **ShopifyQL per shop.** It was cached by query text alone, so two shops would have shared answers. It is now keyed by shop and query, with a client, queue and throttle gate per shop.
+- **UI.**
+  - `ShopSwitcher` sits beside the Insights title, only with two or more shops.
+  - A shop without the desk has no Support or AI agent tab (`DESK_ONLY_PANELS`), and a link to one opens Overview.
+  - The selected shop's `ShopProvider` wraps the frame, so the platform filter follows it.
+- **Webhooks.** An order is re-read with the client of the shop that sent it. A shop not on the list is answered `unknown_shop`.
+- **Nightly.** One run per shop from the `DASHBOARD_SHOPS` repository variable, one after another. A shop's failure doesn't stop the next, and the run ends red if any failed.
+- **Tests.** `dashboard-shops.test.mjs` (5). `shop-scoped-reads.test.mjs` (5): every cached `callRpc` names its shop, every ShopifyQL call is asked on `ctx.shopDomain`, and the cache is keyed by shop. npm test 3839/3839, agent 2161/2161; web tsc and lint clean.
+- **Not seen yet.**
+  - Barbara Gould's store domain and the app's install on it.
+  - Its first nightly, and the switcher in a browser.
+  - A webhook from its store.
+  - VALIDATION_LOG → Barbara Gould in Insights.
+- **Not built.**
+  - Connecting Klaviyo or Meta for a second shop: Settings is the desk shop's.
+  - Per-person shop access: every role sees every shop, the owner's choice.
+  - A per-shop logo.
+- **Removed.** The « Switch shop » link menu (`SHOP_LINKS`, `scripts/lib/shop-links.mjs` and its 6 tests, the user-menu section). On localhost it sent a click on Barbara Gould to the empty separate deployment. A leftover `SHOP_LINKS` is now ignored.
+
+## Insights: a time-frame switch shows at once; other tabs prefetch after it, one at a time (2026-10-26)
+
+Measured on a production build against production, from an empty cache. 1 year took 18 s, though Overview's own reads took 0.9 s: every range click prefetched all seven other panels at once (Sales 9 s, Marketing 10 s, Fulfilment 14 s), and the switch waited for Overview's Shopify cards. Why: DECISIONS → Page speed § A period switch shows at once.
+- `InsightsPage`: the panel is keyed by shop, period and platform, so a switch lands with the database figures and each Shopify card fills in on its own.
+- `InsightsNav`: the other tabs are prefetched 3 s after the panel arrives, one every 2 s, and on hover.
+- `FilterBar`: a preset is prefetched on hover, and Next keeps it 5 minutes.
+- `order-ticket-marks.ts`: Fulfilment's ticket rings are shared for 60 s (`tickets` tag). They were 3.4–6 s of every Fulfilment render.
+- **Proven:** the "before" timings (owner's clicks against the server log); web tsc and lint clean.
+- **Not yet proven:** the "after" click-through and the deployed dashboard.
+
 ## The worker and the nightly read and write over a direct connection; jobs wake the worker by LISTEN (2026-10-26)
 
 Log ingest was ~50 MB/day against a 1 GB cycle to 2026-11-15 (0.6 GB used). Measured: 26.2k PostgREST requests a day at ≈1.6 kB of log each. Timed polls were ~8.6k, the 15 s job check ~5.6k, the nightly's customer pages ~1.2k. Postgres's own logging is not a factor. With `SUPABASE_DB_TRANSPORT=pg` and `WORKER_DB_URL`, the nine REST helpers run as SQL over a pooled session connection (`scripts/lib/supabase-pg-transport.mjs`, `supabase-pg-sql.mjs`). The callers did not change, and the dashboard stays on REST.

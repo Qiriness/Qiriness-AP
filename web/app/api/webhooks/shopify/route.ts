@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadConfig } from "../../../../../scripts/lib/sync-config.mjs";
 import { createShopifyClient } from "../../../../../scripts/lib/shopify-admin-client.mjs";
+import { shopForDomain } from "../../../../../scripts/lib/dashboard-shops.mjs";
 import { createSupabaseClient } from "../../../../../scripts/lib/supabase-rest-client.mjs";
 import {
   processComplianceWebhook,
@@ -52,7 +53,15 @@ export async function POST(request: Request) {
   const supabase = createSupabaseClient(config);
 
   if (topic && ORDER_TOPICS.has(topic)) {
-    const shopify = await createShopifyClient(config);
+    // THE ORDER IS RE-READ FROM THE SHOP THAT SENT IT. One app serves every shop
+    // (DASHBOARD_SHOPS), and its token is minted per store domain. The header is
+    // not yet verified here, so only a shop on that list gets a client; any other
+    // is answered without being read anywhere, never re-read from the desk's shop.
+    const sender = shopForDomain(request.headers.get("x-shopify-shop-domain"), process.env);
+    if (!sender) {
+      return NextResponse.json({ status: "unknown_shop" }, { status: 200 });
+    }
+    const shopify = await createShopifyClient({ ...config, shopDomain: sender.domain });
     const result = await processOrderWebhook({
       rawBody: Buffer.from(raw, "utf8"),
       headers: request.headers,

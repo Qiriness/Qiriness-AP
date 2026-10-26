@@ -111,7 +111,7 @@ const hasComparison = (ctx: InsightsContext) => ctx.range.preset !== "all";
 
 /** Shopify's money ladder for one window, folded onto the platform filter. Live, exact. */
 async function ladderFor(ctx: InsightsContext, window: Window): Promise<StorefrontSales | null> {
-  const rows = await shopifyql(salesLadderQuery({ ...ctx.range, ...window }), PRIORITY.money);
+  const rows = await shopifyql(ctx.shopDomain, salesLadderQuery({ ...ctx.range, ...window }), PRIORITY.money);
   return foldSalesLadder(rows, ctx.platform, ctx.marketplaces) as StorefrontSales | null;
 }
 
@@ -127,8 +127,8 @@ const NO_MONEY: StorefrontMoney = { current: null, previous: null, storefront: {
 export function liveSales(ctx: InsightsContext): Promise<LivePart<StorefrontMoney>> {
   return part(NO_MONEY, async () => {
     const [rows, before] = await Promise.all([
-      shopifyql(salesLadderQuery(ctx.range), PRIORITY.money),
-      hasComparison(ctx) ? shopifyql(salesLadderQuery({ ...ctx.range, ...previousWindow(ctx) }), PRIORITY.money) : Promise.resolve(null),
+      shopifyql(ctx.shopDomain, salesLadderQuery(ctx.range), PRIORITY.money),
+      hasComparison(ctx) ? shopifyql(ctx.shopDomain, salesLadderQuery({ ...ctx.range, ...previousWindow(ctx) }), PRIORITY.money) : Promise.resolve(null),
     ]);
     const fold = (r: Row[] | null, platform: string) => (r ? (foldSalesLadder(r, platform, ctx.marketplaces) as StorefrontSales | null) : null);
     return {
@@ -143,7 +143,7 @@ export function liveSales(ctx: InsightsContext): Promise<LivePart<StorefrontMone
 /** Net sales, orders and AOV per bucket — the trend, on the headline's basis. */
 export function liveSalesSeries(ctx: InsightsContext): Promise<LivePart<SalesSeries | null>> {
   return part(null, async () => {
-    const folded = foldSalesSeries(await shopifyql(salesSeriesQuery(ctx.range), PRIORITY.money), ctx.range, ctx.platform, ctx.marketplaces) as {
+    const folded = foldSalesSeries(await shopifyql(ctx.shopDomain, salesSeriesQuery(ctx.range), PRIORITY.money), ctx.range, ctx.platform, ctx.marketplaces) as {
       netSales: Map<string, number>;
       orders: Map<string, number>;
       aov: Map<string, number>;
@@ -199,7 +199,7 @@ export async function sessionTotalsFor(ctx: InsightsContext, window: Window, pri
   const store = ctx.tzFallback ? new Map<string, Record<string, unknown>>() : await storedMonths(ctx.shopId);
   const plan = planSessionWindow(window, { liveFrom: liveFrom(wallClock(new Date(), ctx.tz)), stored: store.keys() });
   const live = await Promise.all(
-    plan.live.map(async (piece) => readTotals(await shopifyql(totalsQuery({ ...ctx.range, ...piece }), priority)) as StorefrontTotals)
+    plan.live.map(async (piece) => readTotals(await shopifyql(ctx.shopDomain, totalsQuery({ ...ctx.range, ...piece }), priority)) as StorefrontTotals)
   );
   return combineSessionTotals(
     plan.months.map((month) => store.get(month)!),
@@ -233,7 +233,7 @@ export function liveTotals(
 export function liveSessionSeries(ctx: InsightsContext): Promise<LivePart<SeriesPoint[] | null>> {
   if (ctx.marketplaces.isMarketplace(ctx.platform)) return Promise.resolve({ blockedReason: BLOCKED_MARKETPLACE, value: null });
   return part(null, async () => {
-    const folded = foldSeries(await shopifyql(seriesQuery(ctx.range), PRIORITY.trend), ctx.range) as Map<string, number>;
+    const folded = foldSeries(await shopifyql(ctx.shopDomain, seriesQuery(ctx.range), PRIORITY.trend), ctx.range) as Map<string, number>;
     const states = bucketCoverage(ctx.range, { from: null, through: null }) as BucketState[];
     return ctx.range.keys.map(
       (key, i): SeriesPoint => ({
@@ -254,8 +254,8 @@ export function liveChannels(ctx: InsightsContext): Promise<LivePart<StorefrontC
   if (ctx.marketplaces.isMarketplace(ctx.platform)) return Promise.resolve({ blockedReason: BLOCKED_MARKETPLACE, value: [] });
   return part([], async () => {
     const [sessions, sales] = await Promise.all([
-      shopifyql(channelSessionsQuery(ctx.range), PRIORITY.detail),
-      shopifyql(channelSalesQuery(ctx.range), PRIORITY.detail),
+      shopifyql(ctx.shopDomain, channelSessionsQuery(ctx.range), PRIORITY.detail),
+      shopifyql(ctx.shopDomain, channelSalesQuery(ctx.range), PRIORITY.detail),
     ]);
     return joinChannels(sessions, sales) as StorefrontChannel[];
   });
@@ -263,12 +263,12 @@ export function liveChannels(ctx: InsightsContext): Promise<LivePart<StorefrontC
 
 export function liveLandingTypes(ctx: InsightsContext): Promise<LivePart<LandingType[]>> {
   if (ctx.marketplaces.isMarketplace(ctx.platform)) return Promise.resolve({ blockedReason: BLOCKED_MARKETPLACE, value: [] });
-  return part([], async () => readLandingTypes(await shopifyql(landingTypesQuery(ctx.range), PRIORITY.detail)) as LandingType[]);
+  return part([], async () => readLandingTypes(await shopifyql(ctx.shopDomain, landingTypesQuery(ctx.range), PRIORITY.detail)) as LandingType[]);
 }
 
 export function liveProductPages(ctx: InsightsContext): Promise<LivePart<ProductPage[]>> {
   if (ctx.marketplaces.isMarketplace(ctx.platform)) return Promise.resolve({ blockedReason: BLOCKED_MARKETPLACE, value: [] });
-  return part([], async () => readProductPages(await shopifyql(productPagesQuery(ctx.range), PRIORITY.detail)) as ProductPage[]);
+  return part([], async () => readProductPages(await shopifyql(ctx.shopDomain, productPagesQuery(ctx.range), PRIORITY.detail)) as ProductPage[]);
 }
 
 /**

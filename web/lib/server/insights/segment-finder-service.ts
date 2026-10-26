@@ -29,7 +29,7 @@ import { callRpc, count } from "./shared";
 export async function findSegment(shopId: string, segment: SegmentDefinition): Promise<SegmentFinderResult> {
   const rows = await callRpc<Record<string, unknown>>(
     RPC.CUSTOMER_SEGMENT_FIND,
-    segmentArgs(shopId, segment, [...(await getMarketplaces()).handles], SEGMENT_MEMBER_LIMIT)
+    segmentArgs(shopId, segment, [...(await getMarketplaces(shopId)).handles], SEGMENT_MEMBER_LIMIT)
   );
   const head = rows[0] ?? {};
   const members: SegmentMember[] = rows

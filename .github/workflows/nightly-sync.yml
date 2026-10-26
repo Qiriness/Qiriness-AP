@@ -120,11 +120,29 @@ jobs:
           APP_ENV: production
           SYNC_CRON: '0 2 * * *'
           SYNC_TIMEZONE: UTC
+          # Every shop the dashboard's Insights serve (scripts/lib/dashboard-shops.mjs):
+          # a repository variable, store domains comma separated. Unset, the one
+          # SHOPIFY_STORE_DOMAIN, as before. One app reaches every shop, so a shop
+          # needs no secret of its own.
+          DASHBOARD_SHOPS: ${{ vars.DASHBOARD_SHOPS }}
+        # ONE SHOP AFTER ANOTHER, AND ONE SHOP'S FAILURE DOES NOT STOP THE NEXT.
+        # The step still fails at the end if any shop did, so a red run is never
+        # a half-synced night that looks green.
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm run sync:shopify:nightly -- --dry-run
-          else
-            npm run sync:shopify:nightly
+          shops=$(node -e "import('./scripts/lib/dashboard-shops.mjs').then((m) => console.log(m.dashboardShops(process.env).map((s) => s.domain).join(' ')))")
+          failed=""
+          for shop in $shops; do
+            echo "::group::Nightly sync: $shop"
+            if [ "${{ inputs.dry_run }}" = "true" ]; then
+              SHOPIFY_STORE_DOMAIN="$shop" npm run sync:shopify:nightly -- --dry-run || failed="$failed $shop"
+            else
+              SHOPIFY_STORE_DOMAIN="$shop" npm run sync:shopify:nightly || failed="$failed $shop"
+            fi
+            echo "::endgroup::"
+          done
+          if [ -n "$failed" ]; then
+            echo "::error::Nightly sync failed for:$failed"
+            exit 1
           fi
 
       # The run log is inside the job; this puts the headline on the run itself so

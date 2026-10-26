@@ -35,6 +35,8 @@ Marketing consent data is informational for support unless a future marketing wo
 
 Data is stored in Supabase PostgreSQL. Sync is one-way from Shopify to Supabase.
 
+One database serves the Lap Groupe shops the dashboard is configured for (`DASHBOARD_SHOPS`; since 2026-10-26, Qiriness and Barbara Gould). Every shop's rows carry its `shop_id`, and every dashboard read and cached answer is scoped to one shop. Barbara Gould's data is used for the Insights dashboard only. The support desk, the AI agent and the storefront advisor process Qiriness's data alone.
+
 The intended production schedule is one overnight sync per day, defaulting to `0 2 * * *` in `Europe/London`. Manual dry-run scripts remain available for development and troubleshooting.
 
 Operational event tables store metadata only. They must not store raw webhook payloads, tokens, customer email addresses, phone numbers, or full addresses.

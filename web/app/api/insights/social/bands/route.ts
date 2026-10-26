@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requestShop } from "@/lib/server/insights/request-shop";
 import { resetBands, saveBands } from "@/lib/server/social-bands-service";
 
 export const dynamic = "force-dynamic";
@@ -13,11 +14,11 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
     if (body?.reset === true) {
-      const found = await resetBands(body?.kind);
+      const found = await resetBands(body?.kind, (await requestShop(request)).id);
       if (!found) return NextResponse.json({ error: "Unknown platform" }, { status: 400, headers: NO_STORE });
       return NextResponse.json({ ok: true }, { headers: NO_STORE });
     }
-    const saved = await saveBands(body?.kind, body?.rules);
+    const saved = await saveBands(body?.kind, body?.rules, (await requestShop(request)).id);
     if (!saved.ok) return NextResponse.json({ error: saved.error }, { status: 400, headers: NO_STORE });
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (error) {

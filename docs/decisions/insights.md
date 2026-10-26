@@ -812,3 +812,26 @@ Counts such as impressions and clicks still add up. Conversions and revenue are 
 **Not built:** YouTube and Pinterest (shown « Coming soon »). The freshness strip also does not carry the providers: their sync state is the panel's own status row, read from `social_connections`.
 
 **Reusability caveat.** In Meta's Development mode, only people with a role on the Meta app can connect. That works for one company. Offering this to other companies needs Meta App Review plus Business Verification, and Google Ads Basic access with a published consent screen.
+
+### Several shops, one dashboard (2026-10-26)
+
+**Barbara Gould joins Qiriness in the same database and the same deployment, for Insights only** (owner, 2026-10-26). Both are Lap Groupe shops. This replaces the plan of 2026-10-12: a separate Supabase project (`ybowyv…`) and Vercel account, joined by a « Switch shop » link menu (`SHOP_LINKS`). That project holds nothing and can go. The link menu sent a click on Barbara Gould to that empty deployment, so it was removed (`shop-links.mjs`, the user-menu section); a leftover `SHOP_LINKS` is ignored.
+
+- **Which shops:** `DASHBOARD_SHOPS` (store domains, comma separated, in switcher order; `scripts/lib/dashboard-shops.mjs`). `SHOPIFY_STORE_DOMAIN` is the **support desk's** shop and is always served. Unset, the dashboard is exactly as before. It is a list of domains, not code, so a third shop is a variable.
+- **One Shopify app for every shop.** Its client-credentials token is minted per store domain, so a shop needs no secret of its own. The same app's webhooks arrive for every shop, signed with the same secret. A shop on a **different** app would need its own credentials and webhook secret; that is not built.
+- **Only Insights is per shop.** Tickets, orders, agent setup, settings and the worker are the desk shop's (`getShop()`). A shop without the desk has no Support or AI agent tab (`DESK_ONLY_PANELS`); a link to one opens its Overview.
+- **The shop is in the address (`?shop=<subdomain>`), never only in a cookie.**
+  - The address is what the browser keeps a prefetched page under. With the shop in a cookie, Sales for one shop could be shown from the other's prefetch.
+  - The middleware sends an Insights page without a valid shop to the one last looked at (cookie `insights_shop`, the owner's choice), or the first listed.
+  - API calls from a panel carry the page's shop (`useInsightsFrame().api`), so two tabs on two shops each write their own.
+  - On the server, a request naming no shop is the **desk shop**, never "the first listed": the worker's monthly report asks with none.
+- **Every shared cache read names its shop.** The Insights SQL functions take `p_shop` and are cached by their arguments.
+  - ShopifyQL was cached by the query text alone, and two shops' "net sales, last 30 days" are the same text. It is now keyed by shop domain and query, with a client, queue and throttle gate per shop. Shopify's bucket is per store, so one shop's busy minute no longer holds the other's cards.
+  - `shop-scoped-reads.test.mjs` fails if a cached read stops naming its shop. A leak would show plausible wrong figures and fail nothing, which is why this is a test, not a review note.
+- **Order webhooks re-read the order from the shop that sent it.** It used to be read with the desk shop's client. Only a shop on `DASHBOARD_SHOPS` gets a client, because the header is not yet verified at that point. Any other shop is answered `unknown_shop` and not read anywhere.
+- **The nightly runs once per shop**, one after another (GitHub variable `DASHBOARD_SHOPS`).
+  - One shop's failure does not stop the next, and the run still ends red if any failed.
+  - Each run upserts its own `shops` row, so the first nightly creates a new shop's row.
+- **Everyone with a dashboard role sees every shop** (owner's choice). Per-person shop access would be an `app_metadata` list checked on every request, not only in the switcher.
+- **Settings stays the desk shop's.** Connecting Klaviyo or Meta for another shop is not built. Its Marketing and Social panels show « not connected ».
+- **Cost**, measured on Qiriness and scaled to Barbara Gould (<1,000 customers, ≤1 order a day): about +1–3 MB a day of log ingest, mostly from dashboard use, and under 1 MB a day of egress.

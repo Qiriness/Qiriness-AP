@@ -39,10 +39,10 @@ export async function readBandRows(shopId?: string): Promise<BandRow[]> {
  * checked before any is written, so a bad one saves nothing. Returns the
  * reason when it fails.
  */
-export async function saveBands(kind: unknown, rules: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function saveBands(kind: unknown, rules: unknown, forShop?: string): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!(ORGANIC_KINDS as string[]).includes(kind as string)) return { ok: false, error: "Unknown platform" };
   if (!rules || typeof rules !== "object") return { ok: false, error: "rules must be an object" };
-  const shopId = await getShopId();
+  const shopId = forShop ?? (await getShopId());
   const rows: Record<string, unknown>[] = [];
   for (const [metric, input] of Object.entries(rules as Record<string, unknown>)) {
     const checked = validateRule(metric, input) as { ok: true; rule: { mode: string; low: number | null; high: number | null } } | { ok: false; error: string };
@@ -55,9 +55,9 @@ export async function saveBands(kind: unknown, rules: unknown): Promise<{ ok: tr
 }
 
 /** Forgets a platform's stored rules, so the suggestions apply again. */
-export async function resetBands(kind: unknown): Promise<boolean> {
+export async function resetBands(kind: unknown, forShop?: string): Promise<boolean> {
   if (!(ORGANIC_KINDS as string[]).includes(kind as string)) return false;
-  await supabaseDelete(getSupabaseClient(), SOCIAL_BAND_T.BANDS, { shop_id: await getShopId(), kind: kind as string }, { returning: 'minimal' });
+  await supabaseDelete(getSupabaseClient(), SOCIAL_BAND_T.BANDS, { shop_id: forShop ?? (await getShopId()), kind: kind as string }, { returning: 'minimal' });
   return true;
 }
 

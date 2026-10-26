@@ -16,8 +16,8 @@ import styles from "./InsightsHeader.module.css";
 const SETTLE_MS = 3_000;
 const STAGGER_MS = 2_000;
 
-/** The query keys a panel switch carries over, so the range survives a tab change. */
-const KEPT = ["range", "from", "to", "month", "platform"];
+/** The query keys a panel switch carries over, so the shop and the range survive a tab change. */
+const KEPT = ["shop", "range", "from", "to", "month", "platform"];
 
 /**
  * The bar that switches panels. Real links, so each panel can be bookmarked and

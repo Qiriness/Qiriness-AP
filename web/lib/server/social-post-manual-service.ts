@@ -12,8 +12,8 @@ export async function readManualPosts(shopId: string): Promise<Map<string, Manua
   for (const row of rows) { const key = `${row.account_id}|${row.post_id}`; result.set(key, [...(result.get(key) ?? []), row]); }
   return result;
 }
-export async function setManualPost(accountId: string, postId: string, metric: string, value: number | null) {
-  const shopId = await getShopId();
+export async function setManualPost(accountId: string, postId: string, metric: string, value: number | null, forShop?: string) {
+  const shopId = forShop ?? (await getShopId());
   const client = getSupabaseClient();
   const [post] = await supabaseSelect(client, 'social_posts', { shop_id: shopId, account_id: accountId, external_id: postId }, 'views,reach,engagement,likes,comments,shares,follows', { limit: 1 });
   if (!post) return false;
@@ -30,4 +30,4 @@ export function checkPercent(value: unknown) {
   const checked = checkManualMetric('nonFollowersPct', value ?? null);
   return checked.ok ? { ok: true as const, percent: checked.value as number | null } : { ok: false as const, error: checked.error as string };
 }
-export const setNonFollowers = (accountId: string, postId: string, percent: number | null) => setManualPost(accountId, postId, 'nonFollowersPct', percent);
+export const setNonFollowers = (accountId: string, postId: string, percent: number | null, forShop?: string) => setManualPost(accountId, postId, 'nonFollowersPct', percent, forShop);

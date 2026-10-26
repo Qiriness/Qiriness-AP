@@ -31,7 +31,7 @@ import {
 } from "../../../../scripts/lib/insights-range.mjs";
 import type { InsightsRange, PlatformSplit } from "../../types";
 import { orderArgs, rangeArgs, resolveInsightsContext, type InsightsContext } from "./context";
-import { getShop } from "../shop";
+import { getShopByDomain } from "../shop";
 import { liveChannels, liveFunnel, liveLandingTypes, liveTotals, salesFor, sessionTotalsForWindows } from "./analytics";
 import { getInventoryExceptions } from "./inventory";
 import { getPromotions } from "./marketing-service";
@@ -127,8 +127,9 @@ type Window = { from: string; to: string };
 /** A month the report cannot be built for: malformed, or not started yet. */
 export class ReportMonthError extends Error {}
 
-export async function buildSalesReport(month: string) {
-  const ctx = await resolveInsightsContext({ month });
+/** `shopSlug`: the Insights shop (`?shop=`). The worker's monthly mail passes none: the support desk's shop. */
+export async function buildSalesReport(month: string, shopSlug?: string) {
+  const ctx = await resolveInsightsContext({ month, shop: shopSlug });
   if (ctx.range.preset !== "month" || ctx.range.query.month !== month) {
     throw new ReportMonthError(`No report for "${month}": expected a month in YYYY-MM form, not in the future.`);
   }
@@ -344,7 +345,7 @@ export async function buildSalesReport(month: string) {
     inProgress: range.currentKey !== null,
     generatedAt: ctx.renderedAt,
     timezone: ctx.tz,
-    companyName: (await getShop())?.shopName ?? null,
+    companyName: (await getShopByDomain(ctx.shopDomain))?.shopName ?? null,
     modes,
     periods,
     // TWO YEARS of monthly buckets. The chart draws the last twelve and lays

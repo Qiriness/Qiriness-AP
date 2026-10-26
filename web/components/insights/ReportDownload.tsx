@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useT } from "@/lib/i18n/client";
 import styles from "./OverviewView.module.css";
+import { useInsightsFrame } from "./InsightsFrame";
 
 /**
  * Pick a month and download its sales report — the same HTML file that will
@@ -16,6 +17,7 @@ export function ReportDownload({
   months: { id: string; label: string }[];
   initial: string;
 }) {
+  const { api } = useInsightsFrame();
   const t = useT();
   const [month, setMonth] = useState(months.some((m) => m.id === initial) ? initial : months[0]?.id ?? "");
   if (months.length === 0) return <p className={styles.muted}>{t("insights.shell.noMonthEnded")}</p>;
@@ -31,7 +33,7 @@ export function ReportDownload({
           ))}
         </select>
       </label>
-      <a className={styles.reportButton} href={`/api/insights/report?month=${month}`} download>
+      <a className={styles.reportButton} href={api(`/api/insights/report?month=${month}`)} download>
         {t("insights.shell.downloadReport")}
       </a>
     </div>

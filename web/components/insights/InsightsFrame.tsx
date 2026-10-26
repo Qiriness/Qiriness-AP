@@ -44,6 +44,12 @@ interface FrameApi {
   go: (href: string, label?: string) => void;
   /** Re-read the database for the same URL. */
   refresh: () => void;
+  /**
+   * An Insights API path for THIS page's shop (its `?shop=`). Every call from
+   * a panel goes through it: the server takes the shop from the request, so two
+   * tabs on two shops each read and write their own.
+   */
+  api: (path: string) => string;
 }
 
 const FrameContext = createContext<FrameApi>({
@@ -52,6 +58,7 @@ const FrameContext = createContext<FrameApi>({
   prefetch: () => {},
   go: () => {},
   refresh: () => {},
+  api: (path) => path,
 });
 
 export function useInsightsFrame() {
@@ -120,7 +127,15 @@ export function InsightsFrame({
   );
 
   const refresh = useCallback(() => startTransition(() => router.refresh()), [router]);
-  const api = useMemo(() => ({ pending, navigate, prefetch, go, refresh }), [pending, navigate, prefetch, go, refresh]);
+  const shop = params?.get("shop") ?? null;
+  const apiPath = useCallback(
+    (path: string) => (shop ? `${path}${path.includes("?") ? "&" : "?"}shop=${encodeURIComponent(shop)}` : path),
+    [shop]
+  );
+  const api = useMemo(
+    () => ({ pending, navigate, prefetch, go, refresh, api: apiPath }),
+    [pending, navigate, prefetch, go, refresh, apiPath]
+  );
 
   return (
     <FrameContext.Provider value={api}>

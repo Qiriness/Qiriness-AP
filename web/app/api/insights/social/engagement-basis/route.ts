@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { requestShop } from "@/lib/server/insights/request-shop";
 import { setEngagementBasis } from "@/lib/server/social-connections-service";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ const NO_STORE = { "Cache-Control": "no-store" };
 export async function PUT(request: Request) {
   try {
     const body = await request.json().catch(() => ({}));
-    const found = await setEngagementBasis(body?.kind, body?.basis);
+    const found = await setEngagementBasis(body?.kind, body?.basis, (await requestShop(request)).id);
     if (!found) return NextResponse.json({ error: "Unknown platform or basis" }, { status: 400, headers: NO_STORE });
     return NextResponse.json({ ok: true }, { headers: NO_STORE });
   } catch (error) {

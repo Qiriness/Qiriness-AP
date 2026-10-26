@@ -5,6 +5,7 @@ import type {AudienceDimension,OrganicKind,SocialAudience as AudienceData} from 
 import {checkAudienceEntries} from '../../../scripts/lib/social-audience-manual.mjs';
 import {BarList,Card,Grid,Caption} from './InsightsKit';
 import styles from './SocialAudience.module.css';
+import { useInsightsFrame } from "./InsightsFrame";
 const DIMS:AudienceDimension[]=['gender','age','country','city'];
 export function SocialAudience({audience,kind}:{audience:AudienceData|null;kind:OrganicKind}) {
   const tr=useT();
@@ -18,6 +19,7 @@ export function SocialAudience({audience,kind}:{audience:AudienceData|null;kind:
 }
 function AudienceGraph({dimension,audience,kind}:{dimension:AudienceDimension;audience:AudienceData|null;kind:OrganicKind}) {
   const tr=useT(),{percentOf,integer}=useFormat();
+  const { api } = useInsightsFrame();
   // Acknowledged writes render immediately; a slow dashboard read cannot restore old entries.
   const [saved,setSaved]=useState<{data:AudienceData[AudienceDimension];capturedOn:string}|null>(null);
   const native=audience?.dimensionMeta?.[dimension]?.source==='platform';
@@ -40,7 +42,7 @@ function AudienceGraph({dimension,audience,kind}:{dimension:AudienceDimension;au
     if(!checked.ok){setError(tr('insights.social.audience.manual.invalid'));return;}
     busy.current=true;setSaving(true);setError(null);
     try {
-      const response=await fetch('/api/insights/social/manual-audience',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,dimension,capturedOn:date,entries:checked.entries})});
+      const response=await fetch(api('/api/insights/social/manual-audience'),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,dimension,capturedOn:date,entries:checked.entries})});
       if(!response.ok)throw new Error();
       setSaved({data:(checked.entries??[]).map(entry=>({...entry,share:entry.value})),capturedOn:date});
       setEditing(false);

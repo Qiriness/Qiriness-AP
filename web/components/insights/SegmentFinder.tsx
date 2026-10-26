@@ -14,6 +14,7 @@ import { intlTag } from "@/lib/i18n/locales";
 import { describeSegmentL, segmentError } from "@/lib/segment-messages";
 import t from "./tables.module.css";
 import styles from "./SegmentFinder.module.css";
+import { useInsightsFrame } from "./InsightsFrame";
 
 interface Row {
   key: number;
@@ -37,6 +38,7 @@ const INITIAL_ROWS: Row[] = [
  * because the answer names people and every search is logged.
  */
 export function SegmentFinder() {
+  const { api } = useInsightsFrame();
   const tr = useT();
   const locale = useLocale();
   const [windowMonths, setWindowMonths] = useState(String(SEGMENT_WINDOW_MONTHS.default));
@@ -80,7 +82,7 @@ export function SegmentFinder() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/api/insights/segment-finder", {
+      const response = await fetch(api("/api/insights/segment-finder"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(checked.segment),

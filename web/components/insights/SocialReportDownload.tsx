@@ -4,6 +4,7 @@ import { useT } from "@/lib/i18n/client";
 import type { OrganicKind } from "@/lib/social-types";
 import { Card } from "./InsightsKit";
 import styles from "./SocialReportDownload.module.css";
+import { useInsightsFrame } from "./InsightsFrame";
 
 export interface SocialReportOptions {
   months: { id: string; label: string }[];
@@ -11,6 +12,7 @@ export interface SocialReportOptions {
   span: 1 | 6 | 12;
 }
 export function SocialReportDownload({ kinds, options }: { kinds: OrganicKind[]; options: SocialReportOptions }) {
+  const { api } = useInsightsFrame();
   const t = useT();
   const [month, setMonth] = useState(options.months.some(m => m.id === options.initial) ? options.initial : options.months[0]?.id ?? "");
   const [span, setSpan] = useState(options.span);
@@ -22,7 +24,7 @@ export function SocialReportDownload({ kinds, options }: { kinds: OrganicKind[];
     setBusy(true); setError(false);
     try {
       const query = new URLSearchParams({ month, months: String(span), platforms: included.join(",") });
-      const response = await fetch("/api/insights/social/report?" + query);
+      const response = await fetch(api("/api/insights/social/report?" + query));
       if (!response.ok || !response.headers.get("content-type")?.includes("text/html")) throw new Error("Report unavailable");
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");

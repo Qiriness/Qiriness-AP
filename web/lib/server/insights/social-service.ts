@@ -95,7 +95,7 @@ export function parseSocialParams(searchParams: SearchParams): SocialParams {
 }
 
 export async function getSocialPanel(ctx: InsightsContext, params: SocialParams): Promise<SocialPanel> {
-  const connections = await getSocialConnections();
+  const connections = await getSocialConnections(ctx.shopId);
   const tracked = connections.providers.flatMap((p) => p.accounts).filter((a) => a.enabled);
   const has = (kind: SocialKind) => tracked.some((a) => a.kind === kind);
 

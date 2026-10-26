@@ -242,10 +242,9 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # through the nightly's own query and
 |       |                                # mapper, with a replay guard and an
 |       |                                # out-of-order guard; then the snooze wake
-|       |-- shop-links.mjs               # SHOP_LINKS (`Name|https://host`, comma separated)
-|       |                                # -> the other shops' dashboards; /api/auth/me
-|       |                                # returns them, UserMenu draws « Switch shop »
-|       |                                # as plain links (separate deployments, accounts)
+|       |-- dashboard-shops.mjs          # DASHBOARD_SHOPS: the shops Insights serves (store
+|       |                                # domains); SHOPIFY_STORE_DOMAIN = the support desk's;
+|       |                                # slug = subdomain (?shop=); the nightly loops over it
 |       |-- dashboard-auth.mjs           # isomorphic: ROLES, what each may open
 |       |                                # (canAccessPath), and the Supabase Auth
 |       |                                # client — ES256 check locally, then

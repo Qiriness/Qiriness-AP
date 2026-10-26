@@ -2,7 +2,8 @@ import { supabaseSelectAll } from "../../../../scripts/lib/supabase-rest-client.
 import { SOCIAL_T } from "../../../../scripts/lib/tables.mjs";
 import { adaptSocialReport, dateInZone, shiftMonth, endOfMonth, socialReportVersion } from "../../../../scripts/lib/social-report-data.mjs";
 import { renderSocialReport, socialReportState } from "../../../../scripts/lib/social-report.mjs";
-import { getShop } from "../shop";
+import { getShopByDomain } from "../shop";
+import { insightsShopFor } from "./context";
 import { readBandRows } from "../social-bands-service";
 import { readSocialTags } from "../social-tags-service";
 import { getSocialReportReach } from "./social-service";
@@ -13,7 +14,8 @@ import { readManualAudience } from "../social-audience-manual-service";
 export class SocialReportInputError extends Error {}
 
 export async function buildSocialReport(params: URLSearchParams, locale: "fr" | "en") {
-  const shop = await getShop();
+  // The Insights shop the download was asked from (`?shop=`).
+  const shop = await getShopByDomain(insightsShopFor({ shop: params.get("shop") ?? undefined }).domain);
   if (!shop) throw new Error("No shop record.");
   const timezone = shop.ianaTimezone ?? "UTC";
   const asOf = dateInZone(new Date(), timezone);

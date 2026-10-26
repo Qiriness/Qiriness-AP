@@ -6,6 +6,7 @@ import { useT } from "@/lib/i18n/client";
 import type { BandMetric, BandMode, BandRule, OrganicKind } from "@/lib/social-types";
 import styles from "./SocialView.module.css";
 import { modesFor as metricModes } from '../../../scripts/lib/social-bands.mjs';
+import { useInsightsFrame } from "./InsightsFrame";
 
 const METRICS: BandMetric[] = ["views", "reach", "engagementRate", "likes", "comments", "shares", "follows", "engagement", "nonFollowersPct"];
 /** A rate is already a ratio, so « % of followers » is not offered for it (as social-bands.mjs `modesFor`). */
@@ -23,6 +24,7 @@ const toDraft = (rules: Record<BandMetric, BandRule>): Draft =>
  * Saved for the platform as a whole, so every post in the table is recoloured.
  */
 export function BandsEditor({ kind, rules, custom }: { kind: OrganicKind; rules: Record<BandMetric, BandRule>; custom: boolean }) {
+  const { api } = useInsightsFrame();
   const tr = useT();
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(() => toDraft(rules));
@@ -38,7 +40,7 @@ export function BandsEditor({ kind, rules, custom }: { kind: OrganicKind; rules:
     setBusy(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/insights/social/bands", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const response = await fetch(api("/api/insights/social/bands"), { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error ?? `HTTP ${response.status}`);
       setMessage({ error: false, text: done });
       router.refresh();
