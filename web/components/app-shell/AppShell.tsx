@@ -88,6 +88,24 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
     };
   }, []);
 
+  // THE TAB ICON FOLLOWS THE SHOP ON SCREEN: the layout's icon is the desk
+  // shop's (/brand/logo.png), and with another shop open its own mark
+  // (/brand/shops/<slug>.png) tells the two tabs apart. A shop without a file
+  // keeps the desk icon rather than showing a broken one.
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link) return;
+    const fallback = "/brand/logo.png";
+    if (shop.logo === fallback) {
+      link.href = fallback;
+      return;
+    }
+    const probe = new window.Image();
+    probe.onload = () => (link.href = shop.logo);
+    probe.onerror = () => (link.href = fallback);
+    probe.src = shop.logo;
+  }, [shop.logo]);
+
   // Close the mobile drawer on Escape.
   useEffect(() => {
     if (!drawerOpen) return;
