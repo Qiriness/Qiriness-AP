@@ -683,7 +683,7 @@ function channelTable(data) {
 function operations(data) {
   const inv = data.inventory;
   const carrierTotal = data.carriers.reduce((sum, x) => sum + x.shipments, 0);
-  const statusClass = (x) => (x === 'out' || x === 'critical' ? 'negative' : x === 'low' ? 'warn' : '');
+  const statusClass = (x) => (x === 'out' || x === 'critical' ? 'negative' : x === 'watch' ? 'warn' : '');
   const synced = inv.syncedAt ? inv.syncedAt.slice(0, 10) : 'never';
   const opsCards = (mode) => {
     const c = mode.period;
@@ -821,7 +821,22 @@ ${operations(data)}
 `;
 }
 
-/** The download's file name. */
-export function reportFileName(month) {
-  return `qiriness-sales-report-${String(month).replace(/[^0-9-]/g, '')}.html`;
+/**
+ * The download's and the mail attachment's file name, led by the shop's name
+ * (`shops.shop_name`): « Barbara Gould » -> `barbara-gould-sales-report-2026-09.html`.
+ * It was the literal `qiriness-`, so every shop's file was named Qiriness.
+ */
+export function reportFileName(month, brand) {
+  return `${brandSlug(brand)}-sales-report-${String(month).replace(/[^0-9-]/g, '')}.html`;
+}
+
+/** A shop's name as a file-name word: « Barbara Gould » -> `barbara-gould`; `shop` when there is none. */
+export function brandSlug(brand) {
+  const name = String(brand ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return name || 'shop';
 }

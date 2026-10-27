@@ -83,11 +83,15 @@ export function createJobWaker({ listener = null, nextDueAt, hasDue, checkInterv
   };
 }
 
-/** A notification's payload, `{shop_id, kind}`; anything unreadable counts as a ring. */
-export function ringsFor(payload, { shopId, kinds }) {
+/**
+ * A notification's payload, `{shop_id, kind}`; anything unreadable counts as a
+ * ring. `shopIds`: every shop whose jobs this worker runs — the desk shop, and
+ * the other dashboard shops for their « Sync now » (social) jobs.
+ */
+export function ringsFor(payload, { shopId, shopIds = [shopId], kinds }) {
   try {
     const { shop_id: shop, kind } = JSON.parse(payload);
-    return (!shop || shop === shopId) && (!kind || kinds.includes(kind));
+    return (!shop || shopIds.includes(shop)) && (!kind || kinds.includes(kind));
   } catch {
     return true;
   }
@@ -100,7 +104,7 @@ export function ringsFor(payload, { shopId, kinds }) {
  * rings once, so the waker re-reads the queue for anything missed meanwhile;
  * losing the connection rings too, so the waker stops trusting it at once.
  */
-export function createJobListener({ connect, shopId, kinds, logger, pingMs = 240_000, maxBackoffMs = 60_000 }) {
+export function createJobListener({ connect, shopId, shopIds = [shopId], kinds, logger, pingMs = 240_000, maxBackoffMs = 60_000 }) {
   let client = null;
   let listening = false;
   let backoffMs = 1000;
@@ -134,7 +138,7 @@ export function createJobListener({ connect, shopId, kinds, logger, pingMs = 240
     try {
       client = await connect();
       client.on('notification', (message) => {
-        if (message.channel === 'mail_jobs' && ringsFor(message.payload, { shopId, kinds })) ringAll();
+        if (message.channel === 'mail_jobs' && ringsFor(message.payload, { shopIds, kinds })) ringAll();
       });
       client.on('error', (error) => down(error.message));
       client.on('end', () => down('connection ended'));

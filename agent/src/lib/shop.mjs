@@ -12,6 +12,21 @@ export async function resolveShopId(supabase, shopDomain) {
 }
 
 /**
+ * The dashboard's shops (config.dashboardShops) with their `shops.id`. A shop
+ * not synced yet has no row and is left out, logged: its first nightly creates
+ * the row, and the worker picks it up at its next start.
+ */
+export async function resolveServedShops(supabase, shops, logger) {
+  const resolved = [];
+  for (const shop of shops) {
+    const rows = await supabaseSelect(supabase, 'shops', { shop_domain: shop.domain }, 'id');
+    if (rows[0]?.id) resolved.push({ ...shop, id: rows[0].id });
+    else logger?.warn('shops.not_synced', { domain: shop.domain });
+  }
+  return resolved;
+}
+
+/**
  * The shop's IANA time zone (`shops.iana_timezone`, from Shopify), or UTC when
  * it is unset or not a zone this runtime knows. Read where a prompt shows a
  * time a person at the shop would recognise.

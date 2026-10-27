@@ -244,7 +244,16 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # out-of-order guard; then the snooze wake
 |       |-- dashboard-shops.mjs          # DASHBOARD_SHOPS: the shops Insights serves (store
 |       |                                # domains); SHOPIFY_STORE_DOMAIN = the support desk's;
-|       |                                # slug = subdomain (?shop=); the nightly loops over it
+|       |                                # slug = subdomain (?shop=); the nightly loops over it;
+|       |                                # the worker reads it for reports + social jobs
+|       |-- shop-mail-settings.mjs       # per shop: sender + recipients ([{role}|{email}]) of
+|       |                                # the monthly report and the stock alert; resolve
+|       |                                # roles to active accounts at send time
+|       |-- stock-alert.mjs              # the stock alert's measurement and words: read
+|       |                                # out/critical, "newly", the .xlsx, the French mail
+|       |-- xlsx-writer.mjs              # dependency-free one-sheet .xlsx (zip + XML)
+|       |-- social-account-claims.mjs    # one account counts for one shop: trackedElsewhere
+|       |                                # (discovery adds it off; switching on is refused)
 |       |-- dashboard-auth.mjs           # isomorphic: ROLES, what each may open
 |       |                                # (canAccessPath), and the Supabase Auth
 |       |                                # client — ES256 check locally, then

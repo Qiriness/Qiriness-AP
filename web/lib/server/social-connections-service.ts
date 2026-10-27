@@ -11,6 +11,10 @@
  * request may, so the callback queues a `sync_social` job and the worker runs
  * it (agent/src/social/social-job-runner.mjs); « Sync now » queues the same job.
  *
+ * EVERY CALL NAMES ITS SHOP. A connection belongs to one shop: the routes
+ * resolve it from `?shop=` (integration-shop.ts), the OAuth state carries it to
+ * the callback signed, and nothing here falls back to the support desk's shop.
+ *
  * Server-only.
  */
 
@@ -37,7 +41,7 @@ import {
   setAccountEnabled,
 } from "../../../scripts/lib/social-sync.mjs";
 import { getSupabaseClient } from "./insights/shared";
-import { getShopId } from "./knowledge-service";
+import { servedShopById } from "./integration-shop";
 import type { SocialConnectionsStatus, SocialProvider } from "../social-types";
 
 export { STATE_COOKIE };
@@ -53,10 +57,8 @@ export function appOrigin(requestOrigin: string): string {
   return socialAppConfig(process.env).publicUrl ?? requestOrigin;
 }
 
-/** `forShop`: the Insights shop. Settings (connecting accounts) is the support desk's shop. */
-export async function getSocialConnections(forShop?: string): Promise<SocialConnectionsStatus> {
+export async function getSocialConnections(shopId: string): Promise<SocialConnectionsStatus> {
   const config = socialAppConfig(process.env);
-  const shopId = forShop ?? (await getShopId());
   const { connections, accounts } = await readSocialStatus(getSupabaseClient(), shopId);
   const queued = await queuedProviders(shopId);
 
@@ -92,13 +94,13 @@ export async function getSocialConnections(forShop?: string): Promise<SocialConn
 }
 
 /** The consent URL to send the person to, and the nonce for their browser's cookie. */
-export async function startConnect(provider: SocialProvider, origin: string, userId: string | null) {
+export async function startConnect(provider: SocialProvider, shopId: string, origin: string, userId: string | null) {
   const config = socialAppConfig(process.env);
   const app = config[provider];
   if (!app.canConnect || !config.stateSecret) {
     return { ok: false as const, error: "not_configured" };
   }
-  const { state, nonce } = createState({ provider, shopId: await getShopId(), userId, secret: config.stateSecret });
+  const { state, nonce } = createState({ provider, shopId, userId, secret: config.stateSecret });
   const redirect = redirectUri(appOrigin(origin), provider);
   const url =
     provider === "meta"
@@ -122,15 +124,18 @@ export async function startConnect(provider: SocialProvider, origin: string, use
 export async function completeConnect(
   provider: SocialProvider,
   input: { code: string | null; state: string | null; providerError: string | null; cookieNonce: string | undefined; origin: string; userId: string | null }
-): Promise<{ ok: true; accounts: number } | { ok: false; code: string }> {
+): Promise<{ ok: true; accounts: number; shopSlug: string } | { ok: false; code: string; shopSlug?: string }> {
   if (input.providerError) return { ok: false, code: "denied" };
   const config = socialAppConfig(process.env);
   const checked = verifyState({ state: input.state, cookieNonce: input.cookieNonce, provider, secret: config.stateSecret });
   if (!checked.ok) return { ok: false, code: "state" };
 
-  const shopId = await getShopId();
-  if (checked.shopId !== shopId || checked.userId !== input.userId) return { ok: false, code: "state" };
-  if (!input.code) return { ok: false, code: "denied" };
+  // The shop the person was on when they pressed Connect, signed into the
+  // state, and still one the dashboard serves.
+  const shop = await servedShopById(checked.shopId);
+  if (!shop || checked.userId !== input.userId) return { ok: false, code: "state" };
+  const shopId = shop.id;
+  if (!input.code) return { ok: false, code: "denied", shopSlug: shop.slug };
 
   const connect = provider === "meta" ? connectMeta : provider === "tiktok" ? connectTikTok : connectGoogle;
   let result: { ok: boolean; code?: string; error?: string; accounts?: number };
@@ -145,29 +150,34 @@ export async function completeConnect(
     });
   } catch (error) {
     console.error(`social connect ${provider} failed:`, error instanceof Error ? error.message : error);
-    return { ok: false, code: "exchange_failed" };
+    return { ok: false, code: "exchange_failed", shopSlug: shop.slug };
   }
   if (!result.ok) {
     console.warn(`social connect ${provider} refused:`, result.error);
-    return { ok: false, code: result.code ?? "exchange_failed" };
+    return { ok: false, code: result.code ?? "exchange_failed", shopSlug: shop.slug };
   }
-  await queueSync(provider);
-  return { ok: true, accounts: result.accounts ?? 0 };
+  await queueSync(provider, shopId);
+  return { ok: true, accounts: result.accounts ?? 0, shopSlug: shop.slug };
 }
 
 /** Queue a `sync_social` job. A burst of clicks collapses into the one already queued. */
-export async function queueSync(provider: SocialProvider): Promise<void> {
-  const jobs = createMailJobRecord(getSupabaseClient(), { shopId: await getShopId() });
+export async function queueSync(provider: SocialProvider, shopId: string): Promise<void> {
+  const jobs = createMailJobRecord(getSupabaseClient(), { shopId });
   await jobs.enqueue({ kind: "sync_social", dedupeKey: `social:${provider}`, payload: { provider } });
 }
 
-export async function disconnect(provider: SocialProvider): Promise<void> {
-  await disconnectSocial({ supabase: getSupabaseClient(), shopId: await getShopId(), provider });
+export async function disconnect(provider: SocialProvider, shopId: string): Promise<void> {
+  await disconnectSocial({ supabase: getSupabaseClient(), shopId, provider });
 }
 
-export async function setTracked(accountId: string, enabled: boolean): Promise<boolean> {
-  const row = await setAccountEnabled({ supabase: getSupabaseClient(), shopId: await getShopId(), accountId, enabled });
-  return Boolean(row);
+/**
+ * Track an account, or stop. `tracked_elsewhere`: another shop tracks it, and
+ * one account counts for one shop (scripts/lib/social-account-claims.mjs).
+ */
+export async function setTracked(shopId: string, accountId: string, enabled: boolean): Promise<"ok" | "not_found" | "tracked_elsewhere"> {
+  const row = await setAccountEnabled({ supabase: getSupabaseClient(), shopId, accountId, enabled });
+  if (!row) return "not_found";
+  return "refused" in row ? "tracked_elsewhere" : "ok";
 }
 
 /**
@@ -175,9 +185,9 @@ export async function setTracked(accountId: string, enabled: boolean): Promise<b
  * platform, so it is written on every account of that kind. False for a kind or
  * a basis the app does not offer.
  */
-export async function setEngagementBasis(kind: unknown, basis: unknown, forShop?: string): Promise<boolean> {
+export async function setEngagementBasis(kind: unknown, basis: unknown, shopId: string): Promise<boolean> {
   if (!(ORGANIC_KINDS as string[]).includes(kind as string) || !(ENGAGEMENT_BASES as string[]).includes(basis as string)) return false;
-  const rows = await supabaseUpdate(getSupabaseClient(), SOCIAL_T.ACCOUNTS, { shop_id: forShop ?? (await getShopId()), kind: kind as string }, { engagement_basis: basis }, { select: "id" });
+  const rows = await supabaseUpdate(getSupabaseClient(), SOCIAL_T.ACCOUNTS, { shop_id: shopId, kind: kind as string }, { engagement_basis: basis }, { select: "id" });
   return rows.length > 0;
 }
 

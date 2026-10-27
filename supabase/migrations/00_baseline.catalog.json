@@ -1713,7 +1713,11 @@
     "vip_min_spend numeric(12,2)",
     "vip_min_orders integer",
     "vip_window_months integer",
-    "vip_rule_changed_at timestamp with time zone"
+    "vip_rule_changed_at timestamp with time zone",
+    "report_sender text",
+    "report_recipients jsonb not null default '[{\"role\": \"management\"}]'::jsonb",
+    "stock_alert_sender text",
+    "stock_alert_recipients jsonb not null default '[]'::jsonb"
    ],
    "constraints": [
     "shops_app_settings_object_check: CHECK ((jsonb_typeof(app_settings) = 'object'::text))",
@@ -1721,7 +1725,11 @@
     "shops_order_retention_check: CHECK ((((order_retention_mode = 'months'::text) AND (order_retention_months IS NOT NULL) AND (order_retention_months > 0)) OR ((order_retention_mode = 'indefinite'::text) AND (order_retention_months IS NULL))))",
     "shops_pkey: PRIMARY KEY (id)",
     "shops_raw_payload_object_check: CHECK ((jsonb_typeof(raw_shopify_payload) = 'object'::text))",
+    "shops_report_recipients_array_check: CHECK ((jsonb_typeof(report_recipients) = 'array'::text))",
+    "shops_report_sender_shape_check: CHECK (((report_sender IS NULL) OR (report_sender ~ '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$'::text)))",
     "shops_shop_domain_unique: UNIQUE (shop_domain)",
+    "shops_stock_alert_recipients_array_check: CHECK ((jsonb_typeof(stock_alert_recipients) = 'array'::text))",
+    "shops_stock_alert_sender_shape_check: CHECK (((stock_alert_sender IS NULL) OR (stock_alert_sender ~ '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$'::text)))",
     "shops_sync_cursors_object_check: CHECK ((jsonb_typeof(sync_cursors) = 'object'::text))",
     "shops_vip_rule_check: CHECK ((((vip_min_spend IS NULL) AND (vip_min_orders IS NULL) AND (vip_window_months IS NULL)) OR ((vip_min_spend >= (0)::numeric) AND (vip_min_orders >= 0) AND ((vip_window_months >= 1) AND (vip_window_months <= 120)))))"
    ]
@@ -2013,6 +2021,29 @@
     "spam_audit_pkey: PRIMARY KEY (id)",
     "spam_audit_shop_id_fkey: FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE",
     "spam_audit_shop_message_unique: UNIQUE (shop_id, graph_message_id)"
+   ]
+  },
+  "public.stock_alerts": {
+   "rls": true,
+   "force_rls": false,
+   "acl": {
+    "service_role": "Dadmrtwx"
+   },
+   "columns": [
+    "id uuid not null default gen_random_uuid()",
+    "shop_id uuid not null",
+    "status text not null",
+    "out_product_ids text[] not null default '{}'::text[]",
+    "critical_product_ids text[] not null default '{}'::text[]",
+    "new_product_ids text[] not null default '{}'::text[]",
+    "recipients integer",
+    "error_summary text",
+    "created_at timestamp with time zone not null default now()"
+   ],
+   "constraints": [
+    "stock_alerts_pkey: PRIMARY KEY (id)",
+    "stock_alerts_shop_id_fkey: FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE",
+    "stock_alerts_status_check: CHECK ((status = ANY (ARRAY['baseline'::text, 'sent'::text, 'failed'::text])))"
    ]
   },
   "public.storefront_chat_messages": {
@@ -2891,6 +2922,7 @@
   "CREATE INDEX spam_audit_body_expiry_idx ON public.spam_audit USING btree (shop_id, body_expires_at) WHERE (body_text IS NOT NULL)",
   "CREATE INDEX spam_audit_shop_decided_at_idx ON public.spam_audit USING btree (shop_id, decided_at DESC)",
   "CREATE INDEX spam_audit_shop_outcome_idx ON public.spam_audit USING btree (shop_id, outcome, decided_at DESC)",
+  "CREATE INDEX stock_alerts_shop_created_idx ON public.stock_alerts USING btree (shop_id, created_at DESC)",
   "CREATE INDEX storefront_chat_messages_created_idx ON public.storefront_chat_messages USING btree (created_at)",
   "CREATE INDEX storefront_chat_messages_session_idx ON public.storefront_chat_messages USING btree (session_id, created_at)",
   "CREATE INDEX storefront_chat_sessions_activity_idx ON public.storefront_chat_sessions USING btree (last_activity_at)",
@@ -4246,6 +4278,10 @@
   "column public.shops.order_retention_mode: How long orders are kept: months (with order_retention_months) or indefinite (with none). Read by scripts/lib/order-retention.mjs. Deliberately not a support_parameters row -- there a null value means \"nobody has decided yet\", and indefinite retention of personal data must never be reachable by leaving a field blank.",
   "column public.shops.order_retention_months: The retention period in months when order_retention_mode is months. Must be null when the mode is indefinite, so the setting has exactly one reading.",
   "column public.shops.order_retention_reason: Why the retention period was last changed. Retention is a compliance control and the live constraint has already drifted from this repo once; a change with no recorded reason is how that happened.",
+  "column public.shops.report_recipients: Who this shop's monthly sales report goes to: [{\"role\": …} | {\"email\": …}] (Settings → Integrations).",
+  "column public.shops.report_sender: The mailbox this shop's monthly sales report is sent from (Settings → Integrations). Null: not sent.",
+  "column public.shops.stock_alert_recipients: Who this shop's stock alert goes to: [{\"role\": …} | {\"email\": …}]. Empty: no alert.",
+  "column public.shops.stock_alert_sender: The mailbox this shop's stock alert is sent from (Settings → Integrations). Null: no alert.",
   "column public.shops.storefront_url: Shopify primaryDomain.url -- where customers actually go, unlike shop_domain which is the *.myshopify.com identity webhooks key on. The only address a reply may contain, and the base for /account/login.",
   "column public.shops.sync_cursors: Per-resource sync cursors for Shopify imports, webhooks, and reconciliation jobs.",
   "column public.shops.vip_min_spend: VIP rule, set on the Customers panel: net spend inside the window must be MORE THAN this (EUR), AND orders more than vip_min_orders. Null with the other two = no rule, nobody is VIP.",
@@ -4536,6 +4572,7 @@
   "table public.social_post_tags: A shop's own labels for social posts, created by a person in Insights → Social media → Posts. Names are unique per shop, ignoring case.",
   "table public.social_posts: One row per published post with its lifetime counts. Posts of the last 90 days are re-read each sync, because their counts still grow. Counts only: no comment text and no commenter is ever fetched.",
   "table public.spam_audit: Audit trail for the agent ingestion spam gate: one row per decision, recording kept/blocked and a one-line reason. Exists because both passes drop mail before any ticket is written, so a blocked email would otherwise leave no trace. Stores sender address, subject AND the cleaned body (see 08) as the evidence a human needs to judge whether a drop was right. The body expires on its own clock (body_expires_at) and is nulled by the worker; the decision row is kept indefinitely. Service-role worker only until dashboard roles and policies exist.",
+  "table public.stock_alerts: The stock alert's record: each check that changed the set of out-of-stock / critical products. The latest baseline or sent row is the state \"newly\" is measured against.",
   "table public.storefront_chat_messages: Each customer message and advisor reply in a storefront_chat_sessions conversation, with the page context the widget sent.",
   "table public.storefront_chat_sessions: An anonymous storefront advisor conversation (Theme App Extension via app proxy). The token is minted server-side; purged after the retention window.",
   "table public.storefront_session_months: Closed months of Shopify Analytics human sessions and funnel counts, on the shop clock. Rewritten nightly; the last two months are always read live.",

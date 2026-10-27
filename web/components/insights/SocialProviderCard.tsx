@@ -23,13 +23,18 @@ const when = (iso: string | null, locale: Locale) =>
  * screen and comes back to the callback. Everything else — tracking an
  * account, « Sync now », disconnecting — is a request, then a refresh of the
  * page behind so the panel follows.
+ *
+ * EVERY CALL NAMES `shop`, the slug of the shop on screen: a connection belongs
+ * to one shop, and the server refuses a request that names none
+ * (web/lib/server/integration-shop.ts).
  */
-export function SocialProviderCards({ initial, returnKey }: { initial: SocialConnectionsStatus; returnKey: "social" | "settings" }) {
+export function SocialProviderCards({ initial, returnKey, shop }: { initial: SocialConnectionsStatus; returnKey: "social" | "settings"; shop: string }) {
   const t = useT();
   const router = useRouter();
   const [status, setStatus] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const forShop = (path: string) => `${path}?shop=${encodeURIComponent(shop)}`;
 
   async function call(key: string, url: string, init: RequestInit) {
     setBusy(key);
@@ -56,11 +61,11 @@ export function SocialProviderCards({ initial, returnKey }: { initial: SocialCon
         <ProviderCard
           key={p.provider}
           status={p}
-          returnKey={returnKey}
+          connectHref={`${forShop(`${BASE}/${p.provider}/start`)}&return=${returnKey}`}
           busy={busy}
-          onSync={() => call(`sync:${p.provider}`, `${BASE}/${p.provider}/sync`, { method: "POST" })}
-          onDisconnect={() => call(`off:${p.provider}`, `${BASE}/${p.provider}`, { method: "DELETE" })}
-          onTrack={(id, enabled) => call(`acc:${id}`, `${BASE}/social/accounts/${id}`, { method: "PATCH", body: JSON.stringify({ enabled }) })}
+          onSync={() => call(`sync:${p.provider}`, forShop(`${BASE}/${p.provider}/sync`), { method: "POST" })}
+          onDisconnect={() => call(`off:${p.provider}`, forShop(`${BASE}/${p.provider}`), { method: "DELETE" })}
+          onTrack={(id, enabled) => call(`acc:${id}`, forShop(`${BASE}/social/accounts/${id}`), { method: "PATCH", body: JSON.stringify({ enabled }) })}
         />
       ))}
       {error ? (
@@ -88,14 +93,14 @@ export function SocialProviderCards({ initial, returnKey }: { initial: SocialCon
 
 function ProviderCard({
   status: p,
-  returnKey,
+  connectHref,
   busy,
   onSync,
   onDisconnect,
   onTrack,
 }: {
   status: ProviderStatus;
-  returnKey: string;
+  connectHref: string;
   busy: string | null;
   onSync: () => void;
   onDisconnect: () => void;
@@ -103,7 +108,6 @@ function ProviderCard({
 }) {
   const t = useT();
   const locale = useLocale();
-  const connectHref = `${BASE}/${p.provider}/start?return=${returnKey}`;
   const expiresSoon = p.provider !== "tiktok" &&
     p.tokenExpiresAt !== null && Date.parse(p.tokenExpiresAt) - Date.now() < RECONNECT_WARN_DAYS * 24 * 3600 * 1000;
   const needsReconnect = p.lastSyncStatus === "needs_reconnect" || (p.provider !== "tiktok" && p.tokenExpiresAt !== null && Date.parse(p.tokenExpiresAt) < Date.now());

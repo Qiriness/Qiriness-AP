@@ -33,6 +33,8 @@
 export const T = {
   // 01_foundation
   SHOPS: 'shops',
+  // 03_shop_mail_settings_stock_alerts (the new chain): the stock alert's record
+  STOCK_ALERTS: 'stock_alerts',
   SALES_CHANNELS: 'sales_channels',
   INTEGRATION_EVENTS: 'integration_events',
   PRIVACY_REQUESTS: 'privacy_requests',

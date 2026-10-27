@@ -1,6 +1,6 @@
 import { supabaseInsert, supabaseSelect, supabaseUpdate } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { finishIntegrationEvent, sanitizeError } from '../../../scripts/lib/compliance-audit.mjs';
-import { dashboardRoleOf, isBanned, normaliseEmail } from '../../../scripts/lib/dashboard-auth.mjs';
+import { resolveRecipients } from '../../../scripts/lib/shop-mail-settings.mjs';
 import { lastCompleteMonth } from '../../../scripts/lib/insights-range.mjs';
 import { reportFileName } from '../../../scripts/lib/sales-report.mjs';
 
@@ -14,9 +14,15 @@ import { reportFileName } from '../../../scripts/lib/sales-report.mjs';
  * THE WORKER SENDS, THE DASHBOARD BUILDS. The report is built by the web app's
  * report-service.ts (TypeScript, live ShopifyQL reads), so the worker fetches
  * the finished HTML from /api/reports/sales with a shared secret rather than
- * keeping a second copy of the builder. Mailed from the support mailbox as an
- * attachment, to every active dashboard account with a report role, plus the
- * configured extra addresses.
+ * keeping a second copy of the builder. Mailed as an attachment to the shop's
+ * `report_recipients` (roles resolved to their active accounts, and addresses;
+ * scripts/lib/shop-mail-settings.mjs).
+ *
+ * ONE REPORT PER SHOP THE DASHBOARD SERVES (DASHBOARD_SHOPS), each built for
+ * its own shop (`?shop=`) and sent from the address the shop holds
+ * (`shops.report_sender`, set on Settings → Integrations). A shop without one
+ * is not sent — never from another brand's mailbox. The recipients are
+ * set per shop too (owner, 2026-10-27).
  *
  * ONCE PER MONTH, RECORDED IN `integration_events` under one event key per shop
  * and month; the unique key is the claim, so two workers (Render and a local
@@ -53,6 +59,9 @@ export function reportEventKey(shopId, month) {
   return `${SALES_REPORT_EVENT_TYPE}:${shopId}:${month}`;
 }
 
+// A shop with no sender is reported once per worker and month, not every poll.
+const warnedNoSender = new Set();
+
 // Asked for by the owner. The report's switches need no script since
 // 2026-09-29, so a preview works too; a browser still gives the full width.
 const READING_NOTE =
@@ -77,14 +86,6 @@ export function reportMail({ month, brand }) {
     subject: `Rapport des ventes E-commerce ${brand} - ${capitalised}`,
     text: `Bonjour,\n\nVeuillez trouver ci-joint le rapport des ventes e-commerce de ${label}.\n\nBien cordialement,\nAgent Contact ${brand}\n\n${READING_NOTE}`
   };
-}
-
-/** Active dashboard accounts holding one of `roles`, plus `extra`; lower-cased, no repeats. */
-export function reportRecipients(users, { roles, extra = [] }) {
-  const fromAccounts = users
-    .filter((user) => roles.includes(dashboardRoleOf(user)) && !isBanned(user))
-    .map((user) => user.email);
-  return [...new Set([...fromAccounts, ...extra].map(normaliseEmail).filter(Boolean))].sort();
 }
 
 /**
@@ -139,6 +140,7 @@ export async function runSalesReportMail({
   graphClient,
   adminClient,
   shopId,
+  shopSlug = null,
   config,
   logger,
   now = new Date(),
@@ -146,7 +148,8 @@ export async function runSalesReportMail({
 }) {
   if (!config.url || !config.secret) return { skipped: 'not_configured' };
 
-  const [shop] = await supabaseSelect(supabase, 'shops', { id: shopId }, 'shop_name,iana_timezone');
+  const [shop] = await supabaseSelect(supabase, 'shops', { id: shopId }, 'shop_name,iana_timezone,report_sender,report_recipients');
+  const sender = shop?.report_sender || null;
   const month = dueReportMonth({ now, tz: shop?.iana_timezone || 'UTC', sendHour: config.sendHour });
   if (!month) return { skipped: 'not_due' };
 
@@ -154,17 +157,21 @@ export async function runSalesReportMail({
   const [row] = await supabaseSelect(supabase, 'integration_events', { event_key: key }, '*');
   const step = nextStep(row, now);
   if (!step) return { skipped: 'handled', month };
+  if (!sender) {
+    if (!warnedNoSender.has(key)) {
+      warnedNoSender.add(key);
+      logger.warn('sales_report.no_sender', { shopId, shopSlug, month, hint: 'Set the sender on Settings → Integrations for this shop.' });
+    }
+    return { skipped: 'no_sender', month };
+  }
 
   const event = await claim(supabase, { shopId, key, month, step, row, now });
   if (!event) return { skipped: 'claimed_elsewhere', month };
   const attempts = Number(event.counts?.attempts) || 1;
 
   try {
-    const recipients = reportRecipients(await adminClient.listUsers(), {
-      roles: config.roles,
-      extra: config.extraRecipients
-    });
-    if (recipients.length === 0) throw new Error(`No recipients: no active account with role ${config.roles.join('/')}.`);
+    const recipients = resolveRecipients(shop?.report_recipients ?? [], await adminClient.listUsers());
+    if (recipients.length === 0) throw new Error('No recipients: the roles chosen have no active account and no address is listed.');
 
     const { html } = await sendSalesReport({
       graphClient,
@@ -172,15 +179,18 @@ export async function runSalesReportMail({
       month,
       brand: shop?.shop_name || 'Shop',
       recipients,
+      shopSlug,
+      sender,
       fetchImpl
     });
 
     await finishIntegrationEvent(supabase, event.id, {
       status: 'completed',
       finished_at: now.toISOString(),
-      counts: { attempts, recipients: recipients.length, bytes: Buffer.byteLength(html) }
+      counts: { attempts, recipients: recipients.length, bytes: Buffer.byteLength(html) },
+      metadata: { month, sender }
     });
-    logger.info('sales_report.sent', { shopId, month, recipients: recipients.length, attempts });
+    logger.info('sales_report.sent', { shopId, month, sender, recipients: recipients.length, attempts });
     return { sent: true, month, recipients: recipients.length };
   } catch (error) {
     // A failure before Graph accepted the mail is the common case; one after
@@ -198,13 +208,15 @@ export async function runSalesReportMail({
 }
 
 /**
- * Fetch one month's report from the dashboard and mail it. No schedule and no
- * record: the scheduled run above wraps it in both, and the test command
- * (tools/run-sales-report.mjs) calls it bare.
+ * Fetch one month's report for one shop from the dashboard and mail it from
+ * `sender`. No schedule and no record: the scheduled run above wraps it in
+ * both, and the test command (tools/run-sales-report.mjs) calls it bare.
+ * `shopSlug` null asks for the desk shop's report.
  */
-export async function sendSalesReport({ graphClient, config, month, brand, recipients, fetchImpl = fetch }) {
+export async function sendSalesReport({ graphClient, config, month, brand, recipients, shopSlug = null, sender, fetchImpl = fetch }) {
   const url = new URL(config.url);
   url.searchParams.set('month', month);
+  if (shopSlug) url.searchParams.set('shop', shopSlug);
   const response = await fetchImpl(url, { headers: { Authorization: `Bearer ${config.secret}` } });
   if (!response.ok) throw new Error(`The dashboard refused the report: HTTP ${response.status}.`);
   const html = await response.text();
@@ -213,7 +225,8 @@ export async function sendSalesReport({ graphClient, config, month, brand, recip
   await graphClient.sendMail({
     ...mail,
     toRecipients: recipients,
-    attachments: [{ name: reportFileName(month), contentType: 'text/html', content: html }]
+    from: sender,
+    attachments: [{ name: reportFileName(month, brand), contentType: 'text/html', content: html }]
   });
   return { html, subject: mail.subject };
 }

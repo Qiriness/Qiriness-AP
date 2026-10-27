@@ -436,6 +436,17 @@ Built from the owner's example report, which ran on mock data. **Every figure on
 
 The inventory card lists **active** products out of stock, with at most 30 days of cover, **or with fewer than 50 units whatever their cover** (added 2026-10-04 at 30 units, raised to 50 the same day at the owner's request: three slow sellers at 3, 17 and 19 units were missing while the card showed only the five out of stock; a handful of units is one order from out, and a long cover hid them). Such a product reads **Watch**, unless its cover already places it higher. Every listed product is shown — no cap on the Overview card or in the report. Stock is `products.available_stock` at the last product sync — a snapshot, like the orders waiting to ship, so **the date range does not cut it**, and the month-end report says it is today's stock. Cover is read at the rate units left over **the last 30 days whatever range is selected**, so "5 days of cover" means one thing on every panel; **free lines count**, because a sample leaves the shelf like a sale, and all channels count, because it is one warehouse. Out of stock ≤ 0, critical ≤ 7 days, low ≤ 14, watch ≤ 30 — words and thresholds in `sales-overview.mjs`, SQL takes only the cut-off. A product that sold nothing has no cover and is listed only when it is out or under 50 units. The unit floor is `INVENTORY_MIN_STOCK_UNITS`, beside the cover cut-off; SQL takes both as arguments. There is no replenishment column: no purchase order reaches the app, and "planned" would be a claim.
 
+**Critical is under two weeks of cover OR under 40 units (owner, 2026-10-27).** It replaced « critical ≤ 7 days, low ≤ 14 days », and `low` is gone. The stock alert mails on a product newly critical, so the word needed one meaning in the dashboard, the report and the mail. Under 40 units is critical whatever the cover, because a slow seller with a few dozen left is one order from out. `watch` is unchanged: up to 30 days of cover, or under 50 units.
+
+**Ranked by risk (owner, 2026-10-27).** Every list of these exceptions (Overview, Fulfilment, the monthly report, the stock alert's file) is in one order (`rankInventoryByRisk`, `scripts/lib/sales-overview.mjs`):
+1. Out of stock, best sellers of the window first.
+2. Under 40 units (`INVENTORY_VERY_LOW_UNITS` = the critical floor; first set at 20 the same day), lowest cover first. This ranks above a lower cover on a bigger stock: a cover worked out from a slow month can look comfortable with a dozen units left.
+3. The rest, lowest cover first.
+
+A product with no cover (nothing sold in the window) goes last in its group.
+
+**The Fulfilment card is a watchlist (owner, 2026-10-27).** It sits at the bottom of the page and shows every product out of stock or critical, then the next 10 most at risk, whether or not those are exceptions (`getInventoryWatchlist`, status `ok`), so it always shows what is coming next. Overview keeps the exceptions only.
+
 ### The monthly report is static HTML, rendered by a pure function (2026-09-22)
 
 The CEOs will be emailed it at the start of each month, and a mail client runs no script. So **every figure is rendered on the server, for both comparisons**; the inline script only adds the tabs and the MoM / YoY switch, and without it every section shows in turn with the month-on-month deltas. Nothing loads from outside the file. `renderSalesReport` (`scripts/lib/sales-report.mjs`) takes data and returns a string, so the download route and a future mail job produce the same file.
@@ -458,6 +469,15 @@ The CEOs will be emailed it at the start of each month, and a mail client runs n
 **Once per month, in `integration_events`.** Its unique `event_key` is the claim, so Render and a local `ingest:once` cannot both send. A failure is retried every 30 minutes, five times. A lost Graph response can send the report twice; for internal mail that is better than not at all.
 
 **Not saved to Sent Items.** The poller reads Sent Items as our replies to customers; a report there would be ingested as support mail.
+
+**One report per shop, each from its own address (2026-10-27).** The worker mails a report for every `DASHBOARD_SHOPS` shop (Render needs that variable as well as Vercel and GitHub). Each report is built for its shop (`/api/reports/sales?shop=`) and recorded under its own shop id, so one shop's failure or retry never touches another's.
+- **Recipients: set per shop** (`shops.report_recipients`, roles or addresses; § The stock alert). They started as the same people for every shop.
+- **Sender: on the shop, editable** (`shops.report_sender`, Settings → Integrations → « Monthly sales report »; owner, 2026-10-27: "in the shop and modifiable, not in the env vars"). It is a column rather than a variable so a manager changes it without a deploy, and the shop sync never sends it, so a nightly cannot reset it.
+  - **No fallback, not even for the desk shop.** A shop without one is not sent (logged `sales_report.no_sender` once, no `integration_events` row), and with no row written its report goes out within the catch-up week once a sender is set.
+  - **Two shops may share a sender.** At first both are sent from Qiriness's contact mailbox (owner, 2026-10-27). A dedicated Barbara Gould mailbox is a change on its Settings page.
+- **The file is named after the shop** (`reportFileName(month, shop name)`): `barbara-gould-sales-report-2026-09.html`. It was the literal `qiriness-` on every shop's download and attachment.
+- **Sent through Graph as that mailbox.** The app's `Mail.Send` application permission covers every mailbox in the tenant unless an Exchange application access policy narrows it. A mailbox in another tenant cannot be used, and Graph's refusal is recorded as a failed attempt.
+- **The route refuses a shop it does not serve (404).** With a stale Vercel `DASHBOARD_SHOPS` it would otherwise build the desk shop's report, and the mail would carry Qiriness's figures under Barbara Gould's name.
 
 ### Shopify Analytics answers, and what it will not answer (2026-09-23)
 
@@ -819,7 +839,7 @@ Counts such as impressions and clicks still add up. Conversions and revenue are 
 
 - **Which shops:** `DASHBOARD_SHOPS` (store domains, comma separated, in switcher order; `scripts/lib/dashboard-shops.mjs`). `SHOPIFY_STORE_DOMAIN` is the **support desk's** shop and is always served. Unset, the dashboard is exactly as before. It is a list of domains, not code, so a third shop is a variable.
 - **One Shopify app for every shop.** Its client-credentials token is minted per store domain, so a shop needs no secret of its own. The same app's webhooks arrive for every shop, signed with the same secret. A shop on a **different** app would need its own credentials and webhook secret; that is not built.
-- **Only Insights is per shop.** Tickets, orders, agent setup, settings and the worker are the desk shop's (`getShop()`). A shop without the desk has no Support or AI agent tab (`DESK_ONLY_PANELS`); a link to one opens its Overview.
+- **Only Insights and Settings → Integrations are per shop** (Settings since 2026-10-27: § Connections belong to one shop). Tickets, orders, agent setup, conversations and the worker's mail are the desk shop's (`getShop()`). A shop without the desk has no Support or AI agent tab (`DESK_ONLY_PANELS`); a link to one opens its Overview.
 - **The shop is in the address (`?shop=<subdomain>`), never only in a cookie.**
   - The address is what the browser keeps a prefetched page under. With the shop in a cookie, Sales for one shop could be shown from the other's prefetch.
   - The middleware sends an Insights page without a valid shop to the one last looked at (cookie `insights_shop`, the owner's choice), or the first listed.
@@ -833,5 +853,34 @@ Counts such as impressions and clicks still add up. Conversions and revenue are 
   - One shop's failure does not stop the next, and the run still ends red if any failed.
   - Each run upserts its own `shops` row, so the first nightly creates a new shop's row.
 - **Everyone with a dashboard role sees every shop** (owner's choice). Per-person shop access would be an `app_metadata` list checked on every request, not only in the switcher.
-- **Settings stays the desk shop's.** Connecting Klaviyo or Meta for another shop is not built. Its Marketing and Social panels show « not connected ».
+- ~~**Settings stays the desk shop's.**~~ Superseded 2026-10-27: each shop connects its own Klaviyo, Meta, Google Ads and TikTok (§ Connections belong to one shop), the shop is picked in the sidebar (§ The shop is picked in the sidebar), and each shop gets its own monthly report mail (§ The report is mailed on the 1st…).
 - **Cost**, measured on Qiriness and scaled to Barbara Gould (<1,000 customers, ≤1 order a day): about +1–3 MB a day of log ingest, mostly from dashboard use, and under 1 MB a day of egress.
+
+### Connections belong to one shop (2026-10-27)
+
+**Every Klaviyo key, OAuth token, tracked account and « Sync now » is one shop's, and the shop is always named, never defaulted** (owner: "very very important"). Until this date Settings → Integrations wrote to the desk shop whatever was on screen. Worse, the Insights Social → Connections dialog showed the selected shop's status, but its Connect, Sync and Disconnect buttons acted on the desk shop. From Barbara Gould's Insights, « Connect Meta » would have connected Qiriness.
+- **Routes require `?shop=`** (`web/lib/server/integration-shop.ts`). The slug must be a served shop with a `shops` row; anything else is a 400. This deliberately differs from Insights reads, which fall back to the desk shop: a wrong default there shows the wrong page, here it files one brand's credentials under another.
+- **OAuth carries the shop signed in its state.** The callback connects the shop in the state, provided it is still served, whatever the browser did meanwhile. It lands on that shop's page.
+- **The worker runs every shop's `sync_social` jobs**, each with its own queue, and wakes for them (`LISTEN` filters on all served shop ids). Before this, a job queued under another shop would have waited for the nightly.
+- **One account counts for one shop** (`scripts/lib/social-account-claims.mjs`). An agency or group login sees every brand: Qiriness's Meta login already lists Barbara Gould's ad account (switched off). `social_accounts.enabled` defaults to true, so connecting Barbara Gould with that login would have started counting Qiriness's page, Instagram and ads in Barbara Gould's Insights.
+  - Discovery adds a new account that another shop already tracks switched **off**.
+  - Switching it on is refused (409) until the other shop switches it off.
+  - An account nobody tracks behaves as before, and an account a shop already has keeps its choice.
+- **Not built:** per-person shop access (everyone with a role sees every shop, § Several shops).
+
+### The shop is picked in the sidebar (2026-10-27)
+
+**The switcher moved from beside the Insights title to the top of the sidebar, with each shop's logo** (owner, 2026-10-27). The shop is now an app-wide choice rather than an Insights filter (`components/app-shell/ShopMenu.tsx`, `web/lib/shop-switch.mjs`).
+- **Insights and Settings show the shop their address names.** Every other page is the desk shop's, and the sidebar shows the desk shop there.
+- **With another shop on screen, the nav lists only Insights and Settings.** Its tickets, orders, conversations and agent do not exist, and showing Qiriness's queue under Barbara Gould's logo would invite exactly the confusion this switch removes. On Settings it hides Agent settings and Dev info, which are the desk's agents.
+- **A switch keeps the panel, period and Settings tab where the other shop has them.** A desk-only panel opens Overview. From a desk page, another shop opens its Insights.
+- **Nav links to Insights and Settings carry the shop on screen.** The sidebar and the page then never disagree, whatever the `insights_shop` cookie says.
+- **Logos are files, not code.** The desk shop's is `/brand/logo.png` (also the tab icon). Another shop's is `web/public/brand/shops/<slug>.png`. A shop with no file shows its initial, so adding a logo is a file drop and a deploy.
+
+### The stock alert (2026-10-27)
+
+**When a product newly goes out of stock or critical, mail an Excel file of every product out of stock or critical** (owner, 2026-10-27). Each shop sets its own sender and recipients on Settings → Integrations; with either missing, that shop has no alert.
+- **Once a day, after the nightly product sync** (owner: "once a day is ok"). Stock only moves when products sync, so the worker checks a shop once each time its newest `products.synced_at` changes. A late nightly, or one run by hand, is still followed by one check. A worker restart checks once more, but the state is in `stock_alerts`, so nothing is sent twice. Stock reacting within the day would need Shopify's inventory webhook, which is not built.
+- **"Newly"** (`newlyAlerting`): a product in the set now and not at the last check, or critical then and out of stock now. The first check is a silent `baseline`, so turning the alert on does not mail every product already short. When a product restocks out of the set, a `baseline` row records it, so it counts as new if it falls back. A failed send is a `failed` row and leaves the state alone, so the next sync's check sends again.
+- **The file lists them all, the new ones marked.** One sheet: product, status, new, stock, units sold in 30 days, days of cover, type, in the risk order. Written by `scripts/lib/xlsx-writer.mjs`, a dependency-free one-sheet .xlsx (Excel, Numbers, LibreOffice and openpyxl open it). The mail is in French, like the report.
+- **Recipients are roles or addresses** (`scripts/lib/shop-mail-settings.mjs`), for the monthly report too (owner, 2026-10-27). A role means every active account holding it when the mail goes: a new manager receives it without a list being edited, and a disabled account stops. An address is anyone (owner: "any email address is fine"). The report's recipients moved from `SALES_REPORT_ROLES` + `SALES_REPORT_EXTRA_RECIPIENTS` to `shops.report_recipients`, default the management role. The extras variable remains only as where `npm run report:sales:test` sends.

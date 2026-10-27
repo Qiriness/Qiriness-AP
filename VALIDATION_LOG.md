@@ -2084,15 +2084,37 @@ Built and unit-tested (CHANGELOG 2026-10-26); nothing seen against Barbara Gould
 
 Check:
 1. ~~Install the Qiriness app on Barbara Gould's store.~~ Done 2026-10-26: the app's client-credentials token reads the shop (`gurkk8-er.myshopify.com`, « Barbara Gould », Europe/Paris).
-2. Set `DASHBOARD_SHOPS=qiriness.myshopify.com,gurkk8-er.myshopify.com` on Vercel and as a GitHub Actions repository **variable**.
+2. Set `DASHBOARD_SHOPS=qiriness.myshopify.com,gurkk8-er.myshopify.com` on Vercel and as a GitHub Actions repository **variable** (owner says GitHub is set, 2026-10-27; the 10-27 07:04 nightly still ran Qiriness only, so check the next run). Since 2026-10-27 also on Render.
 3. Run the nightly by hand (workflow_dispatch). Both shops' groups should be green in the log, and Barbara Gould's `shops` row should exist.
 4. In the dashboard:
-   - the switcher shows both names;
+   - the sidebar switcher shows both names (moved from the Insights title, 2026-10-27);
    - Barbara Gould has no Support or AI agent tab;
    - its Overview, Sales and Customers figures match its Shopify admin, not Qiriness's;
    - switching back shows Qiriness's figures unchanged.
 5. Place or update an order on Barbara Gould's store. The webhook should write it under Barbara Gould's `shop_id`, and Qiriness's orders should not move.
 6. A day later, the log ingest change should be ≈ +1–3 MB a day.
+
+## Stock alert and per-shop mail settings (2026-10-27) — open
+
+Built and unit-tested (CHANGELOG 2026-10-27). Migration 03 applied 2026-10-27.
+
+Check:
+1. Settings → Integrations, on each shop: « Monthly sales report » shows the sender (contact@qiriness.com) and « Every Management account »; « Stock alert » is Off until a sender and a recipient are saved.
+2. Set the stock alert for a shop. After the next nightly, `stock_alerts` has one `baseline` row for it and nothing is mailed.
+3. When a product newly crosses (out of stock, under 14 days, or under 40 units) at a later nightly: one mail from the configured sender, with the .xlsx listing every out-of-stock / critical product, the new ones marked « Oui », and a `sent` row. The file opens in Excel.
+4. Fulfilment's last card lists every out / critical product, then 10 more; Overview no longer shows a « Low » pill.
+
+## Per-shop connections, report and sidebar (2026-10-27) — open
+
+Built and unit-tested (CHANGELOG 2026-10-27). Migration `02_shop_report_sender.sql` is applied and both shops' sender is set to Qiriness's contact mailbox (2026-10-27). The deploy still needs `DASHBOARD_SHOPS` on **Render** (as on Vercel and GitHub).
+
+Check:
+1. Sidebar: both shops are listed with their logos; Barbara Gould shows its initial until `web/public/brand/shops/gurkk8-er.png` is added. On Barbara Gould the nav shows only Insights and Settings; switching from Sales keeps Sales and its period; from Tickets, Barbara Gould opens its Insights.
+2. Settings → Integrations on Barbara Gould: the caption names Barbara Gould, and Klaviyo and Meta show « not connected ». On Qiriness, they show the current key (…7aaf) and the Meta connection, unchanged.
+3. Connect Klaviyo for Barbara Gould: `klaviyo_connections` gains a row under `d92c8096…`, and Qiriness's row is unchanged. The next nightly's Barbara Gould group reports `klaviyo_campaigns`.
+4. Connect Meta for Barbara Gould: the accounts land under Barbara Gould's shop id. Qiriness's page, Instagram and ad account arrive **switched off** there. Ticking one is refused (« Another shop tracks this account »). The worker log shows `social.synced` with Barbara Gould's shop id within seconds.
+5. On the 1st (or `npm run report:sales:test -- --shop=gurkk8-er` first): the report has Barbara Gould's figures, comes from the sender on its Settings page, is named `barbara-gould-sales-report-YYYY-MM.html`, and goes to the management accounts. Without a sender, the log shows `sales_report.no_sender` once.
+6. Insights → Overview → download the report on Barbara Gould: the file is `barbara-gould-sales-report-….html`.
 
 ## Insights time-frame switching speed (2026-10-26) — open
 

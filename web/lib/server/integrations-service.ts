@@ -6,6 +6,10 @@
  * handed to `klaviyo_save_key` (Supabase Vault). Nothing here ever reads it
  * back: the browser is shown the last four characters and the last sync, and
  * only the sync (scripts/lib/klaviyo-sync.mjs) decrypts it.
+ *
+ * EVERY CALL NAMES ITS SHOP. Each shop has its own Klaviyo account, and the
+ * caller resolves which one from the request (integration-shop.ts); there is
+ * no default to fall back on.
  */
 
 import {
@@ -14,7 +18,6 @@ import {
   readKlaviyoConnection,
 } from "../../../scripts/lib/klaviyo-sync.mjs";
 import { getSupabaseClient } from "./insights/shared";
-import { getShopId } from "./knowledge-service";
 
 export interface KlaviyoStatus {
   connected: boolean;
@@ -34,8 +37,8 @@ const DISCONNECTED: KlaviyoStatus = {
   lastSyncError: null,
 };
 
-export async function getKlaviyoStatus(): Promise<KlaviyoStatus> {
-  const row = await readKlaviyoConnection(getSupabaseClient(), await getShopId());
+export async function getKlaviyoStatus(shopId: string): Promise<KlaviyoStatus> {
+  const row = await readKlaviyoConnection(getSupabaseClient(), shopId);
   if (!row) return DISCONNECTED;
   return {
     connected: true,
@@ -47,16 +50,16 @@ export async function getKlaviyoStatus(): Promise<KlaviyoStatus> {
   };
 }
 
-export async function saveKlaviyoKey(key: unknown, savedBy: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function saveKlaviyoKey(shopId: string, key: unknown, savedBy: string | null): Promise<{ ok: true } | { ok: false; error: string }> {
   const result = await connectKlaviyo({
     supabase: getSupabaseClient(),
-    shopId: await getShopId(),
+    shopId,
     key,
     savedBy,
   });
   return result.ok ? { ok: true } : { ok: false, error: result.error };
 }
 
-export async function removeKlaviyoKey(): Promise<void> {
-  await disconnectKlaviyo({ supabase: getSupabaseClient(), shopId: await getShopId() });
+export async function removeKlaviyoKey(shopId: string): Promise<void> {
+  await disconnectKlaviyo({ supabase: getSupabaseClient(), shopId });
 }

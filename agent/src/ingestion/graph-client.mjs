@@ -625,8 +625,13 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
    *
    * Graph caps a sendMail request at 4 MB, attachments base64-encoded inside
    * it, so a larger file throws here with its size rather than as a 413.
+   *
+   * `from`: another mailbox to send as (each shop's report has its own sender,
+   * SALES_REPORT_SENDERS). The app's `Mail.Send` application permission covers
+   * every mailbox of the tenant unless an Exchange application access policy
+   * narrows it; a mailbox outside it is refused by Graph, with its code.
    */
-  async function sendMail({ subject, text, toRecipients, attachments = [] }) {
+  async function sendMail({ subject, text, toRecipients, attachments = [], from = mailbox }) {
     const recipients = toRecipients.map((address) => String(address || '').trim()).filter(Boolean);
     if (recipients.length === 0) {
       throw new Error('sendMail requires at least one recipient.');
@@ -651,7 +656,7 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     }
 
     const token = await getToken();
-    const response = await fetchImpl(`${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/sendMail`, {
+    const response = await fetchImpl(`${GRAPH_BASE}/users/${encodeURIComponent(from || mailbox)}/sendMail`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body

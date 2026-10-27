@@ -279,9 +279,12 @@ test('the collection mix names the ranges and keeps what falls outside them', ()
   assert.match(html, /<tr class="muted"><td><b>Outside these ranges<\/b>/);
 });
 
-test('the file name carries only the month', () => {
-  assert.equal(reportFileName('2026-08'), 'qiriness-sales-report-2026-08.html');
-  assert.equal(reportFileName('../../x'), 'qiriness-sales-report-.html');
+test("the file name is the shop's name and the month, nothing else", () => {
+  assert.equal(reportFileName('2026-08', 'Qiriness'), 'qiriness-sales-report-2026-08.html');
+  assert.equal(reportFileName('2026-08', 'Barbara Gould'), 'barbara-gould-sales-report-2026-08.html');
+  assert.equal(reportFileName('2026-08', 'Éléonore & Fils'), 'eleonore-fils-sales-report-2026-08.html');
+  assert.equal(reportFileName('../../x', '../"evil"'), 'evil-sales-report-.html');
+  assert.equal(reportFileName('2026-08', null), 'shop-sales-report-2026-08.html');
 });
 
 test('the sales mix reports the period the switch selects, not always the month', () => {

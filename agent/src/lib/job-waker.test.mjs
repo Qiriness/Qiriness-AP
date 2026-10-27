@@ -89,6 +89,9 @@ test('ringsFor: this shop and a wake kind ring; another shop or kind does not; g
   assert.equal(ringsFor(JSON.stringify({ shop_id: 's2', kind: 'sync_mailbox' }), scope), false);
   assert.equal(ringsFor(JSON.stringify({ shop_id: 's1', kind: 'send_outbound' }), scope), false);
   assert.equal(ringsFor('not json', scope), true);
+  const several = { shopIds: ['s1', 's2'], kinds: ['sync_social'] };
+  assert.equal(ringsFor(JSON.stringify({ shop_id: 's2', kind: 'sync_social' }), several), true);
+  assert.equal(ringsFor(JSON.stringify({ shop_id: 's3', kind: 'sync_social' }), several), false);
 });
 
 function fakeClient({ failListen = false } = {}) {

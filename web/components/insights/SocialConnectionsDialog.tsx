@@ -1,5 +1,6 @@
 "use client";
 
+import { useSearchParams } from "next/navigation";
 import { useT } from "@/lib/i18n/client";
 import type { SocialConnectionsStatus } from "@/lib/social-types";
 import { Dialog } from "../ui/Dialog";
@@ -23,11 +24,13 @@ export function SocialConnectionsDialog({
   onClose: () => void;
 }) {
   const t = useT();
+  // The Insights page's shop: the middleware gives every Insights address one.
+  const shop = useSearchParams()?.get("shop") ?? "";
   return (
     <Dialog title={t("insights.social.connections.title")} meta={t("insights.social.connections.meta")} closeLabel={t("insights.social.connections.close")} onClose={onClose}>
       <div className={styles.dialogBody}>
         {notice ? <SocialNotice notice={notice} /> : null}
-        <SocialProviderCards initial={initial} returnKey={returnKey} />
+        <SocialProviderCards initial={initial} returnKey={returnKey} shop={shop} />
       </div>
     </Dialog>
   );

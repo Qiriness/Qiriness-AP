@@ -3,8 +3,9 @@ import "./globals.css";
 import { I18nProvider } from "@/lib/i18n/client";
 import { DICTIONARIES } from "@/lib/i18n/dictionaries";
 import { getLocale } from "@/lib/i18n/server";
-import { ShopProvider, type ShopInfo } from "@/lib/shop-context";
-import { getShop } from "@/lib/server/shop";
+import { NavShopsProvider, ShopProvider, type NavShop, type ShopInfo } from "@/lib/shop-context";
+import { getShop, getShopByDomain } from "@/lib/server/shop";
+import { dashboardShops } from "../../scripts/lib/dashboard-shops.mjs";
 import { getMarketplaces } from "@/lib/server/marketplaces";
 
 /** The shop row, or nothing: a page must not fail because `shops` could not be read. */
@@ -19,6 +20,26 @@ async function readShopInfo(): Promise<ShopInfo> {
   } catch {
     return { name: null, storefrontUrl: null, marketplaces: [] };
   }
+}
+
+/**
+ * Every shop the dashboard serves, for the sidebar's switcher. A shop not synced
+ * yet is still listed, under its slug; a failed read never fails a page.
+ */
+async function readNavShops(): Promise<NavShop[]> {
+  const shops = dashboardShops(process.env) as { slug: string; domain: string; desk: boolean }[];
+  return Promise.all(
+    shops.map(async (shop) => {
+      const row = await getShopByDomain(shop.domain).catch(() => null);
+      return {
+        slug: shop.slug,
+        name: row?.shopName?.trim() || shop.slug,
+        desk: shop.desk,
+        storefrontUrl: row?.storefrontUrl ?? null,
+        logo: shop.desk ? "/brand/logo.png" : `/brand/shops/${shop.slug}.png`,
+      };
+    })
+  );
 }
 
 // THE TITLE NAMES THE SHOP FROM ITS DATA. Every page used to end its title with
@@ -50,12 +71,14 @@ export default async function RootLayout({
   children: React.ReactNode;
 }) {
   const locale = getLocale();
-  const shop = await readShopInfo();
+  const [shop, navShops] = await Promise.all([readShopInfo(), readNavShops()]);
   return (
     <html lang={locale}>
       <body>
         <ShopProvider shop={shop}>
-          <I18nProvider locale={locale} messages={DICTIONARIES[locale]}>{children}</I18nProvider>
+          <NavShopsProvider shops={navShops}>
+            <I18nProvider locale={locale} messages={DICTIONARIES[locale]}>{children}</I18nProvider>
+          </NavShopsProvider>
         </ShopProvider>
       </body>
     </html>

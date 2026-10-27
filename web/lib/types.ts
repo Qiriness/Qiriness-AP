@@ -1939,7 +1939,8 @@ export interface MarketingLive {
 
 // --- Overview, Marketing & funnel, the monthly report ------------------------
 
-export type InventoryStatus = "out" | "critical" | "low" | "watch";
+/** `ok`: not an exception, listed only on the Fulfilment watchlist. */
+export type InventoryStatus = "out" | "critical" | "watch" | "ok";
 
 export interface InventoryException {
   productId: string;

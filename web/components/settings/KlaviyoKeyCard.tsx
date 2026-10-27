@@ -19,8 +19,11 @@ const when = (iso: string | null, locale: Locale) =>
  * the key is shown as its last four characters and can be replaced or removed,
  * never read. The server checks it against Klaviyo before storing it, so a
  * typo is refused here rather than failing the next nightly.
+ *
+ * `shop` is the slug of the shop on screen; every call names it, because each
+ * shop has its own Klaviyo account (web/lib/server/integration-shop.ts).
  */
-export function KlaviyoKeyCard({ status }: { status: KlaviyoStatus }) {
+export function KlaviyoKeyCard({ status, shop }: { status: KlaviyoStatus; shop: string }) {
   const t2 = useT();
   const locale = useLocale();
   const router = useRouter();
@@ -33,7 +36,7 @@ export function KlaviyoKeyCard({ status }: { status: KlaviyoStatus }) {
     setBusy(method === "PUT" ? "save" : "remove");
     setError(null);
     try {
-      const response = await fetch(ENDPOINT, {
+      const response = await fetch(`${ENDPOINT}?shop=${encodeURIComponent(shop)}`, {
         method,
         headers: { "Content-Type": "application/json" },
         body: method === "PUT" ? JSON.stringify({ key }) : undefined,

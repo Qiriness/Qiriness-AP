@@ -80,12 +80,15 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |-- forwarding/settings/route.ts  # PUT the acknowledgement (on/off, FR/EN templates)
 |   |       |-- settings/integrations/klaviyo/route.ts  # GET status · PUT {key} (checked
 |   |       |                                  # with Klaviyo, then Vault) · DELETE. Never
-|   |       |                                  # returns the key. Closed to contact
+|   |       |                                  # returns the key. Closed to contact.
+|   |       |                                  # Every integrations route REQUIRES ?shop=
+|   |       |                                  # (integration-shop.ts; 400 without)
 |   |       |-- settings/integrations/social/ # GET Meta + Google status · accounts/[id]
-|   |       |                                  # PATCH {enabled}. Never returns a token
+|   |       |                                  # PATCH {enabled} (409 tracked by another
+|   |       |                                  # shop). Never returns a token
 |   |       |-- settings/integrations/[provider]/  # meta|google: start (GET -> consent
-|   |       |                                  # screen, signed state + cookie) · callback
-|   |       |                                  # (code -> Vault, accounts, queues
+|   |       |                                  # screen, shop signed into the state) · callback
+|   |       |                                  # (the state's shop; code -> Vault, accounts, queues
 |   |       |                                  # sync_social) · sync (POST, Sync now) ·
 |   |       |                                  # DELETE disconnect. social-connections-service
 |   |       |-- insights/vip-rule/route.ts   # GET the rule / preview a draft count ·
@@ -149,7 +152,12 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |   |-- app-shell/               # AppShell (top bar + drawer; fetches /api/auth/me
 |   |   |                            # once for both; runs sidebar navigation in a
 |   |   |                            # transition: old page dimmed + "Loading …" pill,
-|   |   |                            # no loading.tsx) · Sidebar (Home drawn by role) ·
+|   |   |                            # no loading.tsx) · Sidebar (Home drawn by role;
+|   |   |                            # another shop on screen lists only Insights +
+|   |   |                            # Settings) · ShopMenu (the shop switcher at the
+|   |   |                            # top, with ShopMark: /brand/shops/<slug>.png or
+|   |   |                            # the initial) · use-shop-on-screen (which shop a
+|   |   |                            # page shows, lib/shop-switch.mjs) ·
 |   |   |                            # UserMenu (who is signed in, Sign out)
 |   |   |-- chat/                    # ChatView (conversation tabs + History menu, thread,
 |   |   |                            # composer + conversation cost; reads the stream;
@@ -163,6 +171,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |   |                            # used by every surface showing a number in prose)
 |   |   |-- settings/                # SettingsView (Insights kit: tabs, cards, tables) ·
 |   |   |                            # KlaviyoKeyCard (write-only key field, last sync) ·
+|   |   |                            # MailSettingsCard (a shop's mail: sent from + sent to,
+|   |   |                            # roles and addresses; report and stock alert) ·
 |   |   |                            # AgentModelPicker (one agent's model, Agent settings)
 |   |   |-- orders/                  # OrdersView (filters + table + pager, URL state;
 |   |   |                            # customer name ringed by open-ticket band) ·
@@ -172,8 +182,6 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |   |-- insights/                # InsightsPage (shell + header + one panel) ·
 |   |   |                            # InsightsFrame (URL navigation, pending dim;
 |   |   |                            # prefetch on hover; api() adds ?shop=) ·
-|   |   |                            # ShopSwitcher (Insights shop, ?shop=; only with
-|   |   |                            # 2+ shops in DASHBOARD_SHOPS) ·
 |   |   |                            # PinBoard (pin a row to the top, 2 max, per
 |   |   |                            # panel in localStorage; Grid pin="id") ·
 |   |   |                            # InsightsHeader + InsightsNav + FilterBar +
@@ -244,6 +252,11 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |   |-- tracking-links.ts    # isomorphic: the one import of scripts/lib's
 |   |   |                        # splitTrackingText into the browser bundle
 |   |   |-- social-types.ts      # isomorphic: the Social panel's + Connections' shapes
+|   |   |-- shop-switch.mjs      # isomorphic: which shop a page shows (Insights +
+|   |   |                        # Settings: ?shop=; else the desk shop), where a
+|   |   |                        # sidebar switch goes, nav links with the shop
+|   |   |-- shop-context.tsx     # ShopProvider (one shop's name/storefront) +
+|   |   |                        # NavShopsProvider (every served shop + its logo)
 |   |   |-- ticket-stats.ts      # isomorphic: summariseTickets + isClosed
 |   |   |-- draft-outbound.ts    # what Approve does, worded once for TicketsView +
 |   |   |                        # TicketThreadDialog: outbound line, button labels,
@@ -277,10 +290,14 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |                    # cache-tags (the shared-cache tags `tickets`
 |   |       |                    # and `insights`; ticketsChanged after a
 |   |       |                    # dashboard write) ·
-|   |       |                    # integrations-service (Klaviyo status/save/remove) ·
+|   |       |                    # integration-shop (the shop a connection is for:
+|   |       |                    # ?shop= required, served + synced; servedShopById
+|   |       |                    # for the OAuth state) ·
+|   |       |                    # integrations-service (Klaviyo status/save/remove,
+|   |       |                    # per shop) ·
 |   |       |                    # social-connections-service (Meta / Google OAuth:
 |   |       |                    # start, callback, queue a sync, track, disconnect)
-|   |       |                    # + social-return (the fixed return paths) ·
+|   |       |                    # + social-return (the fixed return paths, + &shop=) ·
 |   |       |                    # social-tags-service (post tags, read live,
 |   |       |                    # never through the Insights cache) ·
 |   |       |                    # auth (getSession, re-checked not trusted) ·

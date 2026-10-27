@@ -7,7 +7,6 @@ import {
   nextStep,
   reportEventKey,
   reportMail,
-  reportRecipients,
   runSalesReportMail
 } from './sales-report-mail.mjs';
 
@@ -42,21 +41,6 @@ test('the subject and body are short, and in French', () => {
   assert.equal(reportMail({ month: '2026-12', brand: 'Qiriness' }).subject, 'Rapport des ventes E-commerce Qiriness - Décembre 2026');
 });
 
-const user = (email, role, extra = {}) => ({ email, app_metadata: { dashboard_role: role }, ...extra });
-
-test('recipients: active accounts with a report role, plus the extras, once each', () => {
-  const users = [
-    user('Boss@Example.com', 'management'),
-    user('agent@example.com', 'contact'),
-    user('dev@example.com', 'developer'),
-    user('gone@example.com', 'management', { banned_until: '2999-01-01T00:00:00Z' })
-  ];
-  assert.deepEqual(reportRecipients(users, { roles: ['management'], extra: ['me@example.com', 'boss@example.com'] }), [
-    'boss@example.com',
-    'me@example.com'
-  ]);
-});
-
 test('next step: insert when new, never twice, retry a failure after the wait, up to the cap', () => {
   const now = new Date('2026-10-01T10:00:00Z');
   assert.equal(nextStep(undefined, now), 'insert');
@@ -72,7 +56,14 @@ test('next step: insert when new, never twice, retry a failure after the wait, u
 
 /** A PostgREST stand-in holding `shops` and `integration_events`. */
 function fakeSupabase({ events = [] } = {}) {
-  const rows = { shops: [{ id: 'shop-1', shop_name: 'Qiriness', iana_timezone: PARIS }], integration_events: events };
+  const rows = {
+    shops: [
+      { id: 'shop-1', shop_name: 'Qiriness', iana_timezone: PARIS, report_sender: 'support@example.com', report_recipients: [{ role: 'management' }, { email: 'me@example.com' }] },
+      { id: 'shop-2', shop_name: 'Other Brand', iana_timezone: PARIS, report_sender: 'reports@other.example', report_recipients: [{ role: 'management' }, { email: 'me@example.com' }] },
+      { id: 'shop-3', shop_name: 'Unset Brand', iana_timezone: PARIS, report_sender: null, report_recipients: [{ role: 'management' }] }
+    ],
+    integration_events: events
+  };
   const originalFetch = globalThis.fetch;
   const calls = [];
   globalThis.fetch = async (url, init = {}) => {
@@ -113,11 +104,11 @@ const quietLogger = { info() {}, warn() {}, error() {} };
 const reportConfig = {
   url: 'https://dash.test/api/reports/sales',
   secret: 's'.repeat(40),
-  roles: ['management'],
-  extraRecipients: ['me@example.com'],
+  extraRecipients: ['tester@example.com'],
   sendHour: 8
 };
-const admin = { listUsers: async () => [user('boss@example.com', 'management')] };
+const user = (email, role) => ({ email, app_metadata: { dashboard_role: role } });
+const admin = { listUsers: async () => [user('boss@example.com', 'management'), user('agent@example.com', 'contact')] };
 
 function run(db, overrides = {}) {
   const sent = [];
@@ -150,6 +141,7 @@ test('sends September once, from the report the dashboard built, and records it'
     assert.equal(first.fetched[0].url, 'https://dash.test/api/reports/sales?month=2026-09');
     assert.equal(first.fetched[0].auth, `Bearer ${reportConfig.secret}`);
     assert.equal(first.sent.length, 1);
+    assert.equal(first.sent[0].from, 'support@example.com');
     assert.deepEqual(first.sent[0].toRecipients, ['boss@example.com', 'me@example.com']);
     assert.equal(first.sent[0].subject, 'Rapport des ventes E-commerce Qiriness - Septembre 2026');
     assert.equal(first.sent[0].attachments[0].name, 'qiriness-sales-report-2026-09.html');
@@ -191,6 +183,32 @@ test('does nothing until configured, or outside the window', async () => {
   try {
     assert.deepEqual(await run(db, { config: { ...reportConfig, secret: '' } }).promise, { skipped: 'not_configured' });
     assert.deepEqual(await run(db, { now: new Date('2026-09-29T12:00:00Z') }).promise, { skipped: 'not_due' });
+    assert.equal(db.rows.integration_events.length, 0);
+  } finally {
+    db.restore();
+  }
+});
+
+test('another shop: its own report, from its own sender, to the same people', async () => {
+  const db = fakeSupabase();
+  try {
+    const other = run(db, { shopId: 'shop-2', shopSlug: 'other-shop' });
+    assert.equal((await other.promise).sent, true);
+    assert.equal(other.fetched[0].url, 'https://dash.test/api/reports/sales?month=2026-09&shop=other-shop');
+    assert.equal(other.sent[0].from, 'reports@other.example');
+    assert.deepEqual(other.sent[0].toRecipients, ['boss@example.com', 'me@example.com']);
+    assert.equal(db.rows.integration_events[0].event_key, reportEventKey('shop-2', '2026-09'));
+  } finally {
+    db.restore();
+  }
+});
+
+test('a shop with no sender is not sent and leaves no record, so it goes once one is set', async () => {
+  const db = fakeSupabase();
+  try {
+    const none = run(db, { shopId: 'shop-3', shopSlug: 'unset-shop' });
+    assert.deepEqual(await none.promise, { skipped: 'no_sender', month: '2026-09' });
+    assert.equal(none.sent.length + none.fetched.length, 0);
     assert.equal(db.rows.integration_events.length, 0);
   } finally {
     db.restore();

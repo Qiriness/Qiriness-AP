@@ -1,5 +1,6 @@
 import { createTikTokClient, exchangeTikTokCode, foldTikTokVideo, TikTokError, TIKTOK_SCOPES, tiktokConfig } from './tiktok-client.mjs';
 import { supabaseRpc, supabaseSelect, supabaseUpdate, supabaseUpsert } from './supabase-rest-client.mjs';
+import { isClaimed, trackedElsewhere } from './social-account-claims.mjs';
 import { SOCIAL_RPC, SOCIAL_T } from './tables.mjs';
 
 // A single TikTok login per shop, with rotating tokens kept together in Vault.
@@ -15,10 +16,14 @@ export async function connectTikTok({ supabase, shopId, code, redirect, userId =
     p_shop: shopId, p_provider: 'tiktok', p_token: JSON.stringify(bundle),
     p_expires_at: new Date(bundle.expiresAt).toISOString(), p_scopes: scopes, p_connected_by: userId
   });
+  // A new login another shop already tracks arrives switched off (social-account-claims.mjs).
+  const account = { kind: 'tiktok', external_id: bundle.openId };
+  const claimed = !existing.length && isClaimed(await trackedElsewhere(supabase, shopId, [account]), account);
   await supabaseUpsert(supabase, SOCIAL_T.ACCOUNTS, [{
     shop_id: shopId, provider: 'tiktok', kind: 'tiktok', external_id: bundle.openId,
     name: profile.display_name ?? null,
-    ...(existing.length ? {} : { engagement_basis: 'views' })
+    ...(existing.length ? {} : { engagement_basis: 'views' }),
+    ...(claimed ? { enabled: false } : {})
   }], 'shop_id,kind,external_id', { returning: 'minimal' });
   // Old logins retain history but cannot be synced with this login's token.
   await supabaseUpdate(supabase, SOCIAL_T.ACCOUNTS, {

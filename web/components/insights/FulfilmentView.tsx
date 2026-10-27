@@ -74,12 +74,6 @@ export function FulfilmentView({ panel, compareLabel }: { panel: FulfilmentPanel
         </Card>
       </Grid>
 
-      <Grid min={100} pin="inventory" label={tr("insights.overview.inventory")}>
-        <Card title={tr("insights.overview.inventory")} aside={<span>{inventoryAside(panel.inventory, tr)}</span>}>
-          <InventoryTable inventory={panel.inventory} />
-        </Card>
-      </Grid>
-
       <Grid min={100} pin="orders-chart" label={tr("insights.fulfilment.ordersChart")}>
         <Card title={tr("insights.fulfilment.ordersPer", { grain })}>
           <TimeSeriesChart
@@ -149,6 +143,15 @@ export function FulfilmentView({ panel, compareLabel }: { panel: FulfilmentPanel
           ) : (
             <CarrierTable rows={panel.carriers} />
           )}
+        </Card>
+      </Grid>
+
+      {/* LAST ON THE PAGE (owner, 2026-10-27): every product out of stock or
+          critical, then the next 10 most at risk (inventory.ts getInventoryWatchlist). */}
+      <Grid min={100} pin="inventory" label={tr("insights.fulfilment.atRisk")}>
+        <Card title={tr("insights.fulfilment.atRisk")} aside={<span>{inventoryAside(panel.inventory, tr)}</span>}>
+          <InventoryTable inventory={panel.inventory} />
+          <p className={t.muted}>{tr("insights.fulfilment.atRiskNote")}</p>
         </Card>
       </Grid>
     </>

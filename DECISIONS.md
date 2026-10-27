@@ -39,7 +39,7 @@ grep -rn "^### <heading>" docs/decisions/
 | Management chat | `docs/decisions/management-chat.md` | 10 | 2,439 |
 | Agent test chat | `docs/decisions/agent-test-chat.md` | 9 | 2,764 |
 | Migrations | `docs/decisions/migrations.md` | 6 | 2,349 |
-| Insights | `docs/decisions/insights.md` | 58 | 41,800 |
+| Insights | `docs/decisions/insights.md` | 61 | 45,000 |
 | Page speed | `docs/decisions/page-speed.md` | 5 | 3,200 |
 | Interface language | `docs/decisions/interface-language.md` | 3 | 1,031 |
 | Storefront advisor | `docs/decisions/storefront-advisor.md` | 49 | 25,500 |

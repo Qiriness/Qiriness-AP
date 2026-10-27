@@ -20,6 +20,7 @@ import {
   isoDay,
   postsPerDay
 } from './meta-insights.mjs';
+import { isClaimed, trackedElsewhere } from './social-account-claims.mjs';
 import { SOCIAL_PROVIDERS } from './social-model.mjs';
 import { socialAppConfig } from './social-oauth.mjs';
 import { supabaseRpc, supabaseSelect, supabaseSelectAll, supabaseUpdate, supabaseUpsert } from './supabase-rest-client.mjs';
@@ -166,7 +167,17 @@ export async function readSocialStatus(supabase, shopId) {
 }
 
 /** Track or stop tracking one account. Its stored figures stay; every read skips a disabled one. */
+/**
+ * Track an account, or stop. Null when this shop has no such account;
+ * `{ refused: 'tracked_elsewhere' }` when switching on an account another shop
+ * tracks (social-account-claims.mjs).
+ */
 export async function setAccountEnabled({ supabase, shopId, accountId, enabled }) {
+  if (enabled) {
+    const [account] = await supabaseSelect(supabase, SOCIAL_T.ACCOUNTS, { shop_id: shopId, id: accountId }, 'kind,external_id', { limit: 1 });
+    if (!account) return null;
+    if (isClaimed(await trackedElsewhere(supabase, shopId, [account]), account)) return { refused: 'tracked_elsewhere' };
+  }
   const rows = await supabaseUpdate(supabase, SOCIAL_T.ACCOUNTS, { shop_id: shopId, id: accountId }, { enabled: Boolean(enabled) });
   return rows?.[0] ?? null;
 }
@@ -208,8 +219,15 @@ export async function discoverGoogleAccounts(ads, { log = () => {} } = {}) {
 
 async function upsertAccounts(supabase, shopId, provider, accounts) {
   if (accounts.length === 0) return [];
-  // `enabled` is not sent, so a re-discovery never re-enables what the team switched off.
-  const rows = accounts.map((a) => ({
+  // `enabled` is not sent for an account this shop already has, so a
+  // re-discovery never re-enables what the team switched off. A NEW account
+  // that another shop tracks arrives switched off (social-account-claims.mjs);
+  // any other new one takes the column's default, on.
+  const known = await supabaseSelect(supabase, SOCIAL_T.ACCOUNTS, { shop_id: shopId, provider }, 'kind,external_id', { limit: 1000 });
+  const knownKeys = new Set(known.map((a) => `${a.kind}:${a.external_id}`));
+  const fresh = accounts.filter((a) => !knownKeys.has(`${a.kind}:${a.external_id}`));
+  const claimed = await trackedElsewhere(supabase, shopId, fresh);
+  const row = (a) => ({
     shop_id: shopId,
     provider,
     kind: a.kind,
@@ -218,8 +236,13 @@ async function upsertAccounts(supabase, shopId, provider, accounts) {
     handle: a.handle ?? null,
     currency: a.currency ?? null,
     login_customer_id: a.login_customer_id ?? null
-  }));
-  return supabaseUpsert(supabase, SOCIAL_T.ACCOUNTS, rows, 'shop_id,kind,external_id');
+  });
+  // Two writes, because a bulk upsert fills a key one row lacks with null.
+  const off = fresh.filter((a) => isClaimed(claimed, a));
+  const rest = accounts.filter((a) => !off.includes(a));
+  const written = rest.length ? await supabaseUpsert(supabase, SOCIAL_T.ACCOUNTS, rest.map(row), 'shop_id,kind,external_id') : [];
+  if (off.length) written.push(...(await supabaseUpsert(supabase, SOCIAL_T.ACCOUNTS, off.map((a) => ({ ...row(a), enabled: false })), 'shop_id,kind,external_id')));
+  return written;
 }
 
 // --- sync -----------------------------------------------------------------------------

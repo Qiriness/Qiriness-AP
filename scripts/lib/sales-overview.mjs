@@ -26,33 +26,72 @@ export const INVENTORY_MAX_COVER_DAYS = 30;
  */
 export const INVENTORY_MIN_STOCK_UNITS = 50;
 
-const STATUS_LIMITS = Object.freeze([
-  { status: 'critical', maxDays: 7 },
-  { status: 'low', maxDays: 14 },
-  { status: 'watch', maxDays: INVENTORY_MAX_COVER_DAYS }
-]);
+/**
+ * CRITICAL: under two weeks of cover, OR under this many units whatever the
+ * cover (owner, 2026-10-27). It replaced « critical ≤ 7 days, low ≤ 14 days »:
+ * the stock alert mails on a product newly critical, so the word needed one
+ * meaning, and a slow seller with a few dozen units left is one order from out.
+ */
+export const INVENTORY_CRITICAL_COVER_DAYS = 14;
+export const INVENTORY_CRITICAL_UNITS = 40;
 
 export const INVENTORY_STATUS_LABELS = Object.freeze({
   out: 'Out of stock',
   critical: 'Critical',
-  low: 'Low',
   watch: 'Watch'
 });
 
 /**
  * One product's standing. Nothing on the shelf is `out` whatever the rate —
  * including a product nobody bought in the window, which has no cover to
- * compute and is still unsellable. Otherwise cover sets the status; past a
- * month of cover, or with no cover at all, a product under
- * INVENTORY_MIN_STOCK_UNITS is `watch`. Null when it is not an exception.
+ * compute and is still unsellable. `critical`: under
+ * INVENTORY_CRITICAL_COVER_DAYS of cover, or under INVENTORY_CRITICAL_UNITS.
+ * `watch`: up to INVENTORY_MAX_COVER_DAYS of cover, or under
+ * INVENTORY_MIN_STOCK_UNITS. Null when it is not an exception.
  */
 export function inventoryStatus(stock, coverDays) {
   if (stock === null || stock === undefined || !Number.isFinite(Number(stock))) return null;
-  if (Number(stock) <= 0) return 'out';
-  const hasCover = coverDays !== null && coverDays !== undefined && Number.isFinite(Number(coverDays));
-  const limit = hasCover ? STATUS_LIMITS.find((l) => Number(coverDays) <= l.maxDays) : undefined;
-  if (limit) return limit.status;
-  return Number(stock) < INVENTORY_MIN_STOCK_UNITS ? 'watch' : null;
+  const units = Number(stock);
+  if (units <= 0) return 'out';
+  const cover = coverDays !== null && coverDays !== undefined && Number.isFinite(Number(coverDays)) ? Number(coverDays) : null;
+  if ((cover !== null && cover < INVENTORY_CRITICAL_COVER_DAYS) || units < INVENTORY_CRITICAL_UNITS) return 'critical';
+  if ((cover !== null && cover <= INVENTORY_MAX_COVER_DAYS) || units < INVENTORY_MIN_STOCK_UNITS) return 'watch';
+  return null;
+}
+
+/** Out of stock or critical: what the stock alert lists (scripts/lib/stock-alert.mjs). */
+export function isAlertStatus(status) {
+  return status === 'out' || status === 'critical';
+}
+
+/**
+ * Units below which a product still on the shelf is ranked straight after the
+ * out-of-stock ones, whatever its cover (owner, 2026-10-27: 20, then 40 the
+ * same day, the critical floor). A cover worked out from a slow month can look
+ * comfortable while there are a dozen units left.
+ */
+export const INVENTORY_VERY_LOW_UNITS = INVENTORY_CRITICAL_UNITS;
+
+/**
+ * The order of risk, every list of stock exceptions in it (owner, 2026-10-27):
+ *   1. out of stock, best sellers of the window first;
+ *   2. under INVENTORY_VERY_LOW_UNITS units, lowest cover first;
+ *   3. the rest, lowest cover first.
+ * Within a group, a product with no cover (nothing left in the window) goes
+ * after those with one; ties go to fewer units, then more sold, then the name.
+ * Returns a new array. `items`: `{ stock, coverDays, unitsOut, title }`.
+ */
+export function rankInventoryByRisk(items) {
+  const group = (item) => (item.stock <= 0 ? 0 : item.stock < INVENTORY_VERY_LOW_UNITS ? 1 : 2);
+  const cover = (item) => (item.coverDays === null || item.coverDays === undefined ? Infinity : Number(item.coverDays));
+  return [...items].sort(
+    (a, b) =>
+      group(a) - group(b) ||
+      (group(a) === 0 ? 0 : cover(a) - cover(b)) ||
+      a.stock - b.stock ||
+      b.unitsOut - a.unitsOut ||
+      String(a.title).localeCompare(String(b.title))
+  );
 }
 
 // --- revenue ------------------------------------------------------------------
@@ -197,7 +236,7 @@ export function managementSignals({ compareLabel, current, previous, inventory, 
     if (out + critical > 0) {
       signals.push({
         tone: 'warn',
-        title: `${out} product${out === 1 ? '' : 's'} out of stock${critical ? `, ${critical} under a week of cover` : ''}`,
+        title: `${out} product${out === 1 ? '' : 's'} out of stock${critical ? `, ${critical} critical (under two weeks of cover or 40 units)` : ''}`,
         detail: 'Active products, as of the last product sync.'
       });
     } else {

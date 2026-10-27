@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSession } from "@/lib/server/auth";
 import { STATE_COOKIE, completeConnect, isProvider } from "@/lib/server/social-connections-service";
-import { knownReturn } from "@/lib/server/social-return";
+import { returnPath } from "@/lib/server/social-return";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
  * `error` when they declined). The state is checked against this browser's
  * cookie, the code exchanged, the token stored in Vault, the accounts found,
  * and a first sync queued for the worker. The person lands back on the page
- * they came from with `connected=` or `connect_error=` — a short code, never
- * the provider's text.
+ * they came from, on the shop the state names, with `connected=` or
+ * `connect_error=` — a short code, never the provider's text.
  *
  * Behind the session gate like every other integrations route: Lax cookies
  * travel with this top-level redirect, so the person is still signed in.
@@ -23,9 +23,8 @@ export async function GET(request: NextRequest, { params }: { params: { provider
   } catch {
     stored = {};
   }
-  const back = knownReturn(stored.back);
-  const land = (query: string) => {
-    const response = NextResponse.redirect(new URL(`${back}&${query}`, request.url));
+  const land = (query: string, shopSlug?: string) => {
+    const response = NextResponse.redirect(new URL(`${returnPath(stored.back, shopSlug)}&${query}`, request.url));
     response.cookies.set(STATE_COOKIE, "", { path: "/api/settings/integrations", maxAge: 0 });
     return response;
   };
@@ -44,6 +43,6 @@ export async function GET(request: NextRequest, { params }: { params: { provider
   });
 
   return result.ok
-    ? land(`connected=${params.provider}`)
-    : land(`connect_error=${encodeURIComponent(result.code)}&provider=${params.provider}`);
+    ? land(`connected=${params.provider}`, result.shopSlug)
+    : land(`connect_error=${encodeURIComponent(result.code)}&provider=${params.provider}`, result.shopSlug);
 }

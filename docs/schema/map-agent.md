@@ -20,7 +20,12 @@ The always-on worker package: ingestion, casework, investigation, drafting, life
 |   |   |                        # subscription-manager (Graph subscriptions per
 |   |   |                        # folder; no-op without MAIL_WEBHOOK_URL)
 |   |   |-- reports/             # sales-report-mail: the monthly sales report,
-|   |   |                        # mailed from the support mailbox on the 1st
+|   |   |                        # one per DASHBOARD_SHOPS shop on the 1st, each
+|   |   |                        # from the shop's report_sender to its
+|   |   |                        # report_recipients (Settings → Integrations) ·
+|   |   |                        # stock-alert-mail: once per product sync per shop,
+|   |   |                        # an .xlsx of out/critical products when one is new
+|   |   |                        # (state in stock_alerts)
 |   |   |                        # (fetched from /api/reports/sales; recorded in
 |   |   |                        # integration_events, one key per shop + month)
 |   |   |-- outbound/            # THE ONLY SENDER OF CUSTOMER REPLIES. outbound-rules

@@ -10,6 +10,41 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Stock alert, per-shop mail recipients, critical redefined, Fulfilment watchlist (2026-10-27)
+
+Why: DECISIONS → Insights § The stock alert, § Stock is now….
+- **Critical is under 14 days of cover or under 40 units** (`inventoryStatus`); `low` is gone. The risk order's "very low" floor is 40 (was 20 earlier the same day). The Overview signal says "critical" instead of "under a week of cover".
+- **Fulfilment card = watchlist:** every product out of stock or critical, then the next 10 most at risk, even if fine (`getInventoryWatchlist`, status `ok`). Qiriness on 2026-10-27: 3 out, 2 critical (Gua Sha 19 units, bathrobe 17), then 10 « ok ». Barbara Gould: 0 at risk, 10 shown.
+- **Stock alert** (`agent/src/reports/stock-alert-mail.mjs`, `scripts/lib/stock-alert.mjs`). Once per shop after each product sync, it mails an .xlsx of every product out of stock or critical when one is newly so. It is recorded in the new `stock_alerts` table; the first check is a silent baseline. `scripts/lib/xlsx-writer.mjs` writes the file with no dependency.
+- **Settings → Integrations:** « Monthly sales report » and « Stock alert » cards (`MailSettingsCard`): sent from, and sent to as roles and/or any addresses, per shop (`PUT /api/settings/integrations/mail`, closed to contact). `scripts/lib/shop-mail-settings.mjs` replaces `report-sender.mjs`.
+- **Monthly report recipients** now come from `shops.report_recipients` (default: the management role), not `SALES_REPORT_ROLES` / `SALES_REPORT_EXTRA_RECIPIENTS`.
+- Migration `03_shop_mail_settings_stock_alerts.sql` applied to production 2026-10-27; baseline regenerated, identical to production. Tests: stock-alert, stock-alert-mail, xlsx-writer, shop-mail-settings and the new status rules; all 3,855 pass.
+
+## Stock exceptions ranked by risk; Fulfilment's card is the 15 most at risk, at the bottom (2026-10-27)
+
+- `rankInventoryByRisk` (`scripts/lib/sales-overview.mjs`): out of stock (best sellers first), then under 20 units, then lowest cover. Applied in `getInventoryExceptions`, so Overview, Fulfilment and the report share it. It replaces the SQL's order, which put a 3-day cover on 120 units ahead of 15 units at 4 days. Why: DECISIONS → Insights § Stock is now….
+- Fulfilment: the inventory card moved from third to last, retitled « Most at-risk products », capped at 15, with a line saying how many there are in all.
+- Test in `sales-overview.test.mjs`. Qiriness on 2026-10-27 had 5 exceptions: 3 out of stock, then the Gua Sha at 19 units and the bathrobe at 17.
+- Also: migration `02_shop_report_sender.sql` applied to production, baseline regenerated (identical to production), and both shops' `report_sender` set to the Qiriness contact mailbox.
+
+## Connections are per shop, the shop switcher moves to the sidebar, and each shop gets its own monthly report (2026-10-27)
+
+Owner: "make sure that when connections or integrations are made that they are shop specific, this is very very important". Why: DECISIONS → Insights § Connections belong to one shop, § The shop is picked in the sidebar, § The report is mailed on the 1st….
+- **Integrations name their shop.** Every `/api/settings/integrations/*` route requires `?shop=` (`web/lib/server/integration-shop.ts`, 400 otherwise). Klaviyo and social services take the shop explicitly, with no desk fallback. The OAuth state carries the shop signed, and the callback connects that shop and lands on it.
+  - **Fixed:** the Insights Social → Connections dialog showed the selected shop but connected, synced and disconnected the desk shop.
+- **One account counts for one shop** (`scripts/lib/social-account-claims.mjs`). A newly discovered account that another shop tracks arrives switched off, and switching it on is refused (409). Qiriness's Meta login already lists Barbara Gould's ad account. TikTok follows the same rule.
+- **The worker serves every dashboard shop's `sync_social` jobs** (its own queue per shop; the `LISTEN` wake filters on all their ids). Before, a Barbara Gould « Sync now » would have waited for the nightly.
+- **Monthly report per shop.** One report per `DASHBOARD_SHOPS` shop, built with `?shop=`, recorded per shop, to the same recipients.
+  - Each is sent from the shop's own address, `shops.report_sender` (migration `02_shop_report_sender.sql`), set on Settings → Integrations under « Monthly sales report ». Applied to production on 2026-10-27, and both shops set to the Qiriness contact mailbox. A shop with none is skipped (`sales_report.no_sender`). There is no env fallback: the owner wants it on the shop and editable.
+  - The file is named after the shop: `barbara-gould-sales-report-2026-09.html`, for the download and the attachment alike. It was the literal `qiriness-` for every shop.
+  - Graph `sendMail` takes `from`.
+  - `/api/reports/sales` answers 404 for a shop it does not serve.
+  - `npm run report:sales:test -- --shop=<slug>` test-sends one shop's report.
+- **Shop switcher in the sidebar** (`components/app-shell/ShopMenu.tsx`, `web/lib/shop-switch.mjs`), with each shop's logo (`/brand/shops/<slug>.png`, else its initial). The Insights title's `ShopSwitcher` was removed.
+  - With another shop on screen, the nav lists only Insights and Settings, and Settings hides Agent settings and Dev info.
+  - The middleware gives `/settings` a `?shop=` like Insights.
+- Tests: `shop-switch.test.mjs`, `social-account-claims.test.mjs`, `agent/src/config.test.mjs`, report and job-waker cases. All 3,846 tests pass; web `tsc`, lint and `next build` are clean. **Not run against production:** nothing connected for Barbara Gould yet, no report sent (VALIDATION_LOG → Per-shop connections, report and sidebar).
+
 ## Insights serves several shops: a switcher, the shop in the address, per-shop caches and a nightly per shop (2026-10-26)
 
 Barbara Gould joins Qiriness in the same database and deployment, for Insights only. Both are Lap Groupe shops, reached with the same Shopify app. This replaces the separate-project plan of 2026-10-12. Why: DECISIONS → Insights § Several shops, one dashboard.

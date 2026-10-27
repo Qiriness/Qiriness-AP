@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import type { MouseEvent } from "react";
 import type { ComponentType } from "react";
@@ -16,7 +15,10 @@ import {
   StoreIcon,
   TicketIcon,
 } from "@/components/icons";
-import { shopLabel, useShop } from "@/lib/shop-context";
+import type { NavShop } from "@/lib/shop-context";
+import { isShopPage, navHref, switchHref } from "@/lib/shop-switch.mjs";
+import { ShopMenu } from "./ShopMenu";
+import { useShopOnScreen } from "./use-shop-on-screen";
 import { canUseManagementChat } from "../../../scripts/lib/dashboard-auth.mjs";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/en";
@@ -86,6 +88,8 @@ interface SidebarProps {
   unfulfilledOrders?: number;
   /** The signed-in role, or null while it is still being fetched. */
   role?: string | null;
+  /** Called with where a pick in the shop switcher goes; the shell navigates. */
+  onSwitchShop?: (href: string, label: string) => void;
 }
 
 export function Sidebar({
@@ -97,11 +101,18 @@ export function Sidebar({
   openTickets = 0,
   unfulfilledOrders = 0,
   role = null,
+  onSwitchShop,
 }: SidebarProps) {
   const t = useT();
-  // The shop's name and storefront, from `shops` (shop-context.tsx). Both were
-  // literals: « Qiriness » and https://qiriness.com.
-  const shop = useShop();
+  // THE SHOP ON SCREEN, picked here (web/lib/shop-switch.mjs): its name, mark
+  // and storefront come from `shops` (all were literals once: « Qiriness »,
+  // https://qiriness.com). Another shop has no tickets, orders or agent, so only
+  // its per-shop sections are listed while it is on screen.
+  const { shops, shop, pathname, search } = useShopOnScreen();
+  const pickShop = (target: NavShop) => {
+    const href = switchHref({ pathname, search, target });
+    if (href) onSwitchShop?.(href, target.name);
+  };
   // Tickets is the queue to work, so it gets the warning colour; Conversations and
   // Orders are grey, present but not competing with it.
   const badges: Record<string, { count: number; key: string; muted: boolean }> = {
@@ -115,23 +126,10 @@ export function Sidebar({
       className={`${styles.sidebar} ${collapsed ? styles.collapsed : ""}`}
       aria-label={t("nav.primary")}
     >
-      <div className={styles.brand}>
-        <Image
-          src="/brand/logo.png"
-          alt={shopLabel(shop)}
-          width={32}
-          height={32}
-          className={styles.mark}
-          // 530 bytes and already the size it is shown at: the optimiser would
-          // re-encode it for nothing and add a request through /_next/image.
-          unoptimized
-          priority
-        />
-        {!collapsed && <span className={styles.brandSub}>Support&nbsp;OS</span>}
-      </div>
+      <ShopMenu shops={shops} current={shop} collapsed={collapsed} onPick={pickShop} />
 
       <ul className={styles.navList}>
-        {NAV.filter((item) => !item.visibleTo || item.visibleTo(role)).map((item) => {
+        {NAV.filter((item) => (!item.visibleTo || item.visibleTo(role)) && (shop.desk || isShopPage(item.href))).map((item) => {
           const Icon = item.icon;
           const isActive = item.available && item.href === activeHref;
           const badge = badges[item.href];
@@ -159,12 +157,12 @@ export function Sidebar({
           return (
             <li key={item.labelKey}>
               <Link
-                href={item.href}
+                href={navHref(item.href, shop, shops.length)}
                 className={`${styles.navItem} ${styles.navLink} ${
                   isActive ? styles.active : ""
                 }`}
                 aria-current={isActive ? "page" : undefined}
-                onClick={(event) => onNavigate?.(event, item.href, t(item.labelKey))}
+                onClick={(event) => onNavigate?.(event, navHref(item.href, shop, shops.length), t(item.labelKey))}
               >
                 <Icon size={19} />
                 {!collapsed && <span className={styles.navLabel}>{t(item.labelKey)}</span>}
@@ -191,14 +189,14 @@ export function Sidebar({
           href={shop.storefrontUrl ?? undefined}
           target="_blank"
           rel="noreferrer noopener"
-          title={t("nav.openStore")}
+          title={t("nav.openStore", { store: shop.name })}
         >
           <span className={styles.storeIcon}>
             <StoreIcon size={18} />
           </span>
           {!collapsed && (
             <span className={styles.storeText}>
-              <span className={styles.storeName}>{shopLabel(shop)}</span>
+              <span className={styles.storeName}>{shop.name}</span>
               <span className={styles.storeMeta}>{t("nav.shopifyStore")}</span>
             </span>
           )}

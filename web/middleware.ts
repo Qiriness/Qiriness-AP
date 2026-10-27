@@ -131,16 +131,18 @@ export async function middleware(request: NextRequest) {
 }
 
 /**
- * EVERY INSIGHTS PAGE NAMES ITS SHOP IN ITS ADDRESS (`?shop=`). The address is
- * what the browser keeps a prefetched page under, so a shop known only from a
- * cookie would let Sales for one shop be shown from the other's prefetch. A page
+ * EVERY INSIGHTS AND SETTINGS PAGE NAMES ITS SHOP IN ITS ADDRESS (`?shop=`). The
+ * address is what the browser keeps a prefetched page under, so a shop known
+ * only from a cookie would let Sales for one shop be shown from the other's
+ * prefetch, or Settings connect Klaviyo to the shop the other tab picked. A page
  * without a shop the dashboard serves is sent to the one last looked at (the
- * cookie), or the first; a page with one remembers it. Pages outside Insights
- * are the support desk's shop and are left alone. scripts/lib/dashboard-shops.mjs
+ * cookie, set by the sidebar's switcher), or the first; a page with one
+ * remembers it. Other pages are the support desk's shop and are left alone.
+ * scripts/lib/dashboard-shops.mjs
  */
 function insightsShop(request: NextRequest): { redirect?: NextResponse; remember?: string } {
   const { pathname, searchParams } = request.nextUrl;
-  if (!pathname.startsWith("/insights/")) return {};
+  if (!pathname.startsWith("/insights/") && pathname !== "/settings") return {};
   const named = shopForSlug(searchParams.get("shop"), process.env);
   if (named) return { remember: named.slug };
   const fallback = defaultShop(request.cookies.get(SHOP_COOKIE)?.value, process.env);

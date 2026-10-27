@@ -124,7 +124,7 @@
     display: flex;
   }
   .topbarBrand {
-    display: inline;
+    display: inline-flex;
   }
   .helpLabel {
     display: none;

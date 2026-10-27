@@ -16,8 +16,8 @@ export const en = {
   "insights.inventory.notMoving": "not moving",
   "insights.inventory.status.out": "Out of stock",
   "insights.inventory.status.critical": "Critical",
-  "insights.inventory.status.low": "Low",
   "insights.inventory.status.watch": "Watch",
+  "insights.inventory.status.ok": "Fine",
   "insights.inventory.aside": "Now, as of the product sync ({synced} UTC) — not cut by the date range",
 } as const;
 
@@ -38,7 +38,7 @@ export const fr: Record<keyof typeof en, string> = {
   "insights.inventory.notMoving": "ne bouge pas",
   "insights.inventory.status.out": "Rupture",
   "insights.inventory.status.critical": "Critique",
-  "insights.inventory.status.low": "Faible",
   "insights.inventory.status.watch": "À surveiller",
+  "insights.inventory.status.ok": "Suffisant",
   "insights.inventory.aside": "Maintenant, à la dernière synchro produits ({synced} UTC) — non filtré par la période",
 };

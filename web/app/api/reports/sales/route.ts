@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { shopForSlug } from "../../../../../scripts/lib/dashboard-shops.mjs";
 import { renderSalesReport } from "../../../../../scripts/lib/sales-report.mjs";
 import { ReportMonthError, buildSalesReport } from "@/lib/server/insights/report-service";
 
@@ -20,6 +21,10 @@ const MIN_SECRET_LENGTH = 32;
  *
  * `month` is required: which month to mail is the worker's decision, taken on
  * the shop clock, not this route's.
+ *
+ * `shop` (a slug) picks the shop; without it, the desk shop's report. A slug
+ * this deployment does not serve is a 404, never the desk shop's report: that
+ * would mail Qiriness's figures under another brand's name.
  */
 export async function GET(request: Request) {
   const secret = process.env.SALES_REPORT_SECRET ?? "";
@@ -28,11 +33,16 @@ export async function GET(request: Request) {
     return Response.json({ error: "Not authorised." }, { status: 401 });
   }
 
-  const month = new URL(request.url).searchParams.get("month");
+  const params = new URL(request.url).searchParams;
+  const month = params.get("month");
   if (!month) return Response.json({ error: "month=YYYY-MM is required." }, { status: 400 });
+  const shop = params.get("shop");
+  if (shop && !shopForSlug(shop, process.env)) {
+    return Response.json({ error: `This dashboard does not serve a shop "${shop}" (DASHBOARD_SHOPS).` }, { status: 404 });
+  }
 
   try {
-    const html = renderSalesReport(await buildSalesReport(month));
+    const html = renderSalesReport(await buildSalesReport(month, shop ?? undefined));
     return new Response(html, {
       headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store, max-age=0" },
     });

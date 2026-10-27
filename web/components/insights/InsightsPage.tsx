@@ -12,26 +12,11 @@ import { getMarketplaces } from "@/lib/server/marketplaces";
 import { getShopByDomain } from "@/lib/server/shop";
 import { ShopProvider, type ShopInfo } from "@/lib/shop-context";
 import { DESK_ONLY_PANELS, INSIGHTS_PANELS, type InsightsPanel, type InsightsScope } from "@/lib/types";
-import { dashboardShops } from "../../../scripts/lib/dashboard-shops.mjs";
 import { InsightsFrame } from "./InsightsFrame";
 import { InsightsHeader } from "./InsightsHeader";
 import { PanelError } from "./InsightsKit";
-import type { SwitcherShop } from "./ShopSwitcher";
 
 const EMPTY_SHOP: ShopInfo = { name: null, storefrontUrl: null, marketplaces: [] };
-
-/** Each shop the switcher offers, named by Shopify's shop name once synced (its slug before). */
-async function switcherShops(): Promise<SwitcherShop[]> {
-  const shops = dashboardShops(process.env) as { slug: string; domain: string; desk: boolean }[];
-  if (shops.length < 2) return [];
-  return Promise.all(
-    shops.map(async (shop) => ({
-      slug: shop.slug,
-      desk: shop.desk,
-      label: (await getShopByDomain(shop.domain).catch(() => null))?.shopName ?? shop.slug,
-    }))
-  );
-}
 
 /**
  * The selected shop as the browser's components need it (its name, storefront
@@ -101,7 +86,6 @@ export async function InsightsPage({
   const panels = INSIGHTS_PANELS.filter(
     (panel) => canSeePanel(session.role, panel.id) && (selected.desk || !(DESK_ONLY_PANELS as string[]).includes(panel.id))
   ).map((panel) => panel.id);
-  const shopsRead = switcherShops();
 
   // Started, not awaited: the sidebar badges are read beside the panel rather
   // than before it. navBadgeCounts never throws.
@@ -133,7 +117,7 @@ export async function InsightsPage({
     error = e instanceof Error ? e.message : getT()("insights.shell.loadFailed");
   }
   const badges = await badgesRead;
-  const [shops, info] = await Promise.all([shopsRead, shopInfo(ctx)]);
+  const info = await shopInfo(ctx);
   const panel = error ? <PanelError message={error} /> : <Fragment key={periodKey(searchParams)}>{body}</Fragment>;
 
   return (
@@ -153,8 +137,6 @@ export async function InsightsPage({
               renderedAt={ctx?.renderedAt ?? null}
               tzFallback={ctx?.tzFallback ?? false}
               months={ctx?.months ?? []}
-              shops={shops}
-              shop={selected.slug}
             />
           }
         >

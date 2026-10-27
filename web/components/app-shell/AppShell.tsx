@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useTransition } from "react";
 import type { MouseEvent, ReactNode } from "react";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { UserMenu, type Me } from "./UserMenu";
 import { HelpIcon } from "@/components/icons";
 import { useT } from "@/lib/i18n/client";
-import { shopLabel, useShop } from "@/lib/shop-context";
+import { ShopMark } from "./ShopMenu";
+import { useShopOnScreen } from "./use-shop-on-screen";
 import styles from "./AppShell.module.css";
 
 interface AppShellProps {
@@ -36,7 +36,7 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
   const [me, setMe] = useState<Me | null>(null);
   const router = useRouter();
   const t = useT();
-  const shop = useShop();
+  const { shop } = useShopOnScreen();
   const [pending, startTransition] = useTransition();
   const [target, setTarget] = useState<{ href: string; label: string } | null>(null);
 
@@ -62,6 +62,11 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
     // A modified click (new tab, new window) belongs to the browser.
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
+    go(href, label);
+  }
+
+  function go(href: string, label: string) {
+    setDrawerOpen(false);
     setTarget({ href, label });
     startTransition(() => router.push(href));
   }
@@ -106,6 +111,7 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
           collapsed={collapsed && !drawerOpen}
           onToggleCollapse={() => setCollapsed((c) => !c)}
           onNavigate={navigate}
+          onSwitchShop={go}
           openConversations={openConversations}
           openTickets={openTickets}
           unfulfilledOrders={unfulfilledOrders}
@@ -136,14 +142,9 @@ export function AppShell({ activeHref, children, openConversations, openTickets,
             <span />
           </button>
 
-          <Image
-            src="/brand/logo.png"
-            alt={shopLabel(shop)}
-            width={28}
-            height={28}
-            className={styles.topbarBrand}
-            unoptimized
-          />
+          <span className={styles.topbarBrand} title={shop.name}>
+            <ShopMark shop={shop} size={28} />
+          </span>
 
           <div className={styles.topbarActions}>
             <button type="button" className={styles.helpBtn}>

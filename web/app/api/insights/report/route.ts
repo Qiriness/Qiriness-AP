@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     return new Response(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `attachment; filename="${reportFileName(month)}"`,
+        "Content-Disposition": `attachment; filename="${reportFileName(month, shop.shopName)}"`,
         "Cache-Control": "no-store, max-age=0",
       },
     });

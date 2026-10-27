@@ -17,7 +17,7 @@
 import { RPC } from "../../../../scripts/lib/tables.mjs";
 import type { FulfilmentBucket, FulfilmentCarrier, FulfilmentPanel, OrdersSummary } from "../../types";
 import { orderArgs, type InsightsContext } from "./context";
-import { getInventoryExceptions } from "./inventory";
+import { getInventoryWatchlist } from "./inventory";
 import { getOpenOrders } from "./open-orders";
 import { logDashboardAccess } from "../access-log";
 import { getOrderSeries, getOrdersSummary, ordersCoverage } from "./orders";
@@ -45,7 +45,7 @@ export async function getFulfilmentPanel(ctx: InsightsContext): Promise<Fulfilme
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_FULFILMENT_BUCKETS, orderArgs(ctx)),
     callRpc<Record<string, unknown>>(RPC.INSIGHTS_FULFILMENT_CARRIERS, orderArgs(ctx)),
     getOpenOrders(ctx),
-    getInventoryExceptions(ctx),
+    getInventoryWatchlist(ctx),
   ]);
 
   // The waiting-orders list names customers and shows their addresses.

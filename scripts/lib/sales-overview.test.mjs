@@ -5,6 +5,7 @@ import {
   averageOrderValue,
   inventoryStatus,
   managementSignals,
+  rankInventoryByRisk,
   revenueBridge,
   revenueDrivers
 } from './sales-overview.mjs';
@@ -15,11 +16,13 @@ test('nothing on the shelf is out of stock, whether or not it sold', () => {
   assert.equal(inventoryStatus(0, null), 'out');
 });
 
-test('cover sets the status, and a month of cover is not an exception', () => {
-  assert.equal(inventoryStatus(3, 2.5), 'critical');
-  assert.equal(inventoryStatus(10, 7), 'critical');
-  assert.equal(inventoryStatus(10, 7.1), 'low');
-  assert.equal(inventoryStatus(10, 14), 'low');
+test('critical: under two weeks of cover, or under 40 units; a month of cover is not an exception', () => {
+  assert.equal(inventoryStatus(60, 2.5), 'critical');
+  assert.equal(inventoryStatus(60, 13.9), 'critical');
+  assert.equal(inventoryStatus(60, 14), 'watch');
+  assert.equal(inventoryStatus(39, 200), 'critical');
+  assert.equal(inventoryStatus(39, null), 'critical');
+  assert.equal(inventoryStatus(40, 200), 'watch');
   assert.equal(inventoryStatus(60, 29.9), 'watch');
   assert.equal(inventoryStatus(60, 45), null);
   // Plenty on the shelf and not moving: no cover, not at risk.
@@ -29,7 +32,7 @@ test('cover sets the status, and a month of cover is not an exception', () => {
 
 test('under 50 units is listed whatever the cover, as watch', () => {
   assert.equal(inventoryStatus(49, 45), 'watch');
-  assert.equal(inventoryStatus(3, null), 'watch');
+  assert.equal(inventoryStatus(45, null), 'watch');
   assert.equal(inventoryStatus(50, 45), null);
   assert.equal(inventoryStatus(50, null), null);
   // Short cover still outranks the floor.
@@ -74,7 +77,7 @@ test('signals come in a fixed order and never exceed four', () => {
   assert.equal(signals[0].tone, 'warn');
   assert.match(signals[1].title, /^Discount rate rose/);
   assert.equal(signals[1].tone, 'warn');
-  assert.equal(signals[2].title, '1 product out of stock, 1 under a week of cover');
+  assert.equal(signals[2].title, '1 product out of stock, 1 critical (under two weeks of cover or 40 units)');
   assert.equal(signals[3].title, '30.0% of orders shipped after 3 days');
   assert.equal(signals[3].tone, 'warn');
 });
@@ -94,4 +97,28 @@ test("the AOV driver follows Shopify's AOV when it is given, not revenue ÷ orde
   assert.equal(d.lead, 'aov');
   // Without it, the old definition.
   assert.equal(revenueDrivers({ revenue: 1200, paidOrders: 10 }, { revenue: 1000, paidOrders: 10 }).aov, 0.2);
+});
+
+test('risk order: out of stock (best sellers first), then under 40 units, then lowest cover', () => {
+  const item = (title, stock, coverDays, unitsOut = 10) => ({ title, stock, coverDays, unitsOut });
+  const ranked = rankInventoryByRisk([
+    item('plenty, 3 days', 120, 3),
+    item('out, slow', 0, null, 0),
+    item('15 left, 25 days', 15, 25),
+    item('out, best seller', 0, 0, 40),
+    item('40 left, not moving', 40, null, 0),
+    item('15 left, 4 days', 15, 4),
+    item('8 left, not moving', 8, null, 0),
+    item('60 left, 10 days', 60, 10)
+  ]).map((i) => i.title);
+  assert.deepEqual(ranked, [
+    'out, best seller',
+    'out, slow',
+    '15 left, 4 days',
+    '15 left, 25 days',
+    '8 left, not moving',
+    'plenty, 3 days',
+    '60 left, 10 days',
+    '40 left, not moving'
+  ]);
 });

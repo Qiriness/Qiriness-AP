@@ -71,6 +71,8 @@ const DENIED = Object.freeze({
     '/api/chat',
     // Only the Klaviyo key: connecting social accounts is open (2026-10-16).
     '/api/settings/integrations/klaviyo',
+    // Who each shop's automatic mail comes from and goes to, on the same tab.
+    '/api/settings/integrations/mail',
     '/api/settings/agents'
   ]
 });

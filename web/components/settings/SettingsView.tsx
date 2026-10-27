@@ -9,6 +9,7 @@ import t from "../insights/tables.module.css";
 import { AgentModelPicker } from "./AgentModelPicker";
 import { DevInfo } from "./DevInfo";
 import { KlaviyoKeyCard } from "./KlaviyoKeyCard";
+import { MailSettingsCard, type MailSetting } from "./MailSettingsCard";
 import { SocialProviderCards } from "../insights/SocialProviderCard";
 import { SocialNotice } from "../insights/SocialConnectionsDialog";
 import type { SocialConnectionsStatus } from "@/lib/social-types";
@@ -25,16 +26,24 @@ export interface SettingsMe {
   access: { id: string; allowed: boolean }[];
 }
 
-// Tab words: `settings.tab.<id>`.
-const TABS: { id: SettingsTab; href: string }[] = [
-  { id: "me", href: "/settings" },
-  { id: "agents", href: "/settings?tab=agents" },
-  { id: "integrations", href: "/settings?tab=integrations" },
-  { id: "dev", href: "/settings?tab=dev" },
-];
+// Tab words: `settings.tab.<id>`. Each link carries the shop (`?shop=`).
+const TABS: SettingsTab[] = ["me", "agents", "integrations", "dev"];
 
 /** Tabs drawn only for roles that manage integrations (developer, management). */
 const RESTRICTED: SettingsTab[] = ["integrations", "dev"];
+
+/** Tabs about the support desk's agents, drawn only on the desk shop. */
+const DESK_ONLY: SettingsTab[] = ["agents", "dev"];
+
+/** The shop Settings is open on: the sidebar's choice, from the address. */
+export interface SettingsShop {
+  slug: string;
+  desk: boolean;
+  name: string;
+}
+
+const tabHref = (id: SettingsTab, shop: string) =>
+  `/settings?${id === "me" ? "" : `tab=${id}&`}shop=${encodeURIComponent(shop)}`;
 
 /**
  * Settings, built from the Insights kit — the same page frame, tab bar, cards
@@ -43,21 +52,26 @@ const RESTRICTED: SettingsTab[] = ["integrations", "dev"];
  */
 export function SettingsView({
   tab,
+  shop,
   me,
   roster,
   klaviyo,
   social = null,
   socialNotice = null,
+  mail = null,
   canManageIntegrations,
   canChooseModels,
 }: {
   tab: SettingsTab;
+  shop: SettingsShop;
   me: SettingsMe | null;
   roster: AgentRoster | null;
   klaviyo: KlaviyoStatus | { error: string } | null;
   /** Meta and Google Ads (social-connections-service.ts); read only on the Integrations tab. */
   social?: SocialConnectionsStatus | { error: string } | null;
   socialNotice?: SocialNoticeValue | null;
+  /** Who the shop's monthly report and stock alert come from and go to; read only on the Integrations tab. */
+  mail?: Record<"sales_report" | "stock_alert", MailSetting> | null;
   /** The contact team is not shown the Integrations or Dev info tabs (dashboard-auth.mjs). */
   canManageIntegrations: boolean;
   /** The contact team sees the models but cannot change them (dashboard-auth.mjs). */
@@ -72,14 +86,14 @@ export function SettingsView({
         </div>
         <nav className={header.nav} aria-label={tr("settings.sections")}>
           <ul className={header.tabs}>
-            {TABS.filter((item) => !RESTRICTED.includes(item.id) || canManageIntegrations).map((item) => (
-              <li key={item.id}>
+            {TABS.filter((id) => (!RESTRICTED.includes(id) || canManageIntegrations) && (shop.desk || !DESK_ONLY.includes(id))).map((id) => (
+              <li key={id}>
                 <Link
-                  href={item.href}
-                  className={`${header.tab} ${item.id === tab ? header.tabActive : ""}`}
-                  aria-current={item.id === tab ? "page" : undefined}
+                  href={tabHref(id, shop.slug)}
+                  className={`${header.tab} ${id === tab ? header.tabActive : ""}`}
+                  aria-current={id === tab ? "page" : undefined}
                 >
-                  {tr(`settings.tab.${item.id}`)}
+                  {tr(`settings.tab.${id}`)}
                 </Link>
               </li>
             ))}
@@ -94,7 +108,7 @@ export function SettingsView({
       ) : tab === "dev" ? (
         <DevInfo roster={roster} />
       ) : (
-        <Integrations klaviyo={klaviyo} social={social} socialNotice={socialNotice} />
+        <Integrations shop={shop} klaviyo={klaviyo} social={social} socialNotice={socialNotice} mail={mail} />
       )}
     </div>
   );
@@ -139,10 +153,14 @@ function MyInfo({ me }: { me: SettingsMe | null }) {
 type SocialNoticeValue = { ok: true; provider: string } | { ok: false; code: string; provider: string | null };
 
 function Integrations({
+  shop,
   klaviyo,
   social,
   socialNotice,
+  mail,
 }: {
+  shop: SettingsShop;
+  mail: Record<"sales_report" | "stock_alert", MailSetting> | null;
   klaviyo: KlaviyoStatus | { error: string } | null;
   social: SocialConnectionsStatus | { error: string } | null;
   socialNotice: SocialNoticeValue | null;
@@ -152,10 +170,18 @@ function Integrations({
   if ("error" in klaviyo) return <PanelError message={klaviyo.error} />;
   return (
     <>
+      <Caption>{tr("settings.integrations.forShop", { shop: shop.name })}</Caption>
       <Grid min={30}>
         <Card title="Klaviyo" aside={<span>{tr("settings.klaviyoAside")}</span>}>
-          <KlaviyoKeyCard status={klaviyo} />
+          <KlaviyoKeyCard status={klaviyo} shop={shop.slug} />
         </Card>
+        {mail
+          ? (["sales_report", "stock_alert"] as const).map((kind) => (
+              <Card key={kind} title={tr(`settings.mail.${kind}.title`)} aside={<span>{tr(`settings.mail.${kind}.aside`)}</span>}>
+                <MailSettingsCard kind={kind} initial={mail[kind]} shop={shop.slug} />
+              </Card>
+            ))
+          : null}
         {social ? (
           <Card title={tr("insights.social.connections.title")} aside={<span>{tr("insights.social.connections.meta")}</span>}>
             {"error" in social ? (
@@ -163,7 +189,7 @@ function Integrations({
             ) : (
               <>
                 {socialNotice ? <SocialNotice notice={socialNotice} /> : null}
-                <SocialProviderCards initial={social} returnKey="settings" />
+                <SocialProviderCards initial={social} returnKey="settings" shop={shop.slug} />
               </>
             )}
           </Card>

@@ -24,6 +24,7 @@ export const fr: Record<MessageKey, string> = {
   "nav.availableSoon": "Bientôt disponible",
   "nav.collapse": "Réduire",
   "nav.openStore": "Ouvrir la boutique {store}",
+  "nav.switchShop": "{shop} — changer de boutique",
   "nav.shopifyStore": "Boutique Shopify",
   "nav.closeNavigation": "Fermer la navigation",
   "nav.openNavigation": "Ouvrir la navigation",

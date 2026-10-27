@@ -33,6 +33,37 @@ export function useShop(): ShopInfo {
 }
 
 /**
+ * One shop the dashboard serves, as the sidebar's switcher draws it
+ * (scripts/lib/dashboard-shops.mjs). Read once by the root layout.
+ */
+export interface NavShop {
+  /** The `.myshopify.com` subdomain: what `?shop=` carries. */
+  slug: string;
+  /** Shopify's shop name, or the slug before the first sync. */
+  name: string;
+  /** The support desk's shop: the only one with tickets, orders and the agent. */
+  desk: boolean;
+  storefrontUrl: string | null;
+  /**
+   * The mark to draw. The desk shop's is `/brand/logo.png` (also the tab icon);
+   * another shop's is `/brand/shops/<slug>.png`, dropped into `web/public` — a
+   * file, not code — and a shop without one shows its initial.
+   */
+  logo: string;
+}
+
+const NavShopsContext = createContext<NavShop[]>([]);
+
+export function NavShopsProvider({ shops, children }: { shops: NavShop[]; children: ReactNode }) {
+  return <NavShopsContext.Provider value={shops}>{children}</NavShopsContext.Provider>;
+}
+
+/** Every shop the dashboard serves, desk shop included; one entry when there is no other. */
+export function useNavShops(): NavShop[] {
+  return useContext(NavShopsContext);
+}
+
+/**
  * The marketplaces' names for a sentence, in the reader's language: « Amazon and
  * Yves Rocher », « Amazon et Yves Rocher ». `{marketplaces}` in any string.
  */

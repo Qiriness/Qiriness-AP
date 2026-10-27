@@ -4,7 +4,7 @@ import { createCaseStateRecord } from '../../scripts/lib/case-state-record.mjs';
 
 import { loadAgentConfig, assertGraphConfig } from './config.mjs';
 import { logger } from './lib/logger.mjs';
-import { loadShopTimeZone, resolveShopId } from './lib/shop.mjs';
+import { loadShopTimeZone, resolveServedShops, resolveShopId } from './lib/shop.mjs';
 import { loadCompany } from '../../scripts/lib/company.mjs';
 import { createGraphClient } from './ingestion/graph-client.mjs';
 import { createSupabaseMessageStore } from './ingestion/ticket-writer.mjs';
@@ -70,6 +70,7 @@ import { createOutboundStore } from './outbound/outbound-store.mjs';
 import { confirmSentActions, createAutoSendActions, runOutbound } from './outbound/outbound-runner.mjs';
 import { createAdminClient } from '../../scripts/lib/dashboard-user-admin.mjs';
 import { runSalesReportMail } from './reports/sales-report-mail.mjs';
+import { runStockAlert } from './reports/stock-alert-mail.mjs';
 
 // The passes a poll runs, in the order it runs them. `--stop-after=<stage>` ends
 // the poll once that stage has run.
@@ -145,6 +146,16 @@ async function main() {
   // The durable queue (mail_jobs) and the send path. Both are read defensively
   // below: a database without migrations 46-47 logs a warning and polls as before.
   const jobs = createMailJobRecord(supabase, { shopId });
+  // THE OTHER DASHBOARD SHOPS (config.dashboardShops). Mail, tickets and
+  // drafting are the desk shop's alone; for the others the worker only mails
+  // their monthly report and runs their « Sync now » social jobs, each under its
+  // own shop id, so a connection made on Barbara Gould's Settings syncs into
+  // Barbara Gould. docs/decisions/insights.md § Connections belong to one shop.
+  const servedShops = await resolveServedShops(supabase, config.dashboardShops, logger);
+  const deskShop = servedShops.find((shop) => shop.id === shopId) ?? { slug: null, desk: true, id: shopId };
+  const otherShops = servedShops
+    .filter((shop) => shop.id !== shopId)
+    .map((shop) => ({ shop, jobs: createMailJobRecord(supabase, { shopId: shop.id }) }));
   const outboundRecord = createOutboundRecord(supabase, { shopId });
   const outboundStore = createOutboundStore(supabase, { shopId });
   const outboundDraftRecord = createDraftRecord(supabase, { shopId });
@@ -903,17 +914,27 @@ async function main() {
     // retention: it is a date, not a pipeline stage, and the sync-only worker
     // is the one that is always running. A no-op until SALES_REPORT_URL and
     // SALES_REPORT_SECRET are set; its own failures are recorded and retried.
-    try {
-      await runSalesReportMail({
-        supabase,
-        graphClient,
-        adminClient: reportAdminClient,
-        shopId,
-        config: config.salesReport,
-        logger
-      });
-    } catch (error) {
-      logger.warn('sales_report.check_failed', { shopId, error: error.message });
+    // One per shop, each from the sender the shop holds (shops.report_sender).
+    for (const shop of [deskShop, ...otherShops.map((other) => other.shop)]) {
+      try {
+        await runSalesReportMail({
+          supabase,
+          graphClient,
+          adminClient: reportAdminClient,
+          shopId: shop.id,
+          shopSlug: shop.slug,
+          config: config.salesReport,
+          logger
+        });
+      } catch (error) {
+        logger.warn('sales_report.check_failed', { shopId: shop.id, error: error.message });
+      }
+      // The stock alert: once per product sync (the nightly), per shop.
+      try {
+        await runStockAlert({ supabase, graphClient, adminClient: reportAdminClient, shopId: shop.id, logger });
+      } catch (error) {
+        logger.warn('stock_alert.check_failed', { shopId: shop.id, error: error.message });
+      }
     }
 
     // What this poll spent, written once at the end.
@@ -959,11 +980,14 @@ async function main() {
       // Social syncs someone asked for (Connect, « Sync now »): after the mail,
       // never instead of it, and whatever the mail poll did. Its own failures
       // are retried through the queue; nothing here can stop the loop.
-      try {
-        const social = await runSocialJobs({ jobs, supabase, shopId, env: config.socialEnv, maxAttempts: config.mailJobMaxAttempts, logger });
-        if (social.considered) logger.info('social.jobs', { shopId, ...social });
-      } catch (error) {
-        logger.warn('social.jobs_failed', { shopId, error: error.message });
+      // Every dashboard shop's, each with its own queue.
+      for (const queue of [{ shop: deskShop, jobs }, ...otherShops]) {
+        try {
+          const social = await runSocialJobs({ jobs: queue.jobs, supabase, shopId: queue.shop.id, env: config.socialEnv, maxAttempts: config.mailJobMaxAttempts, logger });
+          if (social.considered) logger.info('social.jobs', { shopId: queue.shop.id, ...social });
+        } catch (error) {
+          logger.warn('social.jobs_failed', { shopId: queue.shop.id, error: error.message });
+        }
       }
     }
   };
@@ -990,6 +1014,7 @@ async function main() {
           return client;
         },
         shopId,
+        shopIds: [shopId, ...otherShops.map((other) => other.shop.id)],
         kinds: wakeKinds,
         logger
       })
@@ -997,8 +1022,10 @@ async function main() {
   listener?.start();
   const waker = createJobWaker({
     listener,
-    nextDueAt: () => jobs.nextDueAt({ kinds: wakeKinds }),
-    hasDue: () => jobs.hasDue({ kinds: wakeKinds }),
+    // The other shops only ever queue social syncs.
+    nextDueAt: () => earliestDue([jobs.nextDueAt({ kinds: wakeKinds }), ...otherShops.map((other) => other.jobs.nextDueAt({ kinds: ['sync_social'] }))]),
+    hasDue: async () =>
+      (await Promise.all([jobs.hasDue({ kinds: wakeKinds }), ...otherShops.map((other) => other.jobs.hasDue({ kinds: ['sync_social'] }))])).some(Boolean),
     checkIntervalMs: config.jobCheckIntervalMs,
     logger
   });
@@ -1040,6 +1067,12 @@ async function main() {
   await listener?.stop();
 
   logger.info('ingest.stopped', {});
+}
+
+/** The earliest of several queues' next due times (null: none will be due). */
+async function earliestDue(reads) {
+  const times = (await Promise.all(reads)).filter(Boolean);
+  return times.length ? new Date(Math.min(...times.map((at) => at.getTime()))) : null;
 }
 
 /**

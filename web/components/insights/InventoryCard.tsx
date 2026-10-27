@@ -7,8 +7,8 @@ import styles from "./OverviewView.module.css";
 const STATUS_CLASS: Record<InventoryStatus, string> = {
   out: styles.pillBad,
   critical: styles.pillBad,
-  low: styles.pillWarn,
-  watch: styles.pillNeutral,
+  watch: styles.pillWarn,
+  ok: styles.pillNeutral,
 };
 
 /**

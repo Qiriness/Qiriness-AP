@@ -1,6 +1,7 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { dashboardShops } from '../../scripts/lib/dashboard-shops.mjs';
 import { loadEnv } from '../../scripts/lib/sync-config.mjs';
 import { parseActorMap } from './casework/actors.mjs';
 import { parseCaseStatusMap } from './casework/case-status.mjs';
@@ -27,6 +28,11 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     dbUrl: env.WORKER_DB_URL || '',
     dbApplicationName: 'qiriness-worker',
     shopDomain: env.SHOPIFY_STORE_DOMAIN.replace(/^https?:\/\//, '').replace(/\/$/, ''),
+    // Every shop the dashboard serves (DASHBOARD_SHOPS, the desk shop first
+    // unless listed): the worker mails each one's monthly report and runs each
+    // one's « Sync now » social jobs. Mail, tickets and drafting stay the desk
+    // shop's. Unset, the desk shop alone, as before.
+    dashboardShops: dashboardShops(env),
     appEnv: env.APP_ENV || 'development',
     graph: {
       tenantId: env.MS_GRAPH_TENANT_ID,
@@ -194,17 +200,17 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // land somewhere the delta poller would ingest it as a new ticket.
     draftDelivery: env.DRAFT_DELIVERY || 'none',
     draftReviewMailbox: env.DRAFT_REVIEW_MAILBOX || '',
-    // THE MONTHLY SALES REPORT, mailed from the support mailbox on the 1st
+    // THE MONTHLY SALES REPORT, mailed on the 1st from each shop's
+    // `shops.report_sender`
     // (reports/sales-report-mail.mjs). Off unless both the URL and the secret
     // are set: the URL is the dashboard's /api/reports/sales on its public
     // host, and the secret is the same SALES_REPORT_SECRET the dashboard has.
-    // The recipients are every active dashboard account with one of `roles`,
-    // plus `extraRecipients` — so a new manager is added with `npm run users`,
-    // not a deploy.
+    // The sender and recipients are each shop's (`report_sender`,
+    // `report_recipients`, Settings → Integrations). `extraRecipients` is only
+    // where `npm run report:sales:test` sends.
     salesReport: {
       url: env.SALES_REPORT_URL || '',
       secret: env.SALES_REPORT_SECRET || '',
-      roles: splitCsv(env.SALES_REPORT_ROLES || 'management'),
       extraRecipients: splitCsv(env.SALES_REPORT_EXTRA_RECIPIENTS),
       // Shop-clock hour on the 1st from which it may go. After the nightly
       // Shopify sync (02:00 UTC, about 70 minutes), so the month's last day
