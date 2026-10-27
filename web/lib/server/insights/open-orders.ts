@@ -25,7 +25,7 @@ import {
   formatDay,
   wallClock,
 } from "../../../../scripts/lib/insights-range.mjs";
-import { loadVipRule } from "../../../../scripts/lib/vip-rule.mjs";
+import { getVipRule } from "../vip-rule-cache";
 import { orderNumberKey } from "../../../../scripts/lib/order-list-query.mjs";
 import { loadOrderTicketMarks } from "../order-ticket-marks";
 import type { OpenOrder, PlatformId } from "../../types";
@@ -39,7 +39,7 @@ const DAY_MS = 86_400_000;
 
 export async function getOpenOrders(ctx: InsightsContext): Promise<{ orders: OpenOrder[]; vipRuleSet: boolean }> {
   const supabase = getSupabaseClient();
-  const [rule, marks] = await Promise.all([loadVipRule(supabase, ctx.shopId), loadOrderTicketMarks(ctx.shopId)]);
+  const [rule, marks] = await Promise.all([getVipRule(ctx.shopId), loadOrderTicketMarks(ctx.shopId)]);
   const { channels, notChannels } = ctx.marketplaces.channelFilter(ctx.platform);
 
   const rows = await callRpc<Record<string, unknown>>(RPC.OPEN_ORDERS, {

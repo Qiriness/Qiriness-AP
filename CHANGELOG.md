@@ -10,6 +10,16 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Fewer dashboard REST requests: marketplaces and the VIP rule kept per shop; Barbara Gould's mark (2026-10-27)
+
+- **Measured first** (pg_stat_statements, 11:14 → 13:39, two people on the dashboard): about 1,360 REST requests an hour, against 27 an hour overnight now that the worker is on the direct connection. The dashboard is now nearly all the log ingest. `sales_channels` was 16% of it: it was re-read on almost every request, and twice per page for the desk shop, once with no id and once by id. The VIP rule was 4%. Barbara Gould itself adds little: its worker and nightly reads go over the direct connection.
+- `web/lib/server/remembered.ts`: a per-shop read kept 5 minutes per server instance, the pattern `getShopByDomain` already used, with no failure remembered.
+  - `getMarketplaces` is keyed by shop id, so the two call styles share one read. Setup → Sales channels saves forget it.
+  - `getVipRule` (`vip-rule-cache.ts`) replaces `loadVipRule` in Orders, Sales, Customers and the open orders. Saving or clearing the rule forgets it.
+  - Another Vercel instance can show the old list or rule for up to 5 minutes after a save.
+- Barbara Gould's mark at `web/public/brand/shops/gurkk8-er.png` (the owner's faviconBG.png). The browser tab icon follows the shop on screen.
+- To re-measure: `node scripts/.tmp-egress-diff.mjs tmp-egress/snap-2026-10-27-pm.json --by=calls` after a working day.
+
 ## Stock alert, per-shop mail recipients, critical redefined, Fulfilment watchlist (2026-10-27)
 
 Why: DECISIONS → Insights § The stock alert, § Stock is now….

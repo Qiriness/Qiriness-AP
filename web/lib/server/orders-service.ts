@@ -24,7 +24,8 @@ import {
   wallClock,
 } from "../../../scripts/lib/insights-range.mjs";
 import { getMarketplaces } from "./marketplaces";
-import { loadVipCustomers, loadVipRule } from "../../../scripts/lib/vip-rule.mjs";
+import { loadVipCustomers } from "../../../scripts/lib/vip-rule.mjs";
+import { getVipRule } from "./vip-rule-cache";
 import {
   ORDER_PAGE_SIZE,
   delayDays,
@@ -93,7 +94,7 @@ export async function listOrders(shopId: string, query: OrderListQuery): Promise
   const supabase = getSupabaseClient();
   const [tz, rule, facetRows, marks, marketplaces] = await Promise.all([
     shopTimeZone(supabase, shopId),
-    loadVipRule(supabase, shopId),
+    getVipRule(shopId),
     supabaseRpc(supabase, RPC.ORDERS_LIST_FACETS, { p_shop: shopId }),
     loadOrderTicketMarks(shopId),
     getMarketplaces(),
@@ -178,7 +179,7 @@ export async function getOrderDetail(shopId: string, orderId: string): Promise<O
       { limit: 1 }
     ) as Promise<Row[]>,
     shopTimeZone(supabase, shopId),
-    loadVipRule(supabase, shopId),
+    getVipRule(shopId),
     listTicketsWithOrders(shopId),
   ]);
   const order = orders?.[0];

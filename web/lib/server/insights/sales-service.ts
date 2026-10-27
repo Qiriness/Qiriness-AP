@@ -30,7 +30,7 @@ import { foldOrdersPerCustomer } from "./order-frequency";
 import { getOrderSeries, getOrdersSummary, ordersCoverage } from "./orders";
 import { previousCovered } from "./series";
 import { toSeries } from "./series";
-import { loadVipRule } from "../../../../scripts/lib/vip-rule.mjs";
+import { getVipRule, type VipRule } from "../vip-rule-cache";
 import { SALES_COLLECTION_HANDLES } from "../../../../scripts/lib/sales-collections.mjs";
 import { callRpc, callRpcOne, count, getSupabaseClient } from "./shared";
 
@@ -51,7 +51,6 @@ export interface BestProductsRequest {
   vipOnly: boolean;
 }
 
-type VipRule = Awaited<ReturnType<typeof loadVipRule>>;
 
 /**
  * How many collections the mix card lists, before the "outside these" row. Six
@@ -133,7 +132,7 @@ export async function getSalesPanel(
         })
       : Promise.resolve(null),
     // Read once for both cards that can filter to VIPs. A marketplace has none.
-    marketplace ? Promise.resolve(null) : loadVipRule(getSupabaseClient(), ctx.shopId),
+    marketplace ? Promise.resolve(null) : getVipRule(ctx.shopId),
   ]);
 
   // Last period's revenue per product and per collection, keyed for the lookups

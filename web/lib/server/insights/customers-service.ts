@@ -29,7 +29,6 @@
 import { formatRfmGroup } from "../../../../scripts/lib/customer-segments.mjs";
 import {
   describeVipRule,
-  loadVipRule,
   summariseVipRule,
   vipArgsFor,
 } from "../../../../scripts/lib/vip-rule.mjs";
@@ -45,6 +44,7 @@ import type {
 } from "../../types";
 import { CLOSED_STATUSES } from "../../ticket-stats";
 import { callRpc, callRpcOne, count, getSupabaseClient, readView } from "./shared";
+import { getVipRule } from "../vip-rule-cache";
 import { logDashboardAccess } from "../access-log";
 
 /**
@@ -91,7 +91,7 @@ interface TicketStatsRow {
 
 export async function getCustomersPanel(shopId: string): Promise<CustomerPanel> {
   const supabase = getSupabaseClient();
-  const rule = await loadVipRule(supabase, shopId);
+  const rule = await getVipRule(shopId);
   // Biggest segment first, which on this shop means the panel opens on
   // PROSPECTS at 53,942 — the denominator problem stated by the data itself.
   const segmentsPromise = readView<Record<string, unknown>>(V.CUSTOMER_SEGMENT_TOTALS, shopId, {

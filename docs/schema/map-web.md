@@ -290,6 +290,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |                    # cache-tags (the shared-cache tags `tickets`
 |   |       |                    # and `insights`; ticketsChanged after a
 |   |       |                    # dashboard write) ·
+|   |       |                    # remembered (a per-shop read kept 5 min per instance,
+|   |       |                    # forgotten on save): marketplaces, vip-rule-cache ·
 |   |       |                    # integration-shop (the shop a connection is for:
 |   |       |                    # ?shop= required, served + synced; servedShopById
 |   |       |                    # for the OAuth state) ·

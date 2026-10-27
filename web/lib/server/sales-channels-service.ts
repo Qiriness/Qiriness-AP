@@ -26,6 +26,7 @@ import {
 import { RPC, T } from "../../../scripts/lib/tables.mjs";
 import { KnowledgeValidationError } from "./knowledge-errors";
 import type { SalesChannelsView } from "../types";
+import { forgetMarketplaces } from "./marketplaces";
 
 function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
@@ -130,6 +131,7 @@ export async function addSalesChannel(shopId: string, input: any): Promise<Sales
       position: existing.channels.length,
     },
   ], { returning: 'minimal' });
+  forgetMarketplaces(shopId);
   return listSalesChannels(shopId);
 }
 
@@ -148,10 +150,12 @@ export async function updateSalesChannel(shopId: string, id: string, input: any)
   if (input.analyticsNames !== undefined) patch.analytics_names = list(input.analyticsNames, true);
   // The key never changes: it is in bookmarked Insights URLs.
   await supabaseUpdateById(getSupabaseClient(), T.SALES_CHANNELS, id, patch, { returning: 'minimal' });
+  forgetMarketplaces(shopId);
   return listSalesChannels(shopId);
 }
 
 export async function deleteSalesChannel(shopId: string, id: string): Promise<SalesChannelsView> {
   await supabaseDelete(getSupabaseClient(), T.SALES_CHANNELS, { id, shop_id: shopId }, { returning: 'minimal' });
+  forgetMarketplaces(shopId);
   return listSalesChannels(shopId);
 }

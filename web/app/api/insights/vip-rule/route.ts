@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { forgetVipRule } from "@/lib/server/vip-rule-cache";
 import { requestShop } from "@/lib/server/insights/request-shop";
 import { getSupabaseClient } from "@/lib/server/insights/shared";
 import {
@@ -58,6 +59,7 @@ export async function PUT(request: Request) {
 
     if (body?.clear === true) {
       await saveVipRule(supabase, shopId, null);
+      forgetVipRule(shopId);
       return NextResponse.json({ rule: null, description: describeVipRule(null), summary: null }, { headers: NO_STORE });
     }
 
@@ -65,6 +67,7 @@ export async function PUT(request: Request) {
     if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400, headers: NO_STORE });
 
     await saveVipRule(supabase, shopId, checked.rule);
+    forgetVipRule(shopId);
     const summary = await summariseVipRule(supabase, shopId, checked.rule);
     return NextResponse.json(
       { rule: checked.rule, description: describeVipRule(checked.rule), summary },
