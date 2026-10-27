@@ -24,7 +24,7 @@ grep -rn "^### <heading>" docs/decisions/
 | Order resolution | `docs/decisions/order-resolution.md` | 15 | 10,345 |
 | Human overrides | `docs/decisions/human-overrides.md` | 1 | 1,394 |
 | Investigation | `docs/decisions/investigation.md` | 123 | 59,966 |
-| Forwarding | `docs/decisions/forwarding.md` | 8 | 3,205 |
+| Forwarding | `docs/decisions/forwarding.md` | 9 | 3,380 |
 | Lifecycle | `docs/decisions/lifecycle.md` | 8 | 4,550 |
 | Embeddings | `docs/decisions/embeddings.md` | 4 | 1,200 |
 | Exemplars | `docs/decisions/exemplars.md` | 27 | 10,084 |

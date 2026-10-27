@@ -109,7 +109,7 @@ interface TicketsViewProps {
 
 type LevelFilter = "all" | "4" | "3" | "2" | "1" | "uncategorised";
 type SortOrder = "priority" | "recent" | "oldest" | "severity";
-type TicketView = "queue" | "backlog" | "snoozed" | "irrelevant" | "closed";
+type TicketView = "queue" | "backlog" | "snoozed" | "irrelevant" | "closed" | "forwarded";
 
 // Labels come from the dictionary: `tickets.view.sort.<key>`, `tickets.view.tab.<key>`
 // and `tickets.view.verdict.<key>`.
@@ -161,7 +161,7 @@ function matchesDroppedMail(mail: DroppedMail, query: string): boolean {
 const LEVEL_FILTERS: readonly LevelFilter[] = ["all", "4", "3", "2", "1", "uncategorised"];
 const SENDER_FILTERS = ["all", "consumer", "business"] as const;
 type SenderFilter = (typeof SENDER_FILTERS)[number];
-const TICKET_VIEWS: TicketView[] = ["queue", "backlog", "snoozed", "irrelevant", "closed"];
+const TICKET_VIEWS: TicketView[] = ["queue", "backlog", "snoozed", "irrelevant", "closed", "forwarded"];
 const SORT_ORDERS: SortOrder[] = ["priority", "recent", "oldest", "severity"];
 const CATEGORY_FILTERS: readonly (KnowledgeCategory | "all")[] = ["all", ...TICKET_CATEGORIES];
 const STATE_PARAMS = ["view", "q", "level", "category", "sender", "sort", "ticket", "mail"];
@@ -181,7 +181,7 @@ const LAST_TICKETS_SEARCH_KEY = "tickets.lastSearch";
  * here is visible to the worker or to anybody else.
  */
 const CLEARED_MAIL_KEY = "tickets.clearedMail";
-const EMPTY_QUERIES: Record<TicketView, string> = { queue: "", backlog: "", snoozed: "", irrelevant: "", closed: "" };
+const EMPTY_QUERIES: Record<TicketView, string> = { queue: "", backlog: "", snoozed: "", irrelevant: "", closed: "", forwarded: "" };
 
 interface TicketsPageState {
   view: TicketView;
@@ -279,10 +279,11 @@ function reconcilePageState(
   if (next.ticketId) {
     const ticket = tickets.find((row) => row.id === next.ticketId);
     if (ticket) {
-      next.view = viewOfTicket(ticket);
+      // Forwarded cuts across the others: a forwarded ticket saved there stays there.
+      next.view = next.view === "forwarded" && ticket.forwarding ? "forwarded" : viewOfTicket(ticket);
       next.mailId = null;
-      // Level, category and sender filter Queue and Backlog only; Snoozed and Closed are unfiltered.
-      if (next.view !== "closed" && next.view !== "snoozed" && !passesFilters(ticket, next.level, next.category, next.sender)) {
+      // Level, category and sender filter Queue and Backlog only; the other tabs are unfiltered.
+      if ((next.view === "queue" || next.view === "backlog") && !passesFilters(ticket, next.level, next.category, next.sender)) {
         next.level = "all";
         next.category = "all";
         next.sender = "all";
@@ -450,6 +451,15 @@ export function TicketsView({
         .sort((a, b) => Date.parse(a.snooze?.wakeAt ?? "") - Date.parse(b.snooze?.wakeAt ?? "")),
     [tickets]
   );
+  // FORWARDED IS A VIEW, NOT A PLACE: forwarding never changes the ticket's status
+  // (DECISIONS.md § Forwarding), so each of these is also in Queue, Backlog,
+  // Snoozed or Closed. Every tagged ticket, sent or not, latest forward first;
+  // one not yet sent goes by its last message.
+  const forwardedBase = useMemo(() => {
+    const forwardedAt = (ticket: TicketListItem) =>
+      Date.parse(ticket.forwarding?.at ?? ticket.lastMessageAt ?? ticket.firstMessageAt ?? "") || 0;
+    return tickets.filter((ticket) => ticket.forwarding).sort((a, b) => forwardedAt(b) - forwardedAt(a));
+  }, [tickets]);
   const pickedMail = useMemo(() => new Set(pickedMailIds), [pickedMailIds]);
   // Cleared and promoted mail never reaches the page: the database view leaves
   // it out, and a search is run there too, so what is loaded is what is shown.
@@ -470,6 +480,10 @@ export function TicketsView({
     () => snoozedBase.filter((ticket) => matchesTicket(ticket, queryByView.snoozed)),
     [snoozedBase, queryByView.snoozed]
   );
+  const forwarded = useMemo(
+    () => forwardedBase.filter((ticket) => matchesTicket(ticket, queryByView.forwarded)),
+    [forwardedBase, queryByView.forwarded]
+  );
   const visibleDropped = droppedBase;
 
   const activeTickets =
@@ -481,7 +495,9 @@ export function TicketsView({
           ? snoozed
           : activeView === "closed"
             ? closed
-            : [];
+            : activeView === "forwarded"
+              ? forwarded
+              : [];
   const selectedTicket = activeTickets.find((ticket) => ticket.id === selectedTicketId) ?? null;
   const selectedDropped = activeView === "irrelevant"
     ? visibleDropped.find((mail) => mail.id === selectedDroppedId) ?? null
@@ -722,7 +738,8 @@ export function TicketsView({
   }
 
   useEffect(() => {
-    if (activeView === "closed" && (closedState === "idle" || closedState === "failed")) {
+    // Forwarded reads them too: a forwarded ticket may since have been closed.
+    if ((activeView === "closed" || activeView === "forwarded") && (closedState === "idle" || closedState === "failed")) {
       void loadClosed();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -880,7 +897,8 @@ export function TicketsView({
     const ticket = tickets.find((row) => row.id === ticketId);
     setTickets((current) => current.map((row) => (row.id === ticketId ? { ...row, ...change } : row)));
     if (!ticket) return;
-    const leaves = change.snooze ? activeView !== "snoozed" : activeView === "snoozed";
+    // A snoozed forwarded ticket is still forwarded, so it stays in that tab.
+    const leaves = activeView !== "forwarded" && (change.snooze ? activeView !== "snoozed" : activeView === "snoozed");
     if (leaves) {
       const index = activeTickets.findIndex((row) => row.id === ticketId);
       const next = activeTickets[index + 1] ?? (index > 0 ? activeTickets[index - 1] : null) ?? null;
@@ -935,6 +953,8 @@ export function TicketsView({
         : (closedCount ?? 0) +
           closedBase.filter((ticket) => !initialClosedIds.has(ticket.id)).length -
           [...initialClosedIds].filter((id) => !closedBase.some((ticket) => ticket.id === id)).length,
+    // Open ones only until the closed threads are read.
+    forwarded: forwardedBase.length,
   };
 
   return (
@@ -1030,7 +1050,9 @@ export function TicketsView({
           listNotice={
             activeView === "closed" && closedState === "loading"
               ? t("tickets.panels.list.loadingClosed")
-              : activeView === "closed" && closedState === "failed"
+              : activeView === "forwarded" && closedState === "loading" && activeTickets.length === 0
+                ? t("tickets.panels.list.loadingForwarded")
+                : (activeView === "closed" || activeView === "forwarded") && closedState === "failed"
                 ? t("tickets.panels.list.loadClosedFailed")
                 : null
           }
@@ -1344,7 +1366,9 @@ function TicketListPane({
             ? t("tickets.panels.list.recentlyClosed")
             : view === "snoozed"
               ? t("tickets.panels.list.soonestBack")
-              : t("tickets.panels.list.priorityFirst")}
+              : view === "forwarded"
+                ? t("tickets.panels.list.latestForwarded")
+                : t("tickets.panels.list.priorityFirst")}
         </span>
       </div>
 

@@ -81,6 +81,10 @@ Forwarding never changes the ticket's status, so a forwarded ticket looked like 
 
 **The Rules page tags situations too** (asked for the same day). A situation is tagged when the worker's own `planRoute`, run on the situation's category and request kind, would forward it, and only while the master switch is on. The tag describes the category, because forwarding never reads the situation: a reaction ticket filed under `product` matches CV-01 and is still not forwarded. On 2026-10-01: CV-01 to CV-04, all « To Cosmétovigilance after 1st reply »; no situation sits in `careers` or `partner_collaboration`.
 
+### A Forwarded tab, beside the others (2026-10-27)
+
+Asked for by the owner: one place to see what was forwarded. **It is a view, not a section**: forwarding never changes the status, so each ticket in it is also in Queue, Backlog, Snoozed or Closed, and acting on it there or here is the same. It holds every tagged ticket (after first reply, pending, failed, forwarded) because the chip already says which, and a failed forward is the one most worth finding. Closed ones are included, so opening the tab reads the Closed threads as the Closed tab does; until then its count is the open ones only. No level, category or sender filter, as on Snoozed and Closed.
+
 ### `unique(ticket_message_id)` is what makes the pass safe to re-run
 
 Per message, not per ticket, so a candidate's follow-up still reaches the recipient exactly once. The ledger snapshots the category + address used, so re-routing tomorrow does not rewrite where mail went yesterday. Failures are rows, not silence — a Graph rejection stays visible and retryable.
