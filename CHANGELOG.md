@@ -10,6 +10,10 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Fix: Settings → Integrations showed the previous shop after a switch (2026-10-27)
+
+Reported live: report and stock-alert settings and social connections looked the same on both shops. The database was right. Barbara Gould has its own Klaviyo key (…6f52, a different Klaviyo account: Placed Order metric `TWGYic` against Qiriness's `RfDXKz`), its own stock-alert sender, and no Meta connection. The cards are client components that copy their first values into state, and the router keeps them when only `?shop=` changes, so they kept showing the first shop's values. A Save would have written those values to the shop then on screen. `Integrations` is now keyed by shop, and so is the Insights Connections dialog. Insights panels were already keyed by shop (`periodKey`).
+
 ## Fewer dashboard REST requests: marketplaces and the VIP rule kept per shop; Barbara Gould's mark (2026-10-27)
 
 - **Measured first** (pg_stat_statements, 11:14 → 13:39, two people on the dashboard): about 1,360 REST requests an hour, against 27 an hour overnight now that the worker is on the direct connection. The dashboard is now nearly all the log ingest. `sales_channels` was 16% of it: it was re-read on almost every request, and twice per page for the desk shop, once with no id and once by id. The VIP rule was 4%. Barbara Gould itself adds little: its worker and nightly reads go over the direct connection.

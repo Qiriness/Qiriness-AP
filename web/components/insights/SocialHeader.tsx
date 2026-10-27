@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 import { useFormat, useT } from "@/lib/i18n/client";
 import type { EngagementBasis, OrganicKind, OrganicView, SocialConnectionsStatus, SocialKind, SocialMode } from "@/lib/social-types";
 import { Button } from "../ui/Button";
@@ -44,6 +45,7 @@ export function SocialHeader({
   const t = useT();
   const fmt = useFormat();
   const { navigate } = useInsightsFrame();
+  const shopSlug = useSearchParams()?.get("shop") ?? "";
 
   const title =
     network === "all" ? t(mode === "organic" ? "insights.social.title.organicAll" : "insights.social.title.paidAll") : t(`insights.social.kind.${network}`);
@@ -120,6 +122,9 @@ export function SocialHeader({
 
       {openConnections ? (
         <SocialConnectionsDialog
+          // Keyed by shop, like Settings → Integrations: a switch with the
+          // dialog open must not keep the previous shop's connections.
+          key={shopSlug}
           initial={connections}
           returnKey="social"
           notice={connected ? { ok: true, provider: connected } : connectError ? { ok: false, code: connectError, provider: connectProvider } : null}

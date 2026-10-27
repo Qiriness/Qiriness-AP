@@ -108,7 +108,12 @@ export function SettingsView({
       ) : tab === "dev" ? (
         <DevInfo roster={roster} />
       ) : (
-        <Integrations shop={shop} klaviyo={klaviyo} social={social} socialNotice={socialNotice} mail={mail} />
+        // KEYED BY SHOP. The cards are client components that copy their
+        // first values into state, and the router keeps them when only
+        // `?shop=` changes: without the key, switching shop showed the previous
+        // shop's sender, recipients and connections — and a Save would have
+        // written them to the shop now on screen.
+        <Integrations key={shop.slug} shop={shop} klaviyo={klaviyo} social={social} socialNotice={socialNotice} mail={mail} />
       )}
     </div>
   );
