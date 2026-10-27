@@ -108,12 +108,7 @@ export function SettingsView({
       ) : tab === "dev" ? (
         <DevInfo roster={roster} />
       ) : (
-        // KEYED BY SHOP. The cards are client components that copy their
-        // first values into state, and the router keeps them when only
-        // `?shop=` changes: without the key, switching shop showed the previous
-        // shop's sender, recipients and connections — and a Save would have
-        // written them to the shop now on screen.
-        <Integrations key={shop.slug} shop={shop} klaviyo={klaviyo} social={social} socialNotice={socialNotice} mail={mail} />
+        <Integrations shop={shop} klaviyo={klaviyo} social={social} socialNotice={socialNotice} mail={mail} />
       )}
     </div>
   );
@@ -178,12 +173,19 @@ function Integrations({
       <Caption>{tr("settings.integrations.forShop", { shop: shop.name })}</Caption>
       <Grid min={30}>
         <Card title="Klaviyo" aside={<span>{tr("settings.klaviyoAside")}</span>}>
-          <KlaviyoKeyCard status={klaviyo} shop={shop.slug} />
+          {/* EVERY CARD IS KEYED BY ITS SHOP. They are client components that
+              copy their first values into state, and the router keeps them
+              when only `?shop=` changes: without the key, switching shop showed
+              the previous shop's key, sender, recipients and connections, and
+              a Save would have written them to the shop now on screen. The key
+              sits on the client components themselves: a key on a server
+              component (`Integrations`) did not reach them (2026-10-27). */}
+          <KlaviyoKeyCard key={`klaviyo:${shop.slug}`} status={klaviyo} shop={shop.slug} />
         </Card>
         {mail
           ? (["sales_report", "stock_alert"] as const).map((kind) => (
               <Card key={kind} title={tr(`settings.mail.${kind}.title`)} aside={<span>{tr(`settings.mail.${kind}.aside`)}</span>}>
-                <MailSettingsCard kind={kind} initial={mail[kind]} shop={shop.slug} />
+                <MailSettingsCard key={`${kind}:${shop.slug}`} kind={kind} initial={mail[kind]} shop={shop.slug} />
               </Card>
             ))
           : null}
@@ -194,7 +196,7 @@ function Integrations({
             ) : (
               <>
                 {socialNotice ? <SocialNotice notice={socialNotice} /> : null}
-                <SocialProviderCards initial={social} returnKey="settings" shop={shop.slug} />
+                <SocialProviderCards key={`social:${shop.slug}`} initial={social} returnKey="settings" shop={shop.slug} />
               </>
             )}
           </Card>

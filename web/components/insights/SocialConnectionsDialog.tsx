@@ -30,7 +30,7 @@ export function SocialConnectionsDialog({
     <Dialog title={t("insights.social.connections.title")} meta={t("insights.social.connections.meta")} closeLabel={t("insights.social.connections.close")} onClose={onClose}>
       <div className={styles.dialogBody}>
         {notice ? <SocialNotice notice={notice} /> : null}
-        <SocialProviderCards initial={initial} returnKey={returnKey} shop={shop} />
+        <SocialProviderCards key={shop} initial={initial} returnKey={returnKey} shop={shop} />
       </div>
     </Dialog>
   );
