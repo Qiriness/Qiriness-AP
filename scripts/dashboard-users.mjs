@@ -13,6 +13,7 @@ import { createAdminClient } from './lib/dashboard-user-admin.mjs';
 //   npm run users -- add --email a@qiriness.com --role contact [--name "Ana"]
 //   npm run users -- set-password --email a@qiriness.com
 //   npm run users -- set-role --email a@qiriness.com --role management
+//   npm run users -- set-name --email a@qiriness.com --name "Ana Martin"
 //   npm run users -- disable --email a@qiriness.com      (enable to undo)
 //
 // PASSWORDS ARE TYPED, NEVER PASSED. `add` and `set-password` prompt with the
@@ -80,6 +81,17 @@ async function main() {
       console.log(`${user.email} is now ${ROLE_LABELS[role]}. Their open session picks this up within a minute.`);
       return;
     }
+    case 'set-name': {
+      // The name the dashboard shows: the assignee menu, the initials on a
+      // ticket, an internal note's author. Without one it falls back to the
+      // address before the @, which makes poor initials.
+      const user = await requireUser();
+      const name = requireFlag('name').trim();
+      if (!name) throw new Error('--name is required.');
+      await admin.setDisplayName(user.id, name);
+      console.log(`${user.email} is now shown as « ${name} ».`);
+      return;
+    }
     case 'disable':
     case 'enable': {
       const user = await requireUser();
@@ -92,7 +104,7 @@ async function main() {
       return;
     }
     default:
-      console.log('Usage: npm run users -- <list | add | set-password | set-role | disable | enable> [--email x] [--role r]');
+      console.log('Usage: npm run users -- <list | add | set-password | set-role | set-name | disable | enable> [--email x] [--role r] [--name n]');
       console.log(`Roles: ${ROLES.join(', ')}`);
       process.exitCode = command ? 1 : 0;
   }

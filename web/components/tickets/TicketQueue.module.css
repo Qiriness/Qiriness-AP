@@ -316,3 +316,46 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* « Mine / Unassigned / All », under the queue's name. */
+.segmented {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  margin: 0 var(--space-3) var(--space-2) var(--space-4);
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--mist-050);
+}
+
+.segmented button {
+  flex: 1;
+  height: 28px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.segmented button:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.segmented .segmentActive {
+  background: var(--surface);
+  color: var(--text-strong);
+  box-shadow: var(--shadow-xs);
+}
+
+.cardMarks {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

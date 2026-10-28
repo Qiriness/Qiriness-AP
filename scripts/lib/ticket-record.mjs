@@ -624,6 +624,24 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
     },
 
     /**
+     * A person assigns the ticket to someone, or unassigns it (`assignedTo`
+     * null). Touches only the assignment columns: status, overrides and the
+     * case are not this write's business, so it is not conditional on them.
+     */
+    async assign(ticketId, { assignedTo, assignedBy }) {
+      const at = new Date().toISOString();
+      const updated = await update(
+        supabase,
+        T.TICKETS,
+        live({ id: ticketId }),
+        { assigned_to: assignedTo, assigned_by: assignedBy, assigned_at: at, updated_at: at },
+        { select: 'id' }
+      );
+      const row = Array.isArray(updated) ? updated[0] : updated;
+      return row ? queueRow(ticketId) : null;
+    },
+
+    /**
      * A person's corrections from « Edit case » (`overrideChange` in
      * ticket-overrides.mjs builds `columns`).
      *

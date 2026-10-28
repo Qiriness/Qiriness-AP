@@ -12,6 +12,7 @@ import {
   ClockIcon,
   GlobeIcon,
   LockIcon,
+  UserIcon,
   MailInIcon,
   PencilIcon,
   PlusIcon,
@@ -75,6 +76,7 @@ import type {
   TicketListItem,
   TicketMessage,
   TicketNote,
+  TeamMember,
   TicketOrderChange,
   TicketOrderFacts,
   TicketOrderLinkSource,
@@ -95,7 +97,8 @@ import {
   TICKET_STATUS_LABELS,
 } from "@/lib/types";
 import { OrderLinkDialog } from "./OrderLinkDialog";
-import { TicketQueue, type QueueMode } from "./TicketQueue";
+import { ASSIGNEE_FILTERS, TicketQueue, type AssigneeFilter, type QueueMode } from "./TicketQueue";
+import { TeamProvider, useTeam } from "./team-context";
 import { TicketHeader } from "./TicketHeader";
 import { contactingAddress, requesterName, ticketAge, ticketTitle } from "./ticket-text";
 import styles from "./TicketsView.module.css";
@@ -119,6 +122,10 @@ interface TicketsViewProps {
   snoozeDelays?: SnoozeDelays;
   /** The page's query string: which tab, filters and ticket to open on. */
   initialParams?: Record<string, string | string[] | undefined>;
+  /** Who a ticket can be assigned to (`dashboard_team()`). */
+  team?: TeamMember[];
+  /** The signed-in user, for « Mine » and « Assign to me ». */
+  currentUserId?: string | null;
 }
 
 type LevelFilter = "all" | "4" | "3" | "2" | "1" | "uncategorised";
@@ -171,6 +178,13 @@ function matchesTicket(ticket: TicketListItem, query: string): boolean {
   return matches(query, [ticket.subject, ticket.requesterName, ticket.customerName, ticket.orderNumber, ticketNumber]);
 }
 
+/** « Mine », « Unassigned » or everything. Without a signed-in user « Mine » matches nothing. */
+function matchesAssignee(ticket: TicketListItem, filter: AssigneeFilter, currentUserId: string | null): boolean {
+  if (filter === "mine") return Boolean(currentUserId) && ticket.assignedTo === currentUserId;
+  if (filter === "unassigned") return !ticket.assignedTo;
+  return true;
+}
+
 function matchesDroppedMail(mail: DroppedMail, query: string): boolean {
   return matches(query, [mail.subject, mail.fromEmail, mail.reason]);
 }
@@ -184,7 +198,7 @@ type SenderFilter = (typeof SENDER_FILTERS)[number];
 const TICKET_VIEWS: TicketView[] = ["queue", "backlog", "snoozed", "irrelevant", "closed", "forwarded"];
 const SORT_ORDERS: SortOrder[] = ["priority", "recent", "oldest", "severity"];
 const CATEGORY_FILTERS: readonly (KnowledgeCategory | "all")[] = ["all", ...TICKET_CATEGORIES];
-const STATE_PARAMS = ["view", "q", "level", "category", "sender", "sort", "ticket", "mail"];
+const STATE_PARAMS = ["view", "q", "level", "category", "sender", "sort", "assignee", "ticket", "mail"];
 const LAST_TICKETS_SEARCH_KEY = "tickets.lastSearch";
 /**
  * Dropped mail somebody has finished with, hidden from the Irrelevant list.
@@ -210,6 +224,7 @@ interface TicketsPageState {
   category: KnowledgeCategory | "all";
   sender: SenderFilter;
   sort: SortOrder;
+  assignee: AssigneeFilter;
   ticketId: string | null;
   mailId: string | null;
 }
@@ -239,6 +254,7 @@ function parsePageState(params: URLSearchParams): TicketsPageState {
     category: pick(params.get("category"), CATEGORY_FILTERS, "all"),
     sender: pick(params.get("sender"), SENDER_FILTERS, "all"),
     sort: pick(params.get("sort"), SORT_ORDERS, "priority"),
+    assignee: pick(params.get("assignee"), ASSIGNEE_FILTERS, "all"),
     ticketId: params.get("ticket") || null,
     mailId: params.get("mail") || null,
   };
@@ -253,6 +269,7 @@ function serialisePageState(state: TicketsPageState): string {
   if (state.category !== "all") params.set("category", state.category);
   if (state.sender !== "all") params.set("sender", state.sender);
   if (state.sort !== "priority") params.set("sort", state.sort);
+  if (state.assignee !== "all") params.set("assignee", state.assignee);
   if (state.ticketId) params.set("ticket", state.ticketId);
   if (state.mailId) params.set("mail", state.mailId);
   const search = params.toString();
@@ -292,7 +309,8 @@ function viewOfTicket(ticket: TicketListItem): TicketView {
 function reconcilePageState(
   state: TicketsPageState,
   tickets: TicketListItem[],
-  dropped: DroppedMail[]
+  dropped: DroppedMail[],
+  currentUserId: string | null = null
 ): TicketsPageState {
   const next = { ...state };
 
@@ -309,6 +327,7 @@ function reconcilePageState(
         next.sender = "all";
       }
       if (!matchesTicket(ticket, next.query)) next.query = "";
+      if (!matchesAssignee(ticket, next.assignee, currentUserId)) next.assignee = "all";
       return next;
     }
     next.ticketId = null;
@@ -341,11 +360,13 @@ export function TicketsView({
   initialParams,
   headerAside,
   snoozeDelays = NO_DELAYS,
+  team = [],
+  currentUserId = null,
 }: TicketsViewProps) {
   const t = useT();
   const locale = useLocale();
   const [initialState] = useState(() =>
-    reconcilePageState(parsePageState(toSearchParams(initialParams)), initialTickets, droppedMail)
+    reconcilePageState(parsePageState(toSearchParams(initialParams)), initialTickets, droppedMail, currentUserId)
   );
   // False until a bare /tickets has had its chance to restore this tab's last
   // address, so the defaults cannot overwrite what was saved before it is read.
@@ -374,6 +395,7 @@ export function TicketsView({
   const [category, setCategory] = useState<KnowledgeCategory | "all">(initialState.category);
   const [sender, setSender] = useState<SenderFilter>(initialState.sender);
   const [sort, setSort] = useState<SortOrder>(initialState.sort);
+  const [assignee, setAssignee] = useState<AssigneeFilter>(initialState.assignee);
   // One row per case (61_cases.sql): another thread of a case is hidden behind
   // its lead unless asked for. Off by default, never stored.
   const [showLinkedThreads, setShowLinkedThreads] = useState(false);
@@ -464,22 +486,22 @@ export function TicketsView({
   const clearedCount = clearedTotal;
 
   const query = queryByView[activeView];
-  const queue = useMemo(() => queueBase.filter((ticket) => matchesTicket(ticket, queryByView.queue)), [queueBase, queryByView.queue]);
+  const queue = useMemo(() => queueBase.filter((ticket) => matchesTicket(ticket, queryByView.queue) && matchesAssignee(ticket, assignee, currentUserId)), [queueBase, queryByView.queue, assignee, currentUserId]);
   const backlog = useMemo(
-    () => backlogBase.filter((ticket) => matchesTicket(ticket, queryByView.backlog)),
-    [backlogBase, queryByView.backlog]
+    () => backlogBase.filter((ticket) => matchesTicket(ticket, queryByView.backlog) && matchesAssignee(ticket, assignee, currentUserId)),
+    [backlogBase, queryByView.backlog, assignee, currentUserId]
   );
   const closed = useMemo(
-    () => closedBase.filter((ticket) => matchesTicket(ticket, queryByView.closed)),
-    [closedBase, queryByView.closed]
+    () => closedBase.filter((ticket) => matchesTicket(ticket, queryByView.closed) && matchesAssignee(ticket, assignee, currentUserId)),
+    [closedBase, queryByView.closed, assignee, currentUserId]
   );
   const snoozed = useMemo(
-    () => snoozedBase.filter((ticket) => matchesTicket(ticket, queryByView.snoozed)),
-    [snoozedBase, queryByView.snoozed]
+    () => snoozedBase.filter((ticket) => matchesTicket(ticket, queryByView.snoozed) && matchesAssignee(ticket, assignee, currentUserId)),
+    [snoozedBase, queryByView.snoozed, assignee, currentUserId]
   );
   const forwarded = useMemo(
-    () => forwardedBase.filter((ticket) => matchesTicket(ticket, queryByView.forwarded)),
-    [forwardedBase, queryByView.forwarded]
+    () => forwardedBase.filter((ticket) => matchesTicket(ticket, queryByView.forwarded) && matchesAssignee(ticket, assignee, currentUserId)),
+    [forwardedBase, queryByView.forwarded, assignee, currentUserId]
   );
   const visibleDropped = droppedBase;
 
@@ -593,13 +615,14 @@ export function TicketsView({
     if (saved) {
       const parsed = parsePageState(new URLSearchParams(saved));
       const apply = (rows: TicketListItem[]) => {
-        const next = reconcilePageState(parsed, rows, droppedMail);
+        const next = reconcilePageState(parsed, rows, droppedMail, currentUserId);
         setActiveView(next.view);
         setQueryByView({ ...EMPTY_QUERIES, [next.view]: next.query });
         setLevel(next.level);
         setCategory(next.category);
         setSender(next.sender);
         setSort(next.sort);
+        setAssignee(next.assignee);
         setSelectedTicketId(next.ticketId);
         setSelectedDroppedId(next.mailId);
       };
@@ -610,13 +633,14 @@ export function TicketsView({
         setRestored(true);
         return;
       }
-      const next = reconcilePageState(parsed, initialTickets, droppedMail);
+      const next = reconcilePageState(parsed, initialTickets, droppedMail, currentUserId);
       setActiveView(next.view);
       setQueryByView({ ...EMPTY_QUERIES, [next.view]: next.query });
       setLevel(next.level);
       setCategory(next.category);
       setSender(next.sender);
       setSort(next.sort);
+      setAssignee(next.assignee);
       setSelectedTicketId(next.ticketId);
       setSelectedDroppedId(next.mailId);
     }
@@ -752,6 +776,7 @@ export function TicketsView({
         category,
         sender,
         sort,
+        assignee,
         ticketId: selectedTicket?.id ?? null,
         mailId: selectedDropped?.id ?? null,
       })
@@ -955,6 +980,7 @@ export function TicketsView({
   };
 
   return (
+    <TeamProvider team={team} currentUserId={currentUserId}>
     <section className={styles.section}>
       <header className={styles.pageHeader}>
         <div className={styles.headerMain}>
@@ -1077,9 +1103,13 @@ export function TicketsView({
             setTickets((current) => current.map((row) => (row.id === change.ticket.id ? change.ticket : row)));
             setDetail((current) => (current ? { ...current, caseState: change.caseState } : current));
           }}
+          onTicketChanged={(ticket) => setTickets((current) => current.map((row) => (row.id === ticket.id ? ticket : row)))}
+          assignee={assignee}
+          onAssigneeChange={setAssignee}
         />
       )}
     </section>
+    </TeamProvider>
   );
 }
 
@@ -1261,6 +1291,9 @@ interface TicketWorkspaceProps {
   onCloseContext: () => void;
   onOrderChanged: (change: TicketChange) => void;
   onCaseStateChanged: (change: TicketCaseChange) => void;
+  onTicketChanged: (ticket: TicketListItem) => void;
+  assignee: AssigneeFilter;
+  onAssigneeChange: (filter: AssigneeFilter) => void;
 }
 
 function TicketWorkspace({
@@ -1285,6 +1318,9 @@ function TicketWorkspace({
   onCloseContext,
   onOrderChanged,
   onCaseStateChanged,
+  onTicketChanged,
+  assignee,
+  onAssigneeChange,
 }: TicketWorkspaceProps) {
   const t = useT();
   // THE QUEUE GIVES WAY TO THE TICKET. Opening one collapses the cards to a rail
@@ -1365,6 +1401,8 @@ function TicketWorkspace({
             setFocus(false);
             setQueueMode(mode);
           }}
+          assignee={assignee}
+          onAssigneeChange={onAssigneeChange}
         />
         </div>
       )}
@@ -1387,6 +1425,7 @@ function TicketWorkspace({
             onBack={() => select("")}
             focus={focus}
             onToggleFocus={toggleFocus}
+            onTicketChanged={onTicketChanged}
           />
         ) : (
           <EmptyDetail title={t("tickets.view.emptyDetail.title")} body={t("tickets.view.emptyDetail.body")} />
@@ -1429,6 +1468,7 @@ function TicketDetailWorkspace({
   onBack,
   focus,
   onToggleFocus,
+  onTicketChanged,
 }: {
   ticket: TicketListItem;
   detail: TicketDetail | null;
@@ -1445,6 +1485,7 @@ function TicketDetailWorkspace({
   onBack: () => void;
   focus: boolean;
   onToggleFocus: () => void;
+  onTicketChanged: (ticket: TicketListItem) => void;
 }) {
   const t = useT();
   const frameRef = useRef<HTMLDivElement>(null);
@@ -1570,6 +1611,7 @@ function TicketDetailWorkspace({
         onOpenContext={onOpenContext}
         focus={focus}
         onToggleFocus={onToggleFocus}
+        onTicketChanged={onTicketChanged}
       />
 
       <div className={styles.middleTabs} role="tablist" aria-label={t("tickets.panels.historyLabel")}>
@@ -1741,7 +1783,7 @@ type TimelineItem =
   | { type: "note"; id: string; at: string | null; note: TicketNote }
   | { type: "event"; id: string; at: string | null; event: CaseEvent };
 
-type CaseEventKind = "investigation" | "draft" | "override" | "snooze" | "wake" | "obligation";
+type CaseEventKind = "investigation" | "draft" | "override" | "snooze" | "wake" | "obligation" | "assigned";
 
 type CaseEvent = { kind: CaseEventKind; title: string; detail: string | null };
 
@@ -1752,6 +1794,7 @@ const CASE_EVENT_ICONS: Record<CaseEventKind, (props: { size?: number }) => Reac
   snooze: ClockIcon,
   wake: ClockIcon,
   obligation: CheckCircleIcon,
+  assigned: UserIcon,
 };
 
 /**
@@ -1761,7 +1804,13 @@ const CASE_EVENT_ICONS: Record<CaseEventKind, (props: { size?: number }) => Reac
  * thinks: the case analysed, a draft written, a person's correction, a snooze
  * and its wake, a check opened. The agent's individual lookups stay in Activity.
  */
-function caseEvents(ticket: TicketListItem, detail: TicketDetail | null, thread: TicketThread, t: Translate): TimelineItem[] {
+function caseEvents(
+  ticket: TicketListItem,
+  detail: TicketDetail | null,
+  thread: TicketThread,
+  t: Translate,
+  nameOf: (id: string | null) => string | null
+): TimelineItem[] {
   const items: TimelineItem[] = [];
   const push = (id: string, at: string | null | undefined, event: CaseEvent) => {
     if (at) items.push({ type: "event", id, at, event });
@@ -1795,6 +1844,14 @@ function caseEvents(ticket: TicketListItem, detail: TicketDetail | null, thread:
       kind: "snooze",
       title: t("tickets.panels.timeline.snoozed"),
       detail: ticket.snooze.reason,
+    });
+  }
+  // The current assignment only: its history is in ticket_assignments, not on the row.
+  if (ticket.assignedTo) {
+    push("event-assigned", ticket.assignedAt, {
+      kind: "assigned",
+      title: t("tickets.panels.assign.with", { name: nameOf(ticket.assignedTo) ?? t("tickets.panels.assign.former") }),
+      detail: null,
     });
   }
   if (ticket.lastWake) {
@@ -1833,6 +1890,7 @@ function ConversationThread({
   const t = useT();
   const locale = useLocale();
   const latestRef = useRef<HTMLLIElement>(null);
+  const { memberOf } = useTeam();
   const [showEarlier, setShowEarlier] = useState(false);
   const [showEvents, setShowEvents] = useState(true);
 
@@ -1854,7 +1912,7 @@ function ConversationThread({
     return <CompactEmpty title={t("tickets.panels.thread.emptyTitle")} body={t("tickets.panels.thread.emptyBody")} />;
   }
 
-  const events = caseEvents(ticket, detail, thread, t);
+  const events = caseEvents(ticket, detail, thread, t, (id) => memberOf(id)?.name ?? null);
   const items: TimelineItem[] = [
     ...thread.messages.map((message) => ({ type: "message" as const, id: `message-${message.id}`, at: message.at, message })),
     ...notes.map((note) => ({ type: "note" as const, id: `note-${note.id}`, at: note.createdAt, note })),

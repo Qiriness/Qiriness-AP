@@ -99,6 +99,7 @@ import type {
   TicketLanguage,
 } from "../types";
 import { TICKET_LANGUAGES } from "../types";
+import { listTeam } from "./team-service";
 
 function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
@@ -1409,6 +1410,35 @@ export async function setTicketStatus(
  * sender directory with it, since `isOwnSide` is what decides whether a thread
  * belongs on /tickets or /conversations at all.
  */
+/**
+ * A person assigns the ticket to a member of the team, or unassigns it (null).
+ * The assignee must be an active dashboard account (`dashboard_team()`), so a
+ * stale menu cannot hand a ticket to someone since disabled. Every change is
+ * appended to `ticket_assignments`. Returns the refreshed queue row.
+ */
+export async function assignTicket(
+  shopId: string,
+  ticketId: string,
+  assigneeId: string | null,
+  assignedBy: string | null
+): Promise<TicketListItem> {
+  if (assigneeId !== null) {
+    const team = await listTeam();
+    if (!team.some((member) => member.id === assigneeId)) {
+      throw new KnowledgeValidationError("That person cannot be assigned tickets: their account is not active.");
+    }
+  }
+  const row = await getRecord(shopId).assign(ticketId, { assignedTo: assigneeId, assignedBy });
+  if (!row) throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
+  await supabaseInsert(
+    getSupabaseClient(),
+    T.TICKET_ASSIGNMENTS,
+    [{ shop_id: shopId, ticket_id: ticketId, assigned_to: assigneeId, assigned_by: assignedBy }],
+    { returning: "minimal" }
+  );
+  return getTicketListItem(shopId, ticketId);
+}
+
 export async function getTicketListItem(
   shopId: string,
   ticketId: string
@@ -1507,6 +1537,8 @@ function mapTicketRow(
     id: row.id,
     ticketNumber: row.ticket_number === null || row.ticket_number === undefined ? null : Number(row.ticket_number),
     language: asLanguage(row.language),
+    assignedTo: row.assigned_to ?? null,
+    assignedAt: row.assigned_at ?? null,
     subject: row.subject,
     status: row.status as TicketStatus,
     category: (row.category as KnowledgeCategory) ?? null,

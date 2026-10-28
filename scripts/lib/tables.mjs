@@ -72,6 +72,8 @@ export const T = {
   TICKET_SNOOZES: 'ticket_snoozes',
   // 04_ticket_numbers_and_notes
   TICKET_NOTES: 'ticket_notes',
+  // 05_ticket_assignment
+  TICKET_ASSIGNMENTS: 'ticket_assignments',
   CASE_LINKS: 'case_links',
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
@@ -259,6 +261,8 @@ export const RPC = {
   SEARCH_KNOWLEDGE_CHUNKS_TEXT: 'search_knowledge_chunks_text',
   MATCH_SUPPORT_EXEMPLARS: 'match_support_exemplars',
   ORDER_NUMBER_RANGE: 'order_number_range',
+  // 05: the people a ticket can be assigned to, read from Supabase Auth.
+  DASHBOARD_TEAM: 'dashboard_team',
 
   // 04_support — the mail job queue (scripts/lib/mail-job-record.mjs).
   ENQUEUE_MAIL_JOB: 'enqueue_mail_job',
@@ -349,7 +353,9 @@ export const COLUMNS = {
     // When it was closed (75): the Closed section is ordered by it.
     'resolved_at,closed_at,' +
     // The per-shop running number, shown as T-<n>, and the reply language (04).
-    'ticket_number,language',
+    'ticket_number,language,' +
+    // Who the ticket is with, and since when (05).
+    'assigned_to,assigned_at',
 
   /**
    * What the categoriser needs: the previous reading, to ratchet against, and

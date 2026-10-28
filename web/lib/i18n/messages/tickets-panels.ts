@@ -490,6 +490,16 @@ export const en = {
   "tickets.panels.draft.notes_one": "{count} note",
   "tickets.panels.draft.notes_other": "{count} notes",
   "tickets.panels.draft.beforeSending": "Before sending: {action}",
+  "tickets.panels.assign.label": "Assigned to",
+  "tickets.panels.assign.nobody": "Unassigned",
+  "tickets.panels.assign.me": "{name} (me)",
+  "tickets.panels.assign.toMe": "Assign to me",
+  "tickets.panels.assign.with": "Assigned to {name}",
+  "tickets.panels.assign.former": "a former team member",
+  "tickets.panels.assign.filterLabel": "Whose tickets",
+  "tickets.panels.assign.filter.mine": "Mine",
+  "tickets.panels.assign.filter.unassigned": "Unassigned",
+  "tickets.panels.assign.filter.all": "All",
 } as const;
 
 export const fr: Record<keyof typeof en, string> = {
@@ -983,4 +993,14 @@ export const fr: Record<keyof typeof en, string> = {
   "tickets.panels.draft.notes_one": "{count} remarque",
   "tickets.panels.draft.notes_other": "{count} remarques",
   "tickets.panels.draft.beforeSending": "Avant l'envoi : {action}",
+  "tickets.panels.assign.label": "Attribué à",
+  "tickets.panels.assign.nobody": "Non attribué",
+  "tickets.panels.assign.me": "{name} (moi)",
+  "tickets.panels.assign.toMe": "M'attribuer",
+  "tickets.panels.assign.with": "Attribué à {name}",
+  "tickets.panels.assign.former": "un ancien membre de l'équipe",
+  "tickets.panels.assign.filterLabel": "Quels tickets",
+  "tickets.panels.assign.filter.mine": "Mes tickets",
+  "tickets.panels.assign.filter.unassigned": "Non attribués",
+  "tickets.panels.assign.filter.all": "Tous",
 };

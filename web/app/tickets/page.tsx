@@ -12,6 +12,9 @@ import { FreshnessStrip } from "@/components/ui/FreshnessStrip";
 import type { FreshnessItem } from "@/lib/types";
 import { readSnoozeDelays } from "@/lib/server/snooze-service";
 import { NO_DELAYS, type SnoozeDelays } from "@/lib/snooze";
+import { listTeam } from "@/lib/server/team-service";
+import { getSession } from "@/lib/server/auth";
+import type { TeamMember } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +54,11 @@ export default async function TicketsPage({
   let loadError: string | null = null;
   let freshness: FreshnessItem[] = [];
   let snoozeDelays: SnoozeDelays = NO_DELAYS;
+  // Who a ticket can be assigned to, and who is reading: « Mine » and « Assign
+  // to me ». A failed team read leaves assignment unavailable, not the page.
+  let team: TeamMember[] = [];
+  const sessionRead = getSession().catch(() => null);
+  const teamRead = listTeam().catch(() => [] as TeamMember[]);
 
   try {
     const shopId = await getShopId();
@@ -102,7 +110,8 @@ export default async function TicketsPage({
     loadError = error instanceof Error ? error.message : "Failed to load tickets.";
   }
 
-  const badges = await badgesRead;
+  const [badges, session] = await Promise.all([badgesRead, sessionRead]);
+  team = await teamRead;
   return (
     <AppShell activeHref="/tickets" {...badges}>
       <TicketsView
@@ -115,6 +124,8 @@ export default async function TicketsPage({
         initialParams={searchParams}
         headerAside={<FreshnessStrip items={freshness} />}
         snoozeDelays={snoozeDelays}
+        team={team}
+        currentUserId={session?.sub ?? null}
       />
     </AppShell>
   );

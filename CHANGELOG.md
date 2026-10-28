@@ -10,6 +10,24 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Assigning tickets (2026-10-28)
+
+- **Who:** every active dashboard account, read from Supabase Auth by `dashboard_team()`. That is a database function, so the web app never holds the secret key.
+- **How:** the header's assignee chip is a menu, with « Assign to me » beside it. Cards show the assignee's initials. The queue header has a **Mine / Unassigned / All** switch (`?assignee=`, default All) that filters every ticket tab. The current assignment also appears as a case event in the conversation.
+- **Rules agreed with the owner:**
+  - Assignment is manual only.
+  - It is kept through close and reopen.
+  - Only an active account can be assigned; the server checks again on save.
+
+  Why: `docs/decisions/tickets-dashboard.md` § Assignment. This reverses « assignee: left out by decision » in `human-overrides.md`.
+- **Migration `05_ticket_assignment.sql`:**
+  - `tickets.assigned_to` / `assigned_at` / `assigned_by`.
+  - `ticket_assignments`, the append-only history.
+  - `dashboard_team()`.
+  - `ticket_queue` gains `assigned_to` and `assigned_at`.
+  - `PUT /api/tickets/[id]/assignee`.
+- **Proven so far:** `tsc` and lint are clean, the i18n tests pass, and the migration applies on top of the baseline (PGlite).
+
 ## Ticket workspace redesign; ticket numbers and internal notes (2026-10-28)
 
 - **Layout.** `/tickets` is now two panes and a sheet: the queue and the ticket. The ticket panel opens from the header at every width (X, scrim or Escape closes it). **Focus** hides the queue and the panel. The view tabs and filters are unchanged. Why: `docs/decisions/tickets-dashboard.md` § The ticket workspace is two panes and a sheet.

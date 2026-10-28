@@ -265,3 +265,17 @@ export async function deleteTicketNote(ticketId: string, noteId: string): Promis
     throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
   }
 }
+
+/** Assigns the ticket to a member of the team, or unassigns it (null). Returns the refreshed row. */
+export async function assignTicket(ticketId: string, assigneeId: string | null): Promise<TicketListItem> {
+  const response = await fetch(`/api/tickets/${ticketId}/assignee`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ assigneeId }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return body.ticket as TicketListItem;
+}

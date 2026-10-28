@@ -360,11 +360,19 @@ The number is not yet put in outgoing mail. `docs/decisions/cases.md` already li
 - **The writer's name is stored with the note.** Snoozes and overrides store only the user id, because nothing on those screens needs to say who acted. A note is read as « who said this ». Nothing resolves an id to a name, and these are staff names, not customer data.
 - **Soft-deleted, and only by the writer.** A note is someone's word on the case; it should not vanish from the timeline because a colleague clicked the wrong thing.
 
-### Assignment is laid out, not built (2026-10-28)
+### Assignment: any active account, by a person only, kept through close (2026-10-28)
 
-The prototype assigns tickets and filters « Mine / All ». The card and the header leave room for an assignee, but nothing is rendered. `docs/decisions/human-overrides.md` records why there is no assignee column: no user list exists, and inventing one was refused. That still stands. Building assignment means:
-- a user list from `auth.users`;
-- a column;
-- a decision on whether assignment changes who sees what.
+This reverses « assignee: left out by decision » in `docs/decisions/human-overrides.md`. That decision rested on there being no user list, and inventing one was refused. **The list is read, not invented**: `dashboard_team()` reads `auth.users`, the accounts `npm run users` already manages, and returns every account with a dashboard role that is not banned.
 
-That is a change of its own, not part of a layout refactor.
+**Through a database function, not the Auth admin API.** Listing users through the API needs the secret key, and `scripts/lib/dashboard-user-admin.mjs`, the only code that holds it, must never be imported into the web app. The function is SECURITY DEFINER, executable by `service_role` only, and returns id, name and role. It returns no address unless an account has no display name.
+
+Decisions taken with the owner:
+
+- **Who can be assigned: every active account, whatever its role.** The team is a handful of people. Excluding developers would only remove the people most likely to test the feature. Accounts are not per shop, so neither is the team.
+- **Kept through close and reopen.** A customer who writes again lands back with the person who knows the case. Nothing clears an assignment except a person.
+- **Manual only.** Approving a draft or sending a reply does not assign. « Assign to me » is the one-click path. Auto-assigning on approval would have silently moved tickets between people whenever someone helped out.
+- **Mine / Unassigned / All, default All**, in the URL like the other filters. A page that opened on « Mine » would look empty to someone with nothing assigned, and would hide the unassigned work the team has to share out. A link to a ticket the filter would hide resets it to All, as the level and category filters do.
+
+**The assignee must be an active account when it is set.** A menu left open can offer someone since disabled, so the server checks against `dashboard_team()` again. A ticket held by a since-disabled account still shows that it is assigned (« a former team member ») rather than looking free.
+
+**`ticket_assignments` keeps the history; the timeline shows the current assignment only.** « Who had this before » is answerable from the table. Putting every handover in the conversation would add noise the owner asked to remove.

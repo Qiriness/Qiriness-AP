@@ -460,6 +460,10 @@ export interface TicketListItem {
   ticketNumber: number | null;
   /** The language the reply should be written in, read from the customer's mail; null until categorised. */
   language: TicketLanguage | null;
+  /** The dashboard user (auth id) this ticket is with, or null. Set only by a person. */
+  assignedTo: string | null;
+  /** When `assignedTo` last changed. */
+  assignedAt: string | null;
   subject: string | null;
   status: TicketStatus;
   category: KnowledgeCategory | null;
@@ -583,6 +587,13 @@ export const TICKET_LANGUAGES: readonly TicketLanguage[] = ["fr", "en", "es", "d
  */
 export function formatTicketNumber(ticketNumber: number | null | undefined): string | null {
   return typeof ticketNumber === "number" && Number.isFinite(ticketNumber) ? `T-${ticketNumber}` : null;
+}
+
+/** Someone a ticket can be assigned to (`dashboard_team()`): every active dashboard account. */
+export interface TeamMember {
+  id: string;
+  name: string;
+  role: "developer" | "management" | "contact" | null;
 }
 
 /** A note the team left on a ticket (`ticket_notes`). Never sent, never read by the agent. */

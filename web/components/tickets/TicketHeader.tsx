@@ -37,6 +37,7 @@ import { SnoozeBanner, SnoozeControl, type SnoozeChange } from "./SnoozeControl"
 import { ForwardingBanner } from "./ForwardingTag";
 import { CategoryIcon, PriorityDot, StatusIcons, categoryVars, priorityTitle } from "./ticket-marks";
 import { contactingAddress, requesterName, ticketTitle } from "./ticket-text";
+import { AssigneePicker } from "./AssigneePicker";
 import styles from "./TicketHeader.module.css";
 
 interface TicketHeaderProps {
@@ -51,6 +52,8 @@ interface TicketHeaderProps {
   onOpenContext: () => void;
   focus: boolean;
   onToggleFocus: () => void;
+  /** The row came back changed (an assignment). */
+  onTicketChanged: (ticket: TicketListItem) => void;
 }
 
 export function TicketHeader({
@@ -65,6 +68,7 @@ export function TicketHeader({
   onOpenContext,
   focus,
   onToggleFocus,
+  onTicketChanged,
 }: TicketHeaderProps) {
   const t = useT();
   const closed = isClosed(ticket);
@@ -160,10 +164,8 @@ export function TicketHeader({
           </span>
         )}
         {ticket.status !== "open" && <span className={styles.chip}>{t(`status.${ticket.status}`)}</span>}
-        {ticket.responsibleTeam && (
-          <span className={styles.chip}>{t("tickets.panels.team", { team: t(`team.${ticket.responsibleTeam}`) })}</span>
-        )}
-        {/* The assignee chip goes here once tickets can be assigned. */}
+        {/* The responsible team is in the ticket panel, not here: the owner asked for it off the header. */}
+        <AssigneePicker ticket={ticket} onChanged={onTicketChanged} />
         {overridden && (
           <span className={`${styles.chip} ${styles.overrideChip}`} title={t("tickets.panels.header.overriddenHint")}>
             <PencilIcon size={12} />

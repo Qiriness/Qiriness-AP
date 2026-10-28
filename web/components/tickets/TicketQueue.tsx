@@ -18,9 +18,15 @@ import { useT } from "@/lib/i18n/client";
 import type { TicketListItem } from "@/lib/types";
 import { CategoryIcon, PriorityDot, StatusIcons, TicketNumber, categoryVars, priorityTitle } from "./ticket-marks";
 import { requesterInitials, requesterName, ticketAge, ticketTitle } from "./ticket-text";
+import { AssigneeAvatar } from "./AssigneePicker";
+import { useTeam } from "./team-context";
 import styles from "./TicketQueue.module.css";
 
 export type QueueMode = "full" | "compact";
+
+/** Whose tickets the queue shows. `all` by default, so nothing changes until someone chooses. */
+export type AssigneeFilter = "all" | "mine" | "unassigned";
+export const ASSIGNEE_FILTERS: readonly AssigneeFilter[] = ["mine", "unassigned", "all"];
 
 interface TicketQueueProps {
   /** The tab's name, e.g. « Queue ». */
@@ -34,10 +40,24 @@ interface TicketQueueProps {
   notice?: string | null;
   mode: QueueMode;
   onModeChange: (mode: QueueMode) => void;
+  assignee: AssigneeFilter;
+  onAssigneeChange: (filter: AssigneeFilter) => void;
 }
 
-export function TicketQueue({ viewLabel, orderLabel, tickets, selectedId, onSelect, notice = null, mode, onModeChange }: TicketQueueProps) {
+export function TicketQueue({
+  viewLabel,
+  orderLabel,
+  tickets,
+  selectedId,
+  onSelect,
+  notice = null,
+  mode,
+  onModeChange,
+  assignee,
+  onAssigneeChange,
+}: TicketQueueProps) {
   const t = useT();
+  const { team, currentUserId } = useTeam();
 
   if (mode === "compact") {
     return (
@@ -101,6 +121,24 @@ export function TicketQueue({ viewLabel, orderLabel, tickets, selectedId, onSele
         )}
       </div>
 
+      {/* « Mine » needs to know who is reading, and the switch is pointless with no team. */}
+      {team.length > 0 && currentUserId && (
+        <div className={styles.segmented} role="radiogroup" aria-label={t("tickets.panels.assign.filterLabel")}>
+          {ASSIGNEE_FILTERS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={assignee === value}
+              className={assignee === value ? styles.segmentActive : undefined}
+              onClick={() => onAssigneeChange(value)}
+            >
+              {t(`tickets.panels.assign.filter.${value}`)}
+            </button>
+          ))}
+        </div>
+      )}
+
       {tickets.length === 0 ? (
         <div className={styles.empty}>
           {notice ? (
@@ -160,8 +198,10 @@ function QueueCard({ ticket, selected, onSelect }: { ticket: TicketListItem; sel
             {ticket.category ? t(`category.${ticket.category}`) : t("tickets.panels.uncategorised")}
           </span>
         </span>
-        {/* The assignee's avatar goes here once tickets can be assigned. */}
-        <StatusIcons ticket={ticket} />
+        <span className={styles.cardMarks}>
+          <StatusIcons ticket={ticket} />
+          <AssigneeAvatar ticket={ticket} />
+        </span>
       </span>
     </button>
   );

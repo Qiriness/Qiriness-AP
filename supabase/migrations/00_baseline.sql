@@ -321,6 +321,25 @@ AS $function$
     );
 $function$;
 
+CREATE OR REPLACE FUNCTION public.dashboard_team()
+ RETURNS TABLE(id uuid, display_name text, role text)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  return query
+    select u.id,
+           coalesce(nullif(btrim(u.raw_user_meta_data ->> 'display_name'), ''), split_part(u.email::text, '@', 1)),
+           u.raw_app_meta_data ->> 'dashboard_role'
+    from auth.users u
+    where u.raw_app_meta_data ->> 'dashboard_role' in ('developer', 'management', 'contact')
+      and (u.banned_until is null or u.banned_until <= now())
+      and u.deleted_at is null
+    order by 2;
+end;
+$function$;
+
 CREATE OR REPLACE FUNCTION public.insights_agent_blockers(p_shop uuid, p_from timestamp without time zone, p_to timestamp without time zone, p_tz text)
  RETURNS TABLE(need text, state text, finding text, occurrences bigint, tickets bigint)
  LANGUAGE sql
@@ -4061,6 +4080,16 @@ create table public.support_parameters (
   constraint support_parameters_pkey PRIMARY KEY (id)
 );
 
+create table public.ticket_assignments (
+  id uuid default gen_random_uuid() not null,
+  shop_id uuid not null,
+  ticket_id uuid not null,
+  assigned_to text,
+  assigned_by text,
+  assigned_at timestamp with time zone default now() not null,
+  constraint ticket_assignments_pkey PRIMARY KEY (id)
+);
+
 create table public.ticket_case_actions (
   id uuid default gen_random_uuid() not null,
   shop_id uuid not null,
@@ -4421,6 +4450,9 @@ create table public.tickets (
   case_link_state text default 'pending'::text not null,
   fact_drift jsonb,
   ticket_number integer not null,
+  assigned_to text,
+  assigned_at timestamp with time zone,
+  assigned_by text,
   constraint tickets_case_link_state_check CHECK ((case_link_state = ANY (ARRAY['pending'::text, 'decided'::text]))),
   constraint tickets_categorisation_confidence_check CHECK (((categorisation_confidence IS NULL) OR (categorisation_confidence = ANY (ARRAY['high'::text, 'medium'::text, 'low'::text])))),
   constraint tickets_category_check CHECK (((category IS NULL) OR (category = ANY (ARRAY['order'::text, 'delivery'::text, 'return_exchange'::text, 'product'::text, 'product_stock'::text, 'payment'::text, 'account'::text, 'promotions'::text, 'cosmetovigilance'::text, 'legal_privacy'::text, 'b2b'::text, 'partner_collaboration'::text, 'careers'::text, 'other'::text])))),
@@ -4934,7 +4966,9 @@ SELECT t.id,
     t.resolved_at,
     t.closed_at,
     t.ticket_number,
-    t.language
+    t.language,
+    t.assigned_to,
+    t.assigned_at
    FROM public.tickets t
      LEFT JOIN public.customers c ON c.id = t.customer_id
      LEFT JOIN public.ticket_message_counts n ON n.ticket_id = t.id
@@ -5178,6 +5212,7 @@ CREATE INDEX support_exemplars_shop_category_idx ON public.support_exemplars USI
 CREATE INDEX support_exemplars_shop_deleted_at_idx ON public.support_exemplars USING btree (shop_id, deleted_at);
 CREATE UNIQUE INDEX support_exemplars_shop_key_unique ON public.support_exemplars USING btree (shop_id, exemplar_key);
 CREATE UNIQUE INDEX support_parameters_shop_key_unique ON public.support_parameters USING btree (shop_id, parameter_key);
+CREATE INDEX ticket_assignments_ticket_idx ON public.ticket_assignments USING btree (ticket_id, assigned_at);
 CREATE INDEX ticket_case_actions_ticket_idx ON public.ticket_case_actions USING btree (ticket_id, acted_at);
 CREATE INDEX ticket_case_state_ticket_idx ON public.ticket_case_state USING btree (ticket_id, read_at DESC);
 CREATE INDEX ticket_clusters_members_gin_idx ON public.ticket_clusters USING gin (member_message_ids);
@@ -5218,6 +5253,7 @@ CREATE INDEX tickets_pending_categorisation_idx ON public.tickets USING btree (s
 CREATE INDEX tickets_related_ticket_idx ON public.tickets USING btree (related_ticket_id) WHERE (related_ticket_id IS NOT NULL);
 CREATE INDEX tickets_retention_delete_after_idx ON public.tickets USING btree (shop_id, retention_delete_after);
 CREATE INDEX tickets_shop_archived_at_idx ON public.tickets USING btree (shop_id, archived_at);
+CREATE INDEX tickets_shop_assigned_to_idx ON public.tickets USING btree (shop_id, assigned_to) WHERE (assigned_to IS NOT NULL);
 CREATE INDEX tickets_shop_category_idx ON public.tickets USING btree (shop_id, category);
 CREATE INDEX tickets_shop_category_kind_idx ON public.tickets USING btree (shop_id, category, request_kind);
 CREATE INDEX tickets_shop_deleted_at_idx ON public.tickets USING btree (shop_id, deleted_at);
@@ -5330,6 +5366,8 @@ alter table public.support_answers add constraint support_answers_shop_id_fkey F
 alter table public.support_exemplar_phrasings add constraint support_exemplar_phrasings_support_exemplar_id_fkey FOREIGN KEY (support_exemplar_id) REFERENCES public.support_exemplars(id) ON DELETE CASCADE;
 alter table public.support_exemplars add constraint support_exemplars_shop_id_fkey FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE;
 alter table public.support_parameters add constraint support_parameters_shop_id_fkey FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE;
+alter table public.ticket_assignments add constraint ticket_assignments_shop_id_fkey FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE;
+alter table public.ticket_assignments add constraint ticket_assignments_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES public.tickets(id) ON DELETE CASCADE;
 alter table public.ticket_case_actions add constraint ticket_case_actions_shop_id_fkey FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE;
 alter table public.ticket_case_actions add constraint ticket_case_actions_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES public.tickets(id) ON DELETE CASCADE;
 alter table public.ticket_case_state add constraint ticket_case_state_shop_id_fkey FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE;
@@ -5500,6 +5538,7 @@ alter table public.support_answers enable row level security;
 alter table public.support_exemplar_phrasings enable row level security;
 alter table public.support_exemplars enable row level security;
 alter table public.support_parameters enable row level security;
+alter table public.ticket_assignments enable row level security;
 alter table public.ticket_case_actions enable row level security;
 alter table public.ticket_case_state enable row level security;
 alter table public.ticket_clusters enable row level security;
@@ -5752,6 +5791,8 @@ revoke all on public.support_parameters from public, anon, authenticated, servic
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.support_parameters to anon;
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.support_parameters to authenticated;
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.support_parameters to service_role;
+revoke all on public.ticket_assignments from public, anon, authenticated, service_role, mgmt_chat_ro;
+grant truncate, insert, delete, maintain, select, trigger, update, references on public.ticket_assignments to service_role;
 revoke all on public.ticket_case_actions from public, anon, authenticated, service_role, mgmt_chat_ro;
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.ticket_case_actions to anon;
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.ticket_case_actions to authenticated;
@@ -5874,6 +5915,8 @@ revoke all on function public.customer_vip_ticket_categories(p_shop uuid, p_min_
 grant execute on function public.customer_vip_ticket_categories(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[]) to service_role;
 revoke all on function public.customer_vip_ticket_stats(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_closed_statuses text[], p_unhappy_from integer) from public, anon, authenticated, service_role, mgmt_chat_ro;
 grant execute on function public.customer_vip_ticket_stats(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_closed_statuses text[], p_unhappy_from integer) to service_role;
+revoke all on function public.dashboard_team() from public, anon, authenticated, service_role, mgmt_chat_ro;
+grant execute on function public.dashboard_team() to service_role;
 revoke all on function public.enqueue_mail_job(p_shop_id uuid, p_kind text, p_dedupe_key text, p_payload jsonb, p_run_at timestamp with time zone) from public, anon, authenticated, service_role, mgmt_chat_ro;
 grant execute on function public.enqueue_mail_job(p_shop_id uuid, p_kind text, p_dedupe_key text, p_payload jsonb, p_run_at timestamp with time zone) to public;
 grant execute on function public.enqueue_mail_job(p_shop_id uuid, p_kind text, p_dedupe_key text, p_payload jsonb, p_run_at timestamp with time zone) to anon;
@@ -6333,6 +6376,9 @@ comment on column public.ticket_snoozes.waiting_for is 'customer | colleague | p
 comment on column public.ticket_snoozes.wake_at is 'The fallback deadline. The worker wakes the ticket then (wake_reason deadline) without calling a model.';
 comment on column public.ticket_snoozes.wake_reason is 'Why it came back: a new message by actor, the deadline, a person, the case moving to us (case_changed) or to nobody (resolved), or an order update.';
 comment on column public.tickets.archived_at is 'When the ticket was archived out of the active queue while still retained. Set by the archival job for old tickets; distinct from deleted_at.';
+comment on column public.tickets.assigned_at is 'When assigned_to last changed.';
+comment on column public.tickets.assigned_by is 'Who last changed assigned_to (auth.users id).';
+comment on column public.tickets.assigned_to is 'The dashboard user (auth.users id) this ticket is with, or null. Set only by a person on the dashboard; kept through close and reopen. History in ticket_assignments.';
 comment on column public.tickets.case_id is 'The case this thread belongs to. A new conversation opens its own case; the case linker (agent/src/cases/) may move the thread into an older case of the same customer, recorded in case_links. Threads are never merged: several tickets share a case_id.';
 comment on column public.tickets.case_link_state is 'pending until the case linker has decided, once, whether this thread continues an older case; decided after. Tickets that predate cases were marked decided by 61_cases.sql.';
 comment on column public.tickets.categorisation_confidence is 'Marker that this ticket''s labels are known to be untrustworthy. NOT a model self-assessment: the categoriser was originally asked how sure it was and answered "high" on 171 of 171 real tickets and 40 of 40 review cases, because Structured Outputs emits fields in order, so it was rating an answer it had already committed to in the same forward pass. A constant field carries no information, so the question was dropped. Today only "low" is written, and only by the categoriser''s failure paths: a categorisation that exhausted its retries, or stale labels on a ticket whose re-categorisation errored. A successfully categorised ticket is NULL. "high" and "medium" remain permitted by the constraint but nothing writes them -- they are kept so a future calibrated signal (sampling for agreement, or token logprobs) can land here without a migration.';
@@ -6374,6 +6420,7 @@ comment on function public.customer_segment_find(p_shop uuid, p_window_months in
 comment on function public.customer_vip_call_list(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_closed_statuses text[], p_min_level integer) is 'Cases of VIP customers that are open and at or above p_min_level: the panel''s call list. Filtered in SQL, so it is bounded by what needs a call, not by all cases.';
 comment on function public.customer_vip_ticket_categories(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[]) is 'VIP cases by subject (null category = uncategorised). Ordering is left to the caller.';
 comment on function public.customer_vip_ticket_stats(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_closed_statuses text[], p_unhappy_from integer) is 'The Customers panel''s ticket figures, aggregated: cases linked to a customer, cases of VIPs (vip_customers()), distinct VIPs who wrote in, and lifetime spend behind open unhappy cases (once per customer).';
+comment on function public.dashboard_team() is 'The people a ticket can be assigned to: every dashboard account (developer, management, contact) that is not banned, as id, display name (the address before @ when none is set) and role.';
 comment on function public.enqueue_mail_job(p_shop_id uuid, p_kind text, p_dedupe_key text, p_payload jsonb, p_run_at timestamp with time zone) is 'Queue one mail job, or bring an already-queued job with the same dedupe_key forward. Returns the queued row.';
 comment on function public.insights_agent_blockers(p_shop uuid, p_from timestamp without time zone, p_to timestamp without time zone, p_tz text) is 'investigation_evidence_gaps over the runs made in a date range. Satisfied needs are included, as in the view; the caller filters them.';
 comment on function public.insights_agent_funnel(p_shop uuid, p_from timestamp without time zone, p_to timestamp without time zone, p_tz text) is 'agent_pipeline_funnel over the tickets first written in a date range. Always one row.';
@@ -6531,6 +6578,7 @@ comment on view public.support_by_month is 'Monthly support intake with the mood
 comment on table public.support_exemplar_phrasings is 'Retrieval rows for support_exemplars: the canonical question plus every real phrasing of it. One vector each; the exemplar is scored by its best-matching phrasing.';
 comment on table public.support_exemplars is 'Recurring customer situations: a canonical question plus what answering it requires. Authored in the dashboard or imported from the clustered corpus; never auto-synced from Shopify.';
 comment on table public.support_parameters is 'The numbers the support desk runs on -- returns window, dispatch delays, free-shipping threshold -- held once so a rule, an article and an answer skeleton cannot disagree about them. Read by code through scripts/lib/parameters.mjs; never retrieved as prose.';
+comment on table public.ticket_assignments is 'Every assignment and unassignment of a ticket, append-only. The current value is tickets.assigned_to.';
 comment on table public.ticket_case_actions is 'What a person did to a case from the dashboard: an open check marked done or cancelled. The fold (agent/src/casework/case-fold.mjs) applies these after the readings, so a check that was settled by phone or in Shopify stops being owed. Append-only.';
 comment on table public.ticket_case_state is 'One reading per inbound message that landed on a ticket already read once: what the message changed about the case. Keyed per trigger message like ticket_investigations, because a thread''s readings are a trajectory rather than a current value. Records what was asked and answered, what was promised, and which prior evidence may be reused -- never what a tool returned.';
 comment on table public.ticket_clusters is 'One row per topic found in a cluster run: its subject, size, cohesion, a representative excerpt and the messages in it. Written whole by cluster:tickets and read whole by the topic map.';

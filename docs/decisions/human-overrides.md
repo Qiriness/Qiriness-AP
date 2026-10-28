@@ -33,6 +33,6 @@ The ticket rail has one « Edit case » mode. A person can correct the situation
 
 **The evals exclude a person's situation.** `eval:exemplar-needs` asks whether the matcher's situations describe real tickets, and a situation a person chose is not the matcher's claim. `eval:fold` is unchanged at 79 of 132, since it carries no overrides.
 
-**Left out by decision:** assignee (no column and no user list exist, and AGENTS.md forbids inventing them); linking a customer (no dashboard path today, and it touches personal-data rules); unlinking an order.
+**Left out by decision:** assignee (no column and no user list exist, and AGENTS.md forbids inventing them — *reversed 2026-10-28: the list is now read from Supabase Auth through `dashboard_team()`; see `tickets-dashboard.md` § Assignment*); linking a customer (no dashboard path today, and it touches personal-data rules); unlinking an order.
 
 **The nearest three situations** are now stored as `exemplar_match.top` (key, similarity, question). The rail offers them with « Apply » while the match is unsettled and nobody has chosen one. Runs before 2026-09-29 offer `closest` and `runner_up` only.
