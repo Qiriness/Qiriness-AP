@@ -74,6 +74,8 @@ export const T = {
   TICKET_NOTES: 'ticket_notes',
   // 05_ticket_assignment
   TICKET_ASSIGNMENTS: 'ticket_assignments',
+  // 06_manual_forwards
+  TICKET_MANUAL_FORWARDS: 'ticket_manual_forwards',
   CASE_LINKS: 'case_links',
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
@@ -464,7 +466,9 @@ export const COLUMNS = {
 
   /** The thread dialog: envelope and body, both directions. */
   messageForThread:
-    'id,direction,actor,from_name,from_email,to_emails,cc_emails,subject,body_text,has_attachments,received_at,sent_at',
+    'id,direction,actor,from_name,from_email,to_emails,cc_emails,subject,body_text,has_attachments,received_at,sent_at,' +
+    // A forward to colleagues (06): shown inside its forward card, matched on the Message-ID.
+    'internal_only,internet_message_id',
 
   /**
    * The categoriser reads the customer's words and nothing else. `actor` so an
@@ -531,7 +535,7 @@ export const COLUMNS = {
    * Still no `from_name`: a person's name is not a role, and nothing here reads
    * it.
    */
-  threadForDrafting: 'id,ticket_id,direction,actor,subject,body_text,received_at,sent_at,from_email',
+  threadForDrafting: 'id,ticket_id,direction,actor,subject,body_text,received_at,sent_at,from_email,internal_only',
 
   /**
    * Drafting reads the message it is replying to, and nothing about who sent it.

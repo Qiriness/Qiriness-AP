@@ -1207,6 +1207,10 @@ export interface TicketMessage {
   /** Human-readable recipient classes, with addresses discarded server-side. */
   routeTo: string[];
   hasAttachments: boolean;
+  /** Ours, and every recipient is ours too: a forward to colleagues, never an answer to the customer (06). */
+  internalOnly: boolean;
+  /** The dashboard forward this message is the sent copy of; it is shown inside that forward's card. */
+  forwardId: string | null;
   at: string | null;
 }
 
@@ -1258,6 +1262,8 @@ export interface TicketThread {
   case: TicketCaseThreads | null;
   draft: TicketDraft | null;
   messages: TicketMessage[];
+  /** Forwards to colleagues made from the dashboard, oldest first (06). */
+  forwards: TicketForward[];
   /**
    * The parcels this ticket's confirmed order carries, for linking a tracking
    * number wherever one appears in the text — the customer's own message or the
@@ -2882,4 +2888,33 @@ export interface SupportParameter {
   usedBy: string;
   value: string | null;
   updatedAt: string | null;
+}
+
+/* ------------------------------------------------------- forwarding to a colleague */
+
+/** Mirrors ticket_manual_forwards_state_check (scripts/lib/manual-forward-record.mjs). */
+export type TicketForwardState = "queued" | "draft_created" | "send_requested" | "sent" | "held" | "failed";
+
+/**
+ * A person's forward of the whole thread to colleagues (06_manual_forwards.sql).
+ * Addresses stay on the server: the page shows who by name.
+ */
+export interface TicketForward {
+  id: string;
+  recipients: { name: string; kind: "team" | "destination" | "address" }[];
+  note: string | null;
+  forwardedByName: string | null;
+  state: TicketForwardState;
+  error: string | null;
+  attachmentsSent: number;
+  attachmentsSkipped: { name: string | null; reason: string }[];
+  sentAt: string | null;
+  createdAt: string;
+}
+
+/** Who a ticket can be forwarded to, as the picker offers them. `key` is what the page sends back. */
+export interface ForwardRecipientOption {
+  key: string;
+  name: string;
+  kind: "team" | "destination";
 }

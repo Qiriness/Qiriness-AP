@@ -3,7 +3,8 @@
 /**
  * The small marks the ticket workspace repeats in three places — queue card,
  * compact rail, ticket header: the category's colour and icon, the priority
- * dot, and the status icons (needs a human, waiting on the customer, forwarded,
+ * dot, and the status icons (the agent can handle it, needs a human, waiting on
+ * the customer, forwarded,
  * snoozed, VIP, linked threads). One file so the three cannot disagree.
  *
  * The colours are CSS tokens (`--cat-<key>` in globals.css); this only says
@@ -11,6 +12,7 @@
  */
 import type { CSSProperties, ReactNode } from "react";
 import {
+  AgentIcon,
   AlertIcon,
   BoxIcon,
   BriefcaseIcon,
@@ -107,6 +109,14 @@ export function statusMarks(ticket: TicketListItem, t: ReturnType<typeof useT>):
       icon: ticket.level === 4 ? AlertIcon : UserIcon,
       tone: "warning",
       label: `${t("tickets.panels.marks.needsHuman")}${level}`,
+    });
+  } else if (ticket.level === 1 || ticket.level === 2) {
+    // L1/L2 is usually the agent's ticket: the robot says so, the level in its tooltip.
+    marks.push({
+      key: "agent",
+      icon: AgentIcon,
+      tone: "teal",
+      label: `${t("tickets.panels.marks.agent")} · L${ticket.level} ${t(`levelMeaning.${ticket.level}`)}`,
     });
   }
   if (ticket.status === "awaiting_customer") {

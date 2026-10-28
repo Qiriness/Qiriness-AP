@@ -124,11 +124,10 @@ export const AUTO_SEND_MAX_UNHAPPINESS = 2;
  * operator-triggered and 120 drafts unread, is the normal case rather than the
  * edge one.
  *
- * ONE INTERACTION TO REMEMBER. `direction` is derived at ingestion from the
- * sender being `SUPPORT_MAILBOX`, so a forward sent from that mailbox would also
- * be outbound. Forwarding has never sent (`ticket_forwards` is empty) and a
- * forward to a colleague is unlikely to land in the customer's conversation, so
- * this is a note rather than a known bug.
+ * A FORWARD TO A COLLEAGUE IS NOT AN ANSWER. It is outbound — sent from the
+ * support mailbox — but every recipient is ours (`internal_only`, set at
+ * ingestion, 06_manual_forwards.sql), so it answered nobody and the customer is
+ * still owed the reply.
  */
 export function answeredSince({ conversation = [], triggerMessageId = null } = {}) {
   if (!triggerMessageId) return false;
@@ -137,7 +136,7 @@ export function answeredSince({ conversation = [], triggerMessageId = null } = {
   if (triggerAt === null) return false;
 
   return conversation.some(
-    (message) => message?.direction === 'outbound' && stampOf(message) !== null && stampOf(message) > triggerAt
+    (message) => message?.direction === 'outbound' && !message.internal_only && stampOf(message) !== null && stampOf(message) > triggerAt
   );
 }
 

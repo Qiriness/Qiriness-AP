@@ -67,6 +67,7 @@ import { runSocialJobs } from './social/social-job-runner.mjs';
 import { createMailSubscriptionRecord } from '../../scripts/lib/mail-subscription-record.mjs';
 import { createOutboundRecord } from '../../scripts/lib/outbound-record.mjs';
 import { createOutboundStore } from './outbound/outbound-store.mjs';
+import { createManualForwardRecord } from '../../scripts/lib/manual-forward-record.mjs';
 import { confirmSentActions, createAutoSendActions, runOutbound } from './outbound/outbound-runner.mjs';
 import { createAdminClient } from '../../scripts/lib/dashboard-user-admin.mjs';
 import { runSalesReportMail } from './reports/sales-report-mail.mjs';
@@ -142,7 +143,8 @@ async function main() {
   // contract (mail/mail-provider.mjs); only the Outlook adapter knows Graph.
   // Forwarding and the subscription manager still take the Graph client:
   // both are Outlook features with no provider-neutral shape yet.
-  const provider = createOutlookGraphAdapter({ graphClient, mailbox: config.graph.mailbox });
+  // INTERNAL_EMAIL_DOMAINS beside the mailbox's own: mail to them only is internal (06).
+  const provider = createOutlookGraphAdapter({ graphClient, mailbox: config.graph.mailbox, internalDomains: config.internalEmailDomains });
   // The durable queue (mail_jobs) and the send path. Both are read defensively
   // below: a database without migrations 46-47 logs a warning and polls as before.
   const jobs = createMailJobRecord(supabase, { shopId });
@@ -158,6 +160,7 @@ async function main() {
     .map((shop) => ({ shop, jobs: createMailJobRecord(supabase, { shopId: shop.id }) }));
   const outboundRecord = createOutboundRecord(supabase, { shopId });
   const outboundStore = createOutboundStore(supabase, { shopId });
+  const manualForwardRecord = createManualForwardRecord(supabase, { shopId });
   const outboundDraftRecord = createDraftRecord(supabase, { shopId });
   const subscriptions = createMailSubscriptionRecord(supabase);
   // Reads the dashboard accounts, for the sales report's recipients.
@@ -825,6 +828,7 @@ async function main() {
           stopBeforeSend: config.outboundStopBeforeSend,
           draftOnly: config.draftOnly,
           maxAttempts: config.mailJobMaxAttempts,
+          forwards: manualForwardRecord,
           logger,
           shopId
         });

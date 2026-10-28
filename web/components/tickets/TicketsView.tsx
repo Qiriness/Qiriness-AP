@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
 import {
+  AgentIcon,
   AlertIcon,
   CheckCircleIcon,
   CheckIcon,
@@ -10,7 +11,9 @@ import {
   ChevronRightIcon,
   CloseIcon,
   ClockIcon,
+  ForwardIcon,
   GlobeIcon,
+  HelpIcon,
   LockIcon,
   UserIcon,
   MailInIcon,
@@ -77,6 +80,8 @@ import type {
   TicketMessage,
   TicketNote,
   TeamMember,
+  TicketForward,
+  ForwardRecipientOption,
   TicketOrderChange,
   TicketOrderFacts,
   TicketOrderLinkSource,
@@ -99,7 +104,10 @@ import {
 import { OrderLinkDialog } from "./OrderLinkDialog";
 import { ASSIGNEE_FILTERS, TicketQueue, type AssigneeFilter, type QueueMode } from "./TicketQueue";
 import { TeamProvider, useTeam } from "./team-context";
+import { ForwardCard, ForwardComposer, ForwardSnoozeDialog } from "./ForwardComposer";
 import { TicketHeader } from "./TicketHeader";
+import { FilterMenu, type FilterOption } from "./FilterMenu";
+import { CategoryIcon, categoryVars } from "./ticket-marks";
 import { contactingAddress, requesterName, ticketAge, ticketTitle } from "./ticket-text";
 import styles from "./TicketsView.module.css";
 
@@ -126,6 +134,10 @@ interface TicketsViewProps {
   team?: TeamMember[];
   /** The signed-in user, for « Mine » and « Assign to me ». */
   currentUserId?: string | null;
+  /** Who a ticket can be forwarded to (06). */
+  forwardRecipients?: ForwardRecipientOption[];
+  /** OUTBOUND_SEND_ENABLED: whether a forward can be queued at all. */
+  forwardingEnabled?: boolean;
 }
 
 type LevelFilter = "all" | "4" | "3" | "2" | "1" | "uncategorised";
@@ -362,6 +374,8 @@ export function TicketsView({
   snoozeDelays = NO_DELAYS,
   team = [],
   currentUserId = null,
+  forwardRecipients = [],
+  forwardingEnabled = false,
 }: TicketsViewProps) {
   const t = useT();
   const locale = useLocale();
@@ -426,6 +440,17 @@ export function TicketsView({
     for (const ticket of openTickets) {
       if (ticket.level === null) counts.uncategorised += 1;
       else counts[String(ticket.level) as "1" | "2" | "3" | "4"] += 1;
+    }
+    return counts;
+  }, [openTickets]);
+
+  // A ticket counts under its primary and its secondary category, as the filter matches.
+  const categoryCounts = useMemo(() => {
+    const counts: Partial<Record<KnowledgeCategory | "all", number>> = { all: openTickets.length };
+    for (const ticket of openTickets) {
+      for (const value of new Set([ticket.category, ticket.secondaryCategory])) {
+        if (value) counts[value] = (counts[value] ?? 0) + 1;
+      }
     }
     return counts;
   }, [openTickets]);
@@ -980,7 +1005,7 @@ export function TicketsView({
   };
 
   return (
-    <TeamProvider team={team} currentUserId={currentUserId}>
+    <TeamProvider team={team} currentUserId={currentUserId} forwardRecipients={forwardRecipients} forwardingEnabled={forwardingEnabled}>
     <section className={styles.section}>
       <header className={styles.pageHeader}>
         <div className={styles.headerMain}>
@@ -1028,6 +1053,7 @@ export function TicketsView({
           level={level}
           levelCounts={levelCounts}
           onLevelChange={setLevel}
+          categoryCounts={categoryCounts}
           category={category}
           onCategoryChange={setCategory}
           sender={sender}
@@ -1104,6 +1130,13 @@ export function TicketsView({
             setDetail((current) => (current ? { ...current, caseState: change.caseState } : current));
           }}
           onTicketChanged={(ticket) => setTickets((current) => current.map((row) => (row.id === ticket.id ? ticket : row)))}
+          onForwardChanged={(forward) =>
+            setThread((current) =>
+              current
+                ? { ...current, forwards: [...(current.forwards ?? []).filter((row) => row.id !== forward.id), forward] }
+                : current
+            )
+          }
           assignee={assignee}
           onAssigneeChange={setAssignee}
         />
@@ -1143,6 +1176,7 @@ interface TicketToolbarProps {
   level: LevelFilter;
   levelCounts: Record<LevelFilter, number>;
   onLevelChange: (value: LevelFilter) => void;
+  categoryCounts: Partial<Record<KnowledgeCategory | "all", number>>;
   category: KnowledgeCategory | "all";
   onCategoryChange: (value: KnowledgeCategory | "all") => void;
   sender: "all" | "consumer" | "business";
@@ -1160,6 +1194,7 @@ function TicketToolbar({
   level,
   levelCounts,
   onLevelChange,
+  categoryCounts,
   category,
   onCategoryChange,
   sender,
@@ -1190,65 +1225,46 @@ function TicketToolbar({
 
       {ticketView && (
         <>
-          <label className={styles.selectLabel}>
-            <span>{t("tickets.view.filter.level")}</span>
-            <select
-              className={styles.select}
-              value={level}
-              onChange={(event) => onLevelChange(event.target.value as LevelFilter)}
-            >
-              <option value="all">{t("tickets.view.filter.all", { n: levelCounts.all })}</option>
-              <option value="4">{t("level.4")} ({levelCounts["4"]})</option>
-              <option value="3">{t("level.3")} ({levelCounts["3"]})</option>
-              <option value="2">{t("level.2")} ({levelCounts["2"]})</option>
-              <option value="1">{t("level.1")} ({levelCounts["1"]})</option>
-              <option value="uncategorised">{t("tickets.view.filter.uncategorised", { n: levelCounts.uncategorised })}</option>
-            </select>
-          </label>
+          <FilterMenu
+            label={t("tickets.view.filter.level")}
+            value={level}
+            onChange={onLevelChange}
+            options={levelOptions(levelCounts, t)}
+          />
 
-          <label className={styles.selectLabel}>
-            <span>{t("tickets.view.filter.category")}</span>
-            <select
-              className={styles.select}
-              value={category}
-              onChange={(event) => onCategoryChange(event.target.value as KnowledgeCategory | "all")}
-            >
-              <option value="all">{t("tickets.view.filter.allCategories")}</option>
-              {TICKET_CATEGORIES.map((value) => (
-                <option key={value} value={value}>
-                  {t(`category.${value}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FilterMenu
+            label={t("tickets.view.filter.category")}
+            value={category}
+            onChange={onCategoryChange}
+            options={[
+              { value: "all", label: t("tickets.view.filter.allCategories"), count: categoryCounts.all ?? 0 },
+              ...TICKET_CATEGORIES.map((value) => ({
+                value,
+                label: t(`category.${value}`),
+                count: categoryCounts[value] ?? 0,
+                icon: <CategoryIcon category={value} size={14} />,
+                swatch: categoryVars(value),
+              })),
+            ]}
+          />
 
-          <label className={styles.selectLabel}>
-            <span>{t("tickets.view.filter.sender")}</span>
-            <select
-              className={styles.select}
-              value={sender}
-              onChange={(event) => onSenderChange(event.target.value as "all" | "consumer" | "business")}
-            >
-              <option value="all">{t("tickets.view.filter.anyone")}</option>
-              <option value="consumer">{t("tickets.view.filter.consumers")}</option>
-              <option value="business">{t("tickets.view.filter.business")}</option>
-            </select>
-          </label>
+          <FilterMenu
+            label={t("tickets.view.filter.sender")}
+            value={sender}
+            onChange={onSenderChange}
+            options={[
+              { value: "all", label: t("tickets.view.filter.anyone") },
+              { value: "consumer", label: t("tickets.view.filter.consumers") },
+              { value: "business", label: t("tickets.view.filter.business") },
+            ]}
+          />
 
-          <label className={styles.selectLabel}>
-            <span>{t("tickets.view.filter.sort")}</span>
-            <select
-              className={styles.select}
-              value={sort}
-              onChange={(event) => onSortChange(event.target.value as SortOrder)}
-            >
-              {SORT_ORDERS.map((value) => (
-                <option key={value} value={value}>
-                  {t(`tickets.view.sort.${value}`)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <FilterMenu
+            label={t("tickets.view.filter.sort")}
+            value={sort}
+            onChange={onSortChange}
+            options={SORT_ORDERS.map((value) => ({ value, label: t(`tickets.view.sort.${value}`) }))}
+          />
 
           <label className={styles.selectLabel}>
             <input
@@ -1262,6 +1278,37 @@ function TicketToolbar({
       )}
     </div>
   );
+}
+
+/** The level marks the queue cards use: the robot for L1/L2, the person (L3) and alert (L4) for « needs a human ». */
+const LEVEL_MARKS: Record<"1" | "2" | "3" | "4", { icon: typeof AgentIcon; color: string; bg: string }> = {
+  "4": { icon: AlertIcon, color: "var(--warning-ink)", bg: "var(--warning-050)" },
+  "3": { icon: UserIcon, color: "var(--warning-ink)", bg: "var(--warning-050)" },
+  "2": { icon: AgentIcon, color: "var(--teal-ink)", bg: "var(--teal-050)" },
+  "1": { icon: AgentIcon, color: "var(--teal-ink)", bg: "var(--teal-050)" },
+};
+
+function levelOptions(counts: Record<LevelFilter, number>, t: Translate): FilterOption<LevelFilter>[] {
+  return [
+    { value: "all", label: t("tickets.view.filter.allLevels"), count: counts.all },
+    ...(["4", "3", "2", "1"] as const).map((value) => {
+      const { icon: Glyph, color, bg } = LEVEL_MARKS[value];
+      return {
+        value,
+        label: `L${value} · ${t(`levelMeaning.${value}`)}`,
+        count: counts[value],
+        icon: <Glyph size={14} />,
+        swatch: { "--cat-color": color, "--cat-bg": bg } as CSSProperties,
+      };
+    }),
+    {
+      value: "uncategorised" as const,
+      label: t("tickets.view.filter.noLevel"),
+      count: counts.uncategorised,
+      icon: <HelpIcon size={14} />,
+      swatch: categoryVars(null),
+    },
+  ];
 }
 
 /** A draft came back from the server; `decided` says which button produced it. */
@@ -1292,6 +1339,7 @@ interface TicketWorkspaceProps {
   onOrderChanged: (change: TicketChange) => void;
   onCaseStateChanged: (change: TicketCaseChange) => void;
   onTicketChanged: (ticket: TicketListItem) => void;
+  onForwardChanged: (forward: TicketForward) => void;
   assignee: AssigneeFilter;
   onAssigneeChange: (filter: AssigneeFilter) => void;
 }
@@ -1319,6 +1367,7 @@ function TicketWorkspace({
   onOrderChanged,
   onCaseStateChanged,
   onTicketChanged,
+  onForwardChanged,
   assignee,
   onAssigneeChange,
 }: TicketWorkspaceProps) {
@@ -1426,6 +1475,7 @@ function TicketWorkspace({
             focus={focus}
             onToggleFocus={toggleFocus}
             onTicketChanged={onTicketChanged}
+            onForwardChanged={onForwardChanged}
           />
         ) : (
           <EmptyDetail title={t("tickets.view.emptyDetail.title")} body={t("tickets.view.emptyDetail.body")} />
@@ -1469,6 +1519,7 @@ function TicketDetailWorkspace({
   focus,
   onToggleFocus,
   onTicketChanged,
+  onForwardChanged,
 }: {
   ticket: TicketListItem;
   detail: TicketDetail | null;
@@ -1486,6 +1537,7 @@ function TicketDetailWorkspace({
   focus: boolean;
   onToggleFocus: () => void;
   onTicketChanged: (ticket: TicketListItem) => void;
+  onForwardChanged: (forward: TicketForward) => void;
 }) {
   const t = useT();
   const frameRef = useRef<HTMLDivElement>(null);
@@ -1493,6 +1545,8 @@ function TicketDetailWorkspace({
   const [draftHeight, setDraftHeight] = useState<number | null>(readDraftHeight);
   const [middleTab, setMiddleTab] = useState<"conversation" | "notes" | "activity" | "linked">("conversation");
   const [composeMode, setComposeMode] = useState<ComposeMode>("reply");
+  // After a forward: offer to snooze until the colleague replies.
+  const [snoozeOffer, setSnoozeOffer] = useState<string | null>(null);
   // The team's notes on this ticket (04_ticket_numbers_and_notes.sql), read with the ticket.
   const [notes, setNotes] = useState<TicketNote[] | null>(null);
   const [notesError, setNotesError] = useState<string | null>(null);
@@ -1664,6 +1718,7 @@ function TicketDetailWorkspace({
         {middleTab === "conversation" ? (
           <ConversationThread
             ticket={ticket}
+            onForwardChanged={onForwardChanged}
             thread={thread}
             error={threadError}
             detail={detail}
@@ -1712,7 +1767,22 @@ function TicketDetailWorkspace({
         mode={composeMode}
         onModeChange={setComposeMode}
         onNoteAdded={noteAdded}
+        onForwarded={(forward, names) => {
+          onForwardChanged(forward);
+          setComposeMode("reply");
+          // A ticket already snoozed, or closed, is not offered another snooze.
+          if (!ticket.snooze && !isClosed(ticket)) setSnoozeOffer(names);
+        }}
       />
+      {snoozeOffer !== null && (
+        <ForwardSnoozeDialog
+          ticket={ticket}
+          recipientsLabel={snoozeOffer}
+          delays={snoozeDelays}
+          onClose={() => setSnoozeOffer(null)}
+          onSnoozed={onSnoozeChanged}
+        />
+      )}
     </div>
   );
 }
@@ -1780,6 +1850,7 @@ function readShowCaseEvents(): boolean {
 
 type TimelineItem =
   | { type: "message"; id: string; at: string | null; message: TicketMessage }
+  | { type: "forward"; id: string; at: string | null; forward: TicketForward }
   | { type: "note"; id: string; at: string | null; note: TicketNote }
   | { type: "event"; id: string; at: string | null; event: CaseEvent };
 
@@ -1874,6 +1945,7 @@ function timeOf(item: { at: string | null }): number {
 
 function ConversationThread({
   ticket,
+  onForwardChanged,
   thread,
   error,
   detail,
@@ -1881,6 +1953,7 @@ function ConversationThread({
   onDeleteNote,
 }: {
   ticket: TicketListItem;
+  onForwardChanged: (forward: TicketForward) => void;
   thread: TicketThread | null;
   error: string | null;
   detail: TicketDetail | null;
@@ -1913,17 +1986,26 @@ function ConversationThread({
   }
 
   const events = caseEvents(ticket, detail, thread, t, (id) => memberOf(id)?.name ?? null);
+  // A forward made here is one card; its copy from Sent Items is folded inside
+  // it, because it repeats the whole thread already on screen.
+  const forwards = thread.forwards ?? [];
+  const sentCopy = new Map(thread.messages.filter((m) => m.forwardId).map((m) => [m.forwardId as string, m]));
   const items: TimelineItem[] = [
-    ...thread.messages.map((message) => ({ type: "message" as const, id: `message-${message.id}`, at: message.at, message })),
+    ...thread.messages
+      .filter((message) => !message.forwardId || !forwards.some((forward) => forward.id === message.forwardId))
+      .map((message) => ({ type: "message" as const, id: `message-${message.id}`, at: message.at, message })),
+    ...forwards.map((forward) => ({ type: "forward" as const, id: `forward-${forward.id}`, at: forward.sentAt ?? forward.createdAt, forward })),
     ...notes.map((note) => ({ type: "note" as const, id: `note-${note.id}`, at: note.createdAt, note })),
     ...(showEvents ? events : []),
   ].sort((a, b) => timeOf(a) - timeOf(b));
 
-  // EARLIER MESSAGES FOLD AWAY. What is read first is the latest message from
-  // outside and everything after it; the rest is one click up.
+  // EARLIER MESSAGES FOLD AWAY. What is read first is the customer's latest
+  // message and everything after it; the rest is one click up. The customer's,
+  // not any inbound one: a colleague answering a forward must not fold away
+  // what the customer wrote.
   let latestInbound = -1;
   thread.messages.forEach((message, index) => {
-    if (message.direction === "inbound") latestInbound = index;
+    if (message.direction === "inbound" && message.role === "customer") latestInbound = index;
   });
   const cutoff = latestInbound > 0 ? timeOf(thread.messages[latestInbound]) : null;
   const earlier = cutoff === null ? [] : items.filter((item) => timeOf(item) < cutoff);
@@ -1980,6 +2062,18 @@ function ConversationThread({
                     message={item.message}
                     parcels={thread.parcels}
                     itemRef={item.id === lastMessageId ? latestRef : undefined}
+                  />
+                ) : item.type === "forward" ? (
+                  <ForwardCard
+                    key={item.id}
+                    ticketId={ticket.id}
+                    forward={item.forward}
+                    onChanged={onForwardChanged}
+                    sent={
+                      sentCopy.get(item.forward.id) ? (
+                        <MessageBlock message={sentCopy.get(item.forward.id)!} parcels={thread.parcels} />
+                      ) : null
+                    }
                   />
                 ) : item.type === "note" ? (
                   <NoteBlock key={item.id} ticketId={ticket.id} note={item.note} onDeleted={onDeleteNote} />
@@ -2298,7 +2392,7 @@ function messageSnippet(message: TicketMessage, t: Translate): string | null {
   return `${text.length > 140 ? `${text.slice(0, 140).trimEnd()}…` : text}${attachment}`;
 }
 
-type ComposeMode = "reply" | "note";
+type ComposeMode = "reply" | "note" | "forward";
 
 function DraftResponsePanel({
   height,
@@ -2312,6 +2406,7 @@ function DraftResponsePanel({
   mode,
   onModeChange,
   onNoteAdded,
+  onForwarded,
 }: {
   height: number | null;
   ticket: TicketListItem;
@@ -2324,6 +2419,7 @@ function DraftResponsePanel({
   mode: ComposeMode;
   onModeChange: (mode: ComposeMode) => void;
   onNoteAdded: (note: TicketNote) => void;
+  onForwarded: (forward: TicketForward, recipientsLabel: string) => void;
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
@@ -2405,7 +2501,7 @@ function DraftResponsePanel({
 
   return (
     <section
-      className={`${styles.draftPanel} ${height !== null ? styles.draftPanelSized : ""} ${mode === "note" ? styles.draftPanelNote : ""}`}
+      className={`${styles.draftPanel} ${height !== null ? styles.draftPanelSized : ""} ${mode === "note" ? styles.draftPanelNote : mode === "forward" ? styles.draftPanelForward : styles.draftPanelReply}`}
       style={height !== null ? { height, maxHeight: "none" } : undefined}
       aria-label={mode === "note" ? t("tickets.panels.notes.compose") : t("tickets.panels.draft.aiDraft")}
     >
@@ -2415,7 +2511,7 @@ function DraftResponsePanel({
             type="button"
             role="tab"
             aria-selected={mode === "reply"}
-            className={mode === "reply" ? styles.modeActive : undefined}
+            className={mode === "reply" ? styles.modeReplyActive : undefined}
             onClick={() => onModeChange("reply")}
           >
             <MailInIcon size={14} />
@@ -2431,6 +2527,16 @@ function DraftResponsePanel({
             <LockIcon size={14} />
             {t("tickets.panels.compose.noteMode")}
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "forward"}
+            className={mode === "forward" ? styles.modeForwardActive : undefined}
+            onClick={() => onModeChange("forward")}
+          >
+            <ForwardIcon size={14} />
+            {t("tickets.panels.compose.forwardMode")}
+          </button>
         </div>
         {mode === "reply" && draft && !replyDelivered(draft) && (
           <div className={styles.draftLabels}>
@@ -2440,6 +2546,12 @@ function DraftResponsePanel({
             </span>
           </div>
         )}
+        {mode === "forward" && (
+          <span className={`${styles.composeHint} ${styles.composeHintForward}`}>
+            <ForwardIcon size={12} />
+            {t("tickets.panels.forward.hint")}
+          </span>
+        )}
         {mode === "note" && (
           <span className={styles.composeHint}>
             <LockIcon size={12} />
@@ -2448,7 +2560,9 @@ function DraftResponsePanel({
         )}
       </div>
 
-      {mode === "note" ? (
+      {mode === "forward" ? (
+        <ForwardComposer ticket={ticket} thread={thread} onForwarded={onForwarded} />
+      ) : mode === "note" ? (
         <NoteComposer ticketId={ticket.id} onAdded={onNoteAdded} />
       ) : (
         <>
@@ -3886,7 +4000,7 @@ function MessageBlock({
 
   return (
     <li
-      className={`${styles.message} ${message.direction === "outbound" ? styles.messageOurs : ""} ${message.role === "internal" ? styles.messageInternal : ""}`}
+      className={`${styles.message} ${message.direction === "outbound" ? styles.messageOurs : ""} ${message.role === "internal" || message.internalOnly ? styles.messageInternal : ""}`}
       ref={itemRef}
     >
       <span className={`${styles.timelineAvatar} ${styles[`role_${message.role}`]}`} data-email={address}>

@@ -2,7 +2,7 @@ import { supabaseSelect } from '../../../scripts/lib/supabase-rest-client.mjs';
 import { T } from '../../../scripts/lib/tables.mjs';
 import { ORDER_SIGNATURE_COLUMNS, orderSignatureHash } from '../../../scripts/lib/order-signature.mjs';
 
-const MESSAGE_COLUMNS = 'id,ticket_id,graph_message_id,internet_message_id,direction,actor,from_email,received_at';
+const MESSAGE_COLUMNS = 'id,ticket_id,graph_message_id,internet_message_id,direction,actor,from_email,received_at,internal_only';
 const DRAFT_COLUMNS =
   'id,ticket_id,trigger_message_id,status,case_version,auto_send_eligible,checks_passed,body_text,approved_body_text,' +
   // What actionFromDraft builds the HTML from: the formatted rewrite, and the
@@ -95,6 +95,24 @@ export function createOutboundStore(supabase, { shopId, select = supabaseSelect 
     async caseCurrent(ticketId) {
       const rows = await select(supabase, T.CASE_CURRENT, { ticket_id: ticketId, shop_id: shopId }, 'ticket_id,version', { limit: 1 });
       return rows[0] ?? null;
+    },
+
+    /** The ticket a forward is for: its number names it in the forwarded mail. */
+    async ticketForForward(ticketId) {
+      const rows = await supabaseSelect(supabase, T.TICKETS, { id: ticketId, shop_id: shopId }, 'id,ticket_number,subject', { limit: 1 });
+      return rows[0] ?? null;
+    },
+
+    /** The thread a forward carries, oldest first. Our earlier forwards are left out: they repeat it. */
+    async threadForForward(ticketId) {
+      const rows = await supabaseSelect(
+        supabase,
+        T.TICKET_MESSAGES,
+        { ticket_id: ticketId, shop_id: shopId, deleted_at: { operator: 'is', value: 'null' }, internal_only: false },
+        'id,graph_message_id,direction,actor,from_name,from_email,subject,body_text,has_attachments,received_at,sent_at',
+        { order: 'received_at.asc' }
+      );
+      return rows;
     },
 
     async message(messageId) {

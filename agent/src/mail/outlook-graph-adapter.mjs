@@ -12,7 +12,7 @@ import { CursorExpiredError, assertMailProvider, replyBody } from './mail-provid
  *
  * `mailbox` is the support address: a message it sent is outbound.
  */
-export function createOutlookGraphAdapter({ graphClient, mailbox = null }) {
+export function createOutlookGraphAdapter({ graphClient, mailbox = null, internalDomains = [] }) {
   if (!graphClient) throw new Error('createOutlookGraphAdapter requires a graphClient.');
 
   return assertMailProvider({
@@ -33,7 +33,7 @@ export function createOutlookGraphAdapter({ graphClient, mailbox = null }) {
       // Sent Items holds only our mail, whoever the envelope names.
       const direction = folder === 'sentitems' ? 'outbound' : undefined;
       return {
-        items: (page.messages || []).map((raw) => mapGraphMessage(raw, { mailbox, direction })),
+        items: (page.messages || []).map((raw) => mapGraphMessage(raw, { mailbox, direction, internalDomains })),
         nextCursor: page.nextLink || null,
         deltaCursor: page.deltaLink || null
       };
@@ -41,7 +41,7 @@ export function createOutlookGraphAdapter({ graphClient, mailbox = null }) {
 
     async getMessage(id) {
       const raw = await graphClient.getMessage(id);
-      return raw ? mapGraphMessage(raw, { mailbox }) : null;
+      return raw ? mapGraphMessage(raw, { mailbox, internalDomains }) : null;
     },
 
     async getAttachmentMetadata(id) {
@@ -52,6 +52,28 @@ export function createOutlookGraphAdapter({ graphClient, mailbox = null }) {
     async createReplyDraft(messageId, { bodyText, bodyHtml = null, to }) {
       const draft = await graphClient.createReplyDraft(messageId, { html: replyBody({ bodyText, bodyHtml }), toRecipients: to });
       return { draftId: draft.id, internetMessageId: draft.internetMessageId ?? null };
+    },
+
+    /** A forward draft in the same conversation, our HTML above the quoted original (06). */
+    async createForwardDraft(messageId, { html, to }) {
+      const draft = await graphClient.createForwardDraft(messageId, { html, toRecipients: to });
+      return { draftId: draft.id, internetMessageId: draft.internetMessageId ?? null };
+    },
+
+    async listAttachments(messageId) {
+      return graphClient.listAttachmentHandles(messageId);
+    },
+
+    async getAttachment(messageId, attachmentId, options) {
+      return graphClient.getAttachmentContent(messageId, attachmentId, options);
+    },
+
+    async addDraftAttachment(draftId, file) {
+      await graphClient.addDraftAttachment(draftId, file);
+    },
+
+    async deleteDraft(draftId) {
+      await graphClient.deleteDraft(draftId);
     },
 
     async sendDraft(draftId) {

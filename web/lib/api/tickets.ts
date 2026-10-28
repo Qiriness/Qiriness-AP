@@ -15,6 +15,7 @@ import type {
   TicketManualReply,
   TicketListItem,
   TicketNote,
+  TicketForward,
   TicketOrderChange,
   TicketOverrideChanges,
   TicketOverrideResult,
@@ -278,4 +279,30 @@ export async function assignTicket(ticketId: string, assigneeId: string | null):
     throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
   }
   return body.ticket as TicketListItem;
+}
+
+/** Forwards the whole thread to colleagues (picker keys or internal addresses). Queued; the worker sends. */
+export async function forwardTicket(
+  ticketId: string,
+  request: { recipients: string[]; note: string; clientKey: string }
+): Promise<TicketForward> {
+  const response = await fetch(`/api/tickets/${ticketId}/forward`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(request),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return body.forward as TicketForward;
+}
+
+export async function retryForward(ticketId: string, forwardId: string): Promise<TicketForward> {
+  const response = await fetch(`/api/tickets/${ticketId}/forward/${forwardId}/retry`, { method: "POST" });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return body.forward as TicketForward;
 }

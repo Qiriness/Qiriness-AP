@@ -68,8 +68,10 @@ export function preSendCheck({ action, draft, caseCurrent, replyTo, laterMessage
   // drafted means somebody told them already.
   const notice = draft.purpose === 'refund_notice';
   const draftedAt = Date.parse(draft.drafted_at ?? '');
+  // A forward to a colleague (`internal_only`) answered nobody (06).
   const ours = (message) =>
     message.direction === 'outbound' &&
+    !message.internal_only &&
     (!notice || !Number.isFinite(draftedAt) || Date.parse(message.received_at ?? message.sent_at ?? '') > draftedAt);
   if (later.some(ours)) {
     return refuse('already_answered');

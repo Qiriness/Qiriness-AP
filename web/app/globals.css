@@ -85,6 +85,14 @@
   --cat-other: #8a98a5;
   --cat-other-050: #f0f3f5;
 
+  /* Internal — a forward to colleagues and a colleague's mail in the thread.
+     Purple because it never reaches the customer: one hue for « this stayed
+     inside the company », wherever it shows. */
+  --forward: #6a55b8;
+  --forward-ink: #4f3f94;
+  --forward-050: #f7f5fd;
+  --forward-100: #e3ddf5;
+
   /* Gold — VIP, and nothing else in the app.
      Deliberately NOT --warning: that ramp is orange and owns "something is
      wrong". Gold is metallic and cooler, so a VIP row reads as a status the

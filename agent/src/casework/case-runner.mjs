@@ -344,6 +344,9 @@ export function createCaseworkStore(supabase, { caseStateRecord }) {
         {
           shop_id: shopId,
           actor: { operator: 'in', value: '(support,colleague,partner)' },
+          // Our mail to colleagues only is not part of the case the fold reads
+          // (case-fold.mjs), so a reading of it would be a model call for nothing.
+          internal_only: false,
           received_at: { operator: 'gt', value: since },
           deleted_at: { operator: 'is', value: 'null' }
         },

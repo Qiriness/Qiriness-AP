@@ -276,3 +276,15 @@ test('an out-of-office after our reply is not the customer speaking: the case st
   assert.equal(folded.next_actor, 'customer');
   assert.equal(folded.as_of_message_id, 'b');
 });
+
+test('a forward to a colleague is not our answer: the customer still spoke last (06)', () => {
+  const forward = { ...msg('b', 'support', 2), internal_only: true };
+  const folded = foldCase({ messages: [msg('a', 'customer', 1), forward] });
+  assert.equal(folded.last_actor, 'customer');
+  assert.equal(folded.as_of_message_id, 'a');
+  assert.equal(folded.next_actor, 'support');
+  // The colleague's reply, when it comes, is in the thread as usual.
+  const replied = foldCase({ messages: [msg('a', 'customer', 1), forward, msg('c', 'colleague', 3, 'inbound')] });
+  assert.equal(replied.last_actor, 'colleague');
+  assert.equal(replied.as_of_message_id, 'c');
+});

@@ -126,7 +126,7 @@ export function createCaseCurrentStore(supabase, { shopId }) {
 
     async inputs(ticketId) {
       const [messages, caseFiles, readings, previous, actions, ticketRows] = await Promise.all([
-        supabaseSelectAll(supabase, T.TICKET_MESSAGES, { ticket_id: ticketId }, 'id,direction,actor,from_email,received_at,sent_at'),
+        supabaseSelectAll(supabase, T.TICKET_MESSAGES, { ticket_id: ticketId }, 'id,direction,actor,from_email,received_at,sent_at,internal_only'),
         supabaseSelect(
           supabase,
           T.TICKET_INVESTIGATIONS,

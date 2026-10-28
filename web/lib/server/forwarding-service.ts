@@ -273,7 +273,7 @@ export const NO_FORWARDING: ForwardingFacts = () => null;
  */
 export const readForwardingFacts = cache(async (shopId: string): Promise<ForwardingFacts> => {
   const supabase = getSupabaseClient();
-  const [settings, destinations, routing, forwards] = (await Promise.all([
+  const [settings, destinations, routing, forwards, manual] = (await Promise.all([
     supabaseSelect(supabase, T.FORWARDING_SETTINGS, { shop_id: shopId }, "forward_since"),
     supabaseSelectAll(supabase, T.FORWARDING_DESTINATIONS, { shop_id: shopId }, DESTINATION_COLUMNS),
     supabaseSelectAll(
@@ -283,12 +283,25 @@ export const readForwardingFacts = cache(async (shopId: string): Promise<Forward
       "ticket_id,outcome,category,destination_id,destination_label"
     ),
     supabaseSelectAll(supabase, T.TICKET_FORWARDS, { shop_id: shopId }, "ticket_id,status,destination_label,created_at"),
-  ])) as [{ forward_since: string | null }[] | null, DestinationRow[], any[], any[]];
+    // A person's forward from the ticket page (06) tags the ticket the same way.
+    supabaseSelectAll(
+      supabase,
+      T.TICKET_MANUAL_FORWARDS,
+      { shop_id: shopId, state: { operator: "in", value: "(sent,held)" } },
+      "ticket_id,recipients,sent_at,created_at"
+    ),
+  ])) as [{ forward_since: string | null }[] | null, DestinationRow[], any[], any[], any[]];
 
   const switchedOn = Boolean(settings?.[0]?.forward_since);
   const routingByTicket = new Map(routing.map((row) => [row.ticket_id, row]));
   const forwardsByTicket = new Map<string, any[]>();
-  for (const row of forwards) {
+  const manualAsSent = manual.map((row) => ({
+    ticket_id: row.ticket_id,
+    status: "sent",
+    destination_label: (Array.isArray(row.recipients) ? row.recipients : []).map((r: any) => r?.name).filter(Boolean).join(", ") || null,
+    created_at: row.sent_at ?? row.created_at,
+  }));
+  for (const row of [...forwards, ...manualAsSent]) {
     forwardsByTicket.set(row.ticket_id, [...(forwardsByTicket.get(row.ticket_id) ?? []), row]);
   }
   const destinationById = new Map(destinations.map((row) => [row.id, row]));

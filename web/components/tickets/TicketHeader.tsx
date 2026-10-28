@@ -158,12 +158,16 @@ export function TicketHeader({
           <PriorityDot band={ticket.priorityBand} title={priorityTitle(ticket, t)} />
           {priorityTitle(ticket, t)}
         </span>
-        {ticket.level && (
-          <span className={styles.chip}>
-            L{ticket.level} · {t(`levelMeaning.${ticket.level}`)}
-          </span>
-        )}
-        {ticket.status !== "open" && <span className={styles.chip}>{t(`status.${ticket.status}`)}</span>}
+        {/* No chip for what an icon at the end of the row already says: the level
+            (the robot for L1/L2, the person for L3/L4 and « awaiting human », the
+            level in their tooltips), « awaiting customer » (the hourglass), a
+            forward (the arrow). */}
+        {ticket.status !== "open" &&
+          ticket.status !== "awaiting_human" &&
+          ticket.status !== "awaiting_customer" &&
+          !(ticket.status === "forwarded" && ticket.forwarding) && (
+            <span className={styles.chip}>{t(`status.${ticket.status}`)}</span>
+          )}
         {/* The responsible team is in the ticket panel, not here: the owner asked for it off the header. */}
         <AssigneePicker ticket={ticket} onChanged={onTicketChanged} />
         {overridden && (

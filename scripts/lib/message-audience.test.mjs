@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  isInternalOnlyMessage,
   emailDomain,
   isInternalSender,
   partitionByAudience,
@@ -74,4 +75,18 @@ test('emailDomain takes the part after the last @', () => {
   assert.equal(emailDomain('a@b@example.com'), 'example.com');
   assert.equal(emailDomain('plain'), null);
   assert.equal(emailDomain('trailing@'), null);
+});
+
+test('an outbound message to colleagues only is internal-only; a reply to the customer never is', () => {
+  const domains = ['example.com'];
+  const forward = { direction: 'outbound', to_emails: ['dounia@example.com'], cc_emails: ['ops@mail.example.com'] };
+  assert.equal(isInternalOnlyMessage(forward, domains), true);
+  // The customer in To, or only in Cc: an answer to the customer.
+  assert.equal(isInternalOnlyMessage({ direction: 'outbound', to_emails: ['shopper@gmail.com'] }, domains), false);
+  assert.equal(isInternalOnlyMessage({ ...forward, cc_emails: ['shopper@gmail.com'] }, domains), false);
+  // Nothing says where it went: the old reading.
+  assert.equal(isInternalOnlyMessage({ direction: 'outbound', to_emails: [], cc_emails: [] }, domains), false);
+  // Inbound mail is never « ours that stayed in »: a colleague writing in is the colleague's message.
+  assert.equal(isInternalOnlyMessage({ ...forward, direction: 'inbound' }, domains), false);
+  assert.equal(isInternalOnlyMessage(forward, []), false);
 });

@@ -1,0 +1,334 @@
+.composer {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.off {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px dashed var(--forward-100);
+  border-radius: var(--radius);
+  background: var(--forward-050);
+  color: var(--forward-ink);
+  font-size: var(--text-caption);
+}
+
+.toLine {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  border: 1px solid var(--forward-100);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.toLine:focus-within {
+  border-color: var(--forward);
+  box-shadow: 0 0 0 3px var(--forward-050);
+}
+
+.toLabel {
+  flex: none;
+  padding-top: 4px;
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.chips {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--forward-050);
+  color: var(--forward-ink);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+}
+
+.chip button {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.chip button:hover {
+  background: var(--forward-100);
+}
+
+.picker {
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
+.typed {
+  flex: 1 1 180px;
+  min-width: 160px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.typed input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--text-caption);
+  outline: none;
+}
+
+.typed button {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--forward-100);
+  border-radius: var(--radius);
+  background: var(--forward-050);
+  color: var(--forward-ink);
+  cursor: pointer;
+}
+
+.note {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--forward-100);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--text-body);
+  line-height: 1.5;
+}
+
+.note:focus-visible {
+  outline: none;
+  border-color: var(--forward);
+  box-shadow: 0 0 0 3px var(--forward-050);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--forward-ink);
+  font-size: var(--text-caption);
+}
+
+/* The primary button, in the forward's purple: this sends, but never to a customer. */
+.send {
+  background: var(--forward) !important;
+  border-color: var(--forward) !important;
+}
+
+.send:hover:not(:disabled) {
+  background: var(--forward-ink) !important;
+  border-color: var(--forward-ink) !important;
+}
+
+.error {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--error);
+  font-size: var(--text-caption);
+}
+
+/* ── After the forward: the snooze offer ─────────────────────────── */
+
+.dialogBody {
+  display: grid;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.dialogBody p {
+  margin: 0;
+}
+
+.dialogHint {
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.dateField {
+  display: grid;
+  gap: 4px;
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.dateField input {
+  height: 34px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  font: inherit;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ── The forward in the conversation ─────────────────────────────── */
+
+.card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: 0 0 var(--space-3);
+}
+
+.cardIcon {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--forward-100);
+  border-radius: 50%;
+  background: var(--forward-050);
+  color: var(--forward-ink);
+}
+
+.cardBody {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--forward-100);
+  border-radius: var(--radius-lg);
+  background: var(--forward-050);
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.cardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  color: var(--forward-ink);
+}
+
+.by {
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.cardMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.state {
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  font-weight: var(--weight-semibold);
+}
+
+.state_sent {
+  color: var(--forward-ink);
+}
+
+.state_held {
+  color: var(--info);
+}
+
+.state_failed {
+  color: var(--error);
+  background: var(--error-050);
+}
+
+.cardNote {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cardHint {
+  margin: 6px 0 0;
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.cardError {
+  margin: 6px 0 0;
+  color: var(--error);
+  font-size: var(--text-caption);
+}
+
+.cardError button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--forward-ink);
+  font: inherit;
+  font-weight: var(--weight-semibold);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.sent {
+  margin-top: 6px;
+}
+
+.sent summary {
+  color: var(--forward-ink);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.sentList {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}

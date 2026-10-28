@@ -53,7 +53,7 @@ export const CASE_LINK_STATES = Object.freeze(['pending', 'decided']);
 const IS_NULL = { operator: 'is', value: 'null' };
 
 /** What a case's conversation carries: enough for the target, the timeline and the transcript. */
-export const CASE_MESSAGE_COLUMNS = 'id,ticket_id,direction,actor,subject,received_at,sent_at';
+export const CASE_MESSAGE_COLUMNS = 'id,ticket_id,direction,actor,subject,received_at,sent_at,internal_only';
 
 export const REST_TRANSPORT = {
   select: supabaseSelect,

@@ -88,3 +88,27 @@ Asked for by the owner: one place to see what was forwarded. **It is a view, not
 ### `unique(ticket_message_id)` is what makes the pass safe to re-run
 
 Per message, not per ticket, so a candidate's follow-up still reaches the recipient exactly once. The ledger snapshots the category + address used, so re-routing tomorrow does not rewrite where mail went yesterday. Failures are rows, not silence — a Graph rejection stays visible and retryable.
+
+### Manual forwards: the whole thread, to colleagues only (2026-10-28)
+
+A person can forward a ticket from the ticket page: the composer's purple « Transférer » tab. Decisions taken with the owner:
+- **Recipients:** a team member, an internal forwarding destination, or a typed address on one of our domains (the support mailbox's, plus `INTERNAL_EMAIL_DOMAINS`). Anything else is refused on the server.
+- **Attachments:** every message's files are re-attached up to Graph's per-file limit (about 3 MB); larger ones are listed by name in the mail.
+- **Queue:** a manual forward tags the ticket like an automatic one (forward icon, Forwarded tab).
+- **After sending:** a popup offers to snooze the ticket until the colleague replies.
+
+**`createForward` on the latest customer message, not a new message.** A new message would get a new conversation id. The forward would then drop out of the ticket at ingestion (Sent Items only attaches to existing tickets), and the colleague's reply would open a separate ticket. `createForward` keeps the conversation and carries that message's attachments. The note and a dated transcript of the whole thread go above the quoted original, and the other messages' files are added to the draft one by one. The 4 MB cap is per request, so sending files individually avoids it.
+
+**Not in `ticket_forwards`.** That ledger is `unique(ticket_message_id)` and drives the automatic pass. A manual forward recorded there would make the pass treat the message as already forwarded.
+
+**A forward to colleagues is not an answer to the customer.** Before this, any outbound message did all of these:
+- staled the customer's pending draft;
+- could snooze the ticket « waiting for the customer » or fold it to resolved;
+- cleared the case's reply target;
+- cancelled a queued reply as « already answered »;
+- unlocked `after_first_reply`;
+- reset the customer's waiting time.
+
+`ticket_messages.internal_only` marks outbound mail whose every To/Cc address is ours. It is set at ingestion, so every reader skips it with a column instead of re-deriving it. The same rule covers the automatic pass's forwards to internal destinations, and a forward made from Outlook. Rows from before 06 stay false, so no historical case folds differently.
+
+**Sending is the reply pipeline's.** It is gated by `OUTBOUND_SEND_ENABLED`, held in Drafts under `OUTBOUND_STOP_BEFORE_SEND`, and never retried blind: `send_requested` is written before the send, and a half-built draft is thrown away and rebuilt rather than sent with some files missing.

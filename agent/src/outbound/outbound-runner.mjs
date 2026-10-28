@@ -1,6 +1,7 @@
 import { sendDedupeKey } from '../../../scripts/lib/mail-job-record.mjs';
 import { actionFromDraft } from '../../../scripts/lib/outbound-record.mjs';
 import { preSendCheck } from './outbound-rules.mjs';
+import { carryOutForward } from './forward-ticket.mjs';
 
 /**
  * THE OUTBOUND WORKER: the only code that calls a provider's
@@ -97,6 +98,8 @@ export async function runOutbound({
   maxAttempts,
   leaseSeconds = 300,
   limit = 10,
+  // A person's forward to colleagues rides the same jobs (06_manual_forwards.sql).
+  forwards = null,
   logger,
   shopId
 }) {
@@ -107,11 +110,23 @@ export async function runOutbound({
   for (const job of claimed) {
     totals.considered += 1;
     const actionId = job.payload?.outboundActionId ?? null;
+    const forwardId = job.payload?.manualForwardId ?? null;
     try {
       if (maxAttempts && job.retry_count >= maxAttempts) {
         throw new Error('the worker died holding this job too many times');
       }
-      const outcome = await carryOut(actionId);
+      const outcome = forwardId
+        ? forwards
+          ? await carryOutForward(forwardId, {
+              forwards,
+              store: { ticket: store.ticketForForward, thread: store.threadForForward },
+              provider,
+              stopBeforeSend,
+              logger,
+              shopId
+            })
+          : 'closed'
+        : await carryOut(actionId);
       totals[outcome] = (totals[outcome] ?? 0) + 1;
       await jobs.complete(job.id);
     } catch (error) {
@@ -119,6 +134,7 @@ export async function runOutbound({
       if (patch.state === 'dead') {
         totals.dead += 1;
         if (actionId) await outboundRecord.markFailed(actionId, `retries exhausted: ${patch.last_error}`);
+        if (forwardId && forwards) await forwards.markFailed(forwardId, `retries exhausted: ${patch.last_error}`);
         logger?.error?.('outbound.dead', { shopId, actionId, jobId: job.id, error: patch.last_error });
       } else {
         totals.retried += 1;

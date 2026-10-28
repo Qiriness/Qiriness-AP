@@ -19,12 +19,24 @@ import type { TeamMember } from "../types";
 
 const ROLES = new Set(["developer", "management", "contact"]);
 
-export const listTeam = cache(async (): Promise<TeamMember[]> => {
+type TeamRow = { id: string; display_name: string | null; role: string | null; email: string | null };
+
+/** Every row with its address. Server-only: the address never goes to the page. */
+const readTeamRows = cache(async (): Promise<TeamRow[]> => {
   const supabase = createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
-  const rows = (await supabaseRpc(supabase, RPC.DASHBOARD_TEAM, {})) as { id: string; display_name: string | null; role: string | null }[];
-  return (rows ?? []).map((row) => ({
+  return ((await supabaseRpc(supabase, RPC.DASHBOARD_TEAM, {})) as TeamRow[]) ?? [];
+});
+
+export const listTeam = cache(async (): Promise<TeamMember[]> =>
+  (await readTeamRows()).map((row) => ({
     id: row.id,
     name: row.display_name?.trim() || "—",
     role: row.role && ROLES.has(row.role) ? (row.role as TeamMember["role"]) : null,
-  }));
-});
+  }))
+);
+
+/** A team member's name and address, for a forward (06). Null for an unknown or disabled account. */
+export async function teamAddress(id: string): Promise<{ name: string; email: string } | null> {
+  const row = (await readTeamRows()).find((member) => member.id === id);
+  return row?.email ? { name: row.display_name?.trim() || row.email, email: row.email } : null;
+}

@@ -1,0 +1,142 @@
+.root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.caption {
+  white-space: nowrap;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  min-width: 8.5rem;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+/* A filter on: the trigger wears the chosen category's (or level's) colour. */
+.triggerTinted {
+  border-color: color-mix(in srgb, var(--cat-color) 35%, transparent);
+  background: var(--cat-bg);
+}
+
+.triggerIcon {
+  display: inline-flex;
+  color: var(--cat-color, currentColor);
+}
+
+.triggerLabel {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.trigger > svg:last-child {
+  color: var(--text-muted);
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: var(--z-dropdown);
+  min-width: 15rem;
+  max-height: 22rem;
+  margin: 0;
+  padding: 4px;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+}
+
+.menu:focus {
+  outline: none;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px var(--space-2);
+  border-radius: var(--radius);
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.optionActive {
+  background: var(--mist-050);
+}
+
+.optionEmpty {
+  color: var(--text-muted);
+}
+
+.swatch {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--cat-color, var(--text-muted));
+  background: var(--cat-bg, transparent);
+}
+
+.optionLabel {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.count {
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  font-variant-numeric: tabular-nums;
+}
+
+.check {
+  flex: none;
+  display: inline-flex;
+  width: 14px;
+  color: var(--teal);
+}
+
+@media (max-width: 720px) {
+  .root {
+    width: 100%;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .trigger {
+    width: 100%;
+  }
+
+  .menu {
+    left: 0;
+    right: auto;
+    width: 100%;
+  }
+}

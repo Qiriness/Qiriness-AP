@@ -1,5 +1,6 @@
 import { htmlToText, normalizePlainText } from '../../../scripts/lib/html-to-text.mjs';
 import { hashIdentifier } from '../../../scripts/lib/compliance-audit.mjs';
+import { isInternalOnlyMessage, resolveInternalDomains } from '../../../scripts/lib/message-audience.mjs';
 
 import { autoReplySignal } from './auto-reply.mjs';
 import { isNotificationSender, parseContactForm } from './contact-form.mjs';
@@ -28,7 +29,7 @@ import { isNotificationSender, parseContactForm } from './contact-form.mjs';
 //   INBOUND ONLY — a reply of ours quotes the notification it answers, and
 //   parsing that quote would file our own reply under the customer's name.
 
-export function mapGraphMessage(raw, { direction, mailbox } = {}) {
+export function mapGraphMessage(raw, { direction, mailbox, internalDomains = [] } = {}) {
   // Delta responses include tombstones for removed messages: `{ id, '@removed': {...} }`.
   if (raw && raw['@removed']) {
     return {
@@ -90,6 +91,14 @@ export function mapGraphMessage(raw, { direction, mailbox } = {}) {
     from_name: fromName,
     to_emails: recipientAddresses(raw?.toRecipients),
     cc_emails: recipientAddresses(raw?.ccRecipients),
+    // OURS, AND IT NEVER LEFT THE COMPANY: a forward to a colleague. Never an
+    // answer to the customer (message-audience.mjs, 06_manual_forwards.sql).
+    // The mailbox's own domain is ours by definition; `internalDomains` adds
+    // INTERNAL_EMAIL_DOMAINS.
+    internal_only: isInternalOnlyMessage(
+      { direction: resolvedDirection, to_emails: recipientAddresses(raw?.toRecipients), cc_emails: recipientAddresses(raw?.ccRecipients) },
+      resolveInternalDomains({ supportMailbox: mailbox, extra: internalDomains })
+    ),
     subject: raw?.subject || null,
     // What the customer actually wrote. The wrapper and its labelled fields are
     // stripped: they cost prompt tokens on every categorisation and drafting

@@ -322,7 +322,7 @@ AS $function$
 $function$;
 
 CREATE OR REPLACE FUNCTION public.dashboard_team()
- RETURNS TABLE(id uuid, display_name text, role text)
+ RETURNS TABLE(id uuid, display_name text, role text, email text)
  LANGUAGE plpgsql
  STABLE SECURITY DEFINER
  SET search_path TO ''
@@ -331,7 +331,8 @@ begin
   return query
     select u.id,
            coalesce(nullif(btrim(u.raw_user_meta_data ->> 'display_name'), ''), split_part(u.email::text, '@', 1)),
-           u.raw_app_meta_data ->> 'dashboard_role'
+           u.raw_app_meta_data ->> 'dashboard_role',
+           lower(u.email::text)
     from auth.users u
     where u.raw_app_meta_data ->> 'dashboard_role' in ('developer', 'management', 'contact')
       and (u.banned_until is null or u.banned_until <= now())
@@ -4284,6 +4285,33 @@ create table public.ticket_investigations (
   constraint ticket_investigations_shop_id_trigger_message_id_key UNIQUE (shop_id, trigger_message_id)
 );
 
+create table public.ticket_manual_forwards (
+  id uuid default gen_random_uuid() not null,
+  shop_id uuid not null,
+  ticket_id uuid not null,
+  client_key uuid not null,
+  recipients jsonb not null,
+  note text,
+  forwarded_by text,
+  forwarded_by_name text,
+  state text default 'queued'::text not null,
+  source_message_id uuid,
+  provider_draft_id text,
+  internet_message_id text,
+  attachments_sent integer default 0 not null,
+  attachments_skipped jsonb default '[]'::jsonb not null,
+  error text,
+  sent_at timestamp with time zone,
+  created_at timestamp with time zone default now() not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint ticket_manual_forwards_note_check CHECK (((note IS NULL) OR (length(note) <= 5000))),
+  constraint ticket_manual_forwards_recipients_check CHECK (((jsonb_typeof(recipients) = 'array'::text) AND ((jsonb_array_length(recipients) >= 1) AND (jsonb_array_length(recipients) <= 10)))),
+  constraint ticket_manual_forwards_skipped_check CHECK ((jsonb_typeof(attachments_skipped) = 'array'::text)),
+  constraint ticket_manual_forwards_state_check CHECK ((state = ANY (ARRAY['queued'::text, 'draft_created'::text, 'send_requested'::text, 'sent'::text, 'held'::text, 'failed'::text]))),
+  constraint ticket_manual_forwards_pkey PRIMARY KEY (id),
+  constraint ticket_manual_forwards_client_key_unique UNIQUE (shop_id, client_key)
+);
+
 create table public.ticket_messages (
   id uuid default gen_random_uuid() not null,
   ticket_id uuid not null,
@@ -4315,6 +4343,7 @@ create table public.ticket_messages (
   attachments jsonb,
   reference_ids text[] default '{}'::text[] not null,
   actor text,
+  internal_only boolean default false not null,
   constraint ticket_messages_actor_check CHECK (((actor IS NULL) OR (actor = ANY (ARRAY['customer'::text, 'support'::text, 'colleague'::text, 'partner'::text, 'automated'::text])))),
   constraint ticket_messages_attachments_array_check CHECK (((attachments IS NULL) OR (jsonb_typeof(attachments) = 'array'::text))),
   constraint ticket_messages_direction_check CHECK ((direction = ANY (ARRAY['inbound'::text, 'outbound'::text]))),
@@ -4777,7 +4806,7 @@ SELECT t.shop_id,
     count(m.id) AS message_count,
     count(m.id) FILTER (WHERE m.direction = 'inbound'::text) AS inbound_count,
     max(m.received_at) FILTER (WHERE m.direction = 'inbound'::text) AS latest_inbound_at,
-    max(m.sent_at) FILTER (WHERE m.direction = 'outbound'::text) AS latest_outbound_at,
+    max(m.sent_at) FILTER (WHERE m.direction = 'outbound'::text AND NOT m.internal_only) AS latest_outbound_at,
     max(t.last_message_at) AS last_activity_at
    FROM public.tickets t
      LEFT JOIN public.ticket_messages m ON m.ticket_id = t.id AND m.deleted_at IS NULL
@@ -4917,7 +4946,7 @@ SELECT shop_id,
     count(*) AS message_count,
     count(*) FILTER (WHERE direction = 'inbound'::text) AS inbound_count,
     max(received_at) FILTER (WHERE direction = 'inbound'::text) AS latest_inbound_at,
-    max(sent_at) FILTER (WHERE direction = 'outbound'::text) AS latest_outbound_at
+    max(sent_at) FILTER (WHERE direction = 'outbound'::text AND NOT internal_only) AS latest_outbound_at
    FROM public.ticket_messages m
   WHERE deleted_at IS NULL
   GROUP BY shop_id, ticket_id;
@@ -5233,6 +5262,8 @@ CREATE INDEX ticket_forwards_ticket_idx ON public.ticket_forwards USING btree (t
 CREATE INDEX ticket_investigations_customer_idx ON public.ticket_investigations USING btree (customer_id, investigated_at DESC);
 CREATE INDEX ticket_investigations_shop_verdict_idx ON public.ticket_investigations USING btree (shop_id, verdict);
 CREATE INDEX ticket_investigations_ticket_idx ON public.ticket_investigations USING btree (ticket_id);
+CREATE INDEX ticket_manual_forwards_message_id_idx ON public.ticket_manual_forwards USING btree (shop_id, internet_message_id) WHERE (internet_message_id IS NOT NULL);
+CREATE INDEX ticket_manual_forwards_ticket_idx ON public.ticket_manual_forwards USING btree (ticket_id, created_at);
 CREATE INDEX ticket_messages_shop_conversation_idx ON public.ticket_messages USING btree (shop_id, graph_conversation_id);
 CREATE INDEX ticket_messages_shop_deleted_at_idx ON public.ticket_messages USING btree (shop_id, deleted_at);
 CREATE INDEX ticket_messages_shop_internet_id_idx ON public.ticket_messages USING btree (shop_id, internet_message_id) WHERE (internet_message_id IS NOT NULL);
@@ -5390,6 +5421,9 @@ alter table public.ticket_investigations add constraint ticket_investigations_cu
 alter table public.ticket_investigations add constraint ticket_investigations_shop_id_fkey FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE;
 alter table public.ticket_investigations add constraint ticket_investigations_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES public.tickets(id) ON DELETE CASCADE;
 alter table public.ticket_investigations add constraint ticket_investigations_trigger_message_id_fkey FOREIGN KEY (trigger_message_id) REFERENCES public.ticket_messages(id) ON DELETE CASCADE;
+alter table public.ticket_manual_forwards add constraint ticket_manual_forwards_shop_id_fkey FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE;
+alter table public.ticket_manual_forwards add constraint ticket_manual_forwards_source_message_id_fkey FOREIGN KEY (source_message_id) REFERENCES public.ticket_messages(id) ON DELETE SET NULL;
+alter table public.ticket_manual_forwards add constraint ticket_manual_forwards_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES public.tickets(id) ON DELETE CASCADE;
 alter table public.ticket_messages add constraint ticket_messages_shop_id_fkey FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE;
 alter table public.ticket_messages add constraint ticket_messages_ticket_id_fkey FOREIGN KEY (ticket_id) REFERENCES public.tickets(id) ON DELETE CASCADE;
 alter table public.ticket_notes add constraint ticket_notes_shop_id_fkey FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE;
@@ -5455,6 +5489,7 @@ CREATE TRIGGER support_exemplar_phrasings_set_updated_at BEFORE UPDATE ON public
 CREATE TRIGGER support_exemplars_set_updated_at BEFORE UPDATE ON public.support_exemplars FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 CREATE TRIGGER support_parameters_set_updated_at BEFORE UPDATE ON public.support_parameters FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 CREATE TRIGGER ticket_drafts_set_updated_at BEFORE UPDATE ON public.ticket_drafts FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
+CREATE TRIGGER ticket_manual_forwards_set_updated_at BEFORE UPDATE ON public.ticket_manual_forwards FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 CREATE TRIGGER ticket_messages_set_updated_at BEFORE UPDATE ON public.ticket_messages FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 CREATE TRIGGER ticket_notes_set_updated_at BEFORE UPDATE ON public.ticket_notes FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 CREATE TRIGGER tickets_assign_ticket_number BEFORE INSERT ON public.tickets FOR EACH ROW EXECUTE FUNCTION public.assign_ticket_number();
@@ -5546,6 +5581,7 @@ alter table public.ticket_draft_edits enable row level security;
 alter table public.ticket_drafts enable row level security;
 alter table public.ticket_forwards enable row level security;
 alter table public.ticket_investigations enable row level security;
+alter table public.ticket_manual_forwards enable row level security;
 alter table public.ticket_messages enable row level security;
 alter table public.ticket_notes enable row level security;
 alter table public.ticket_overrides enable row level security;
@@ -5821,6 +5857,8 @@ revoke all on public.ticket_investigations from public, anon, authenticated, ser
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.ticket_investigations to anon;
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.ticket_investigations to authenticated;
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.ticket_investigations to service_role;
+revoke all on public.ticket_manual_forwards from public, anon, authenticated, service_role, mgmt_chat_ro;
+grant truncate, insert, delete, maintain, select, trigger, update, references on public.ticket_manual_forwards to service_role;
 revoke all on public.ticket_messages from public, anon, authenticated, service_role, mgmt_chat_ro;
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.ticket_messages to anon;
 grant truncate, insert, delete, maintain, select, trigger, update, references on public.ticket_messages to authenticated;
@@ -6369,6 +6407,7 @@ comment on column public.ticket_messages.embedded_input_hash is 'Hash of the emb
 comment on column public.ticket_messages.embedding is 'pgvector(1536) embedding of the email body (text-embedding-3-small) for similar-ticket retrieval and clustering, populated primarily for inbound messages. Matches the knowledge_chunks embedding pipeline; a row holds a vector iff embedded_input_hash/model/dimensions match the current input and model.';
 comment on column public.ticket_messages.from_email is 'Raw sender email. Required to reply to the requester; do not include in AI prompts unless strictly required.';
 comment on column public.ticket_messages.graph_message_id is 'Microsoft Graph message id. The idempotency key: re-ingesting the same email is a no-op via the shop_id + graph_message_id unique constraint.';
+comment on column public.ticket_messages.internal_only is 'Outbound mail every To/Cc recipient of which is on one of our own domains (a forward to a colleague): set at ingestion. Never counts as an answer to the customer: the fold, drafting, the reply target and the waiting time all skip it. False on rows stored before 06.';
 comment on column public.ticket_messages.internet_message_id is 'RFC 5322 Message-ID header, stable across mail systems. Useful for threading and correlating replies independently of Graph ids.';
 comment on column public.ticket_messages.raw_graph_payload is 'Sanitised raw Microsoft Graph message payload for traceability. Exclude attachment binaries and unnecessary personal data.';
 comment on column public.ticket_routing.ack_state is 'requested (written before sending; never retried) | sent | failed (retried up to the cap) | skipped (automated or internal sender, or acknowledgements off). Null until the first forward.';
@@ -6420,7 +6459,7 @@ comment on function public.customer_segment_find(p_shop uuid, p_window_months in
 comment on function public.customer_vip_call_list(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_closed_statuses text[], p_min_level integer) is 'Cases of VIP customers that are open and at or above p_min_level: the panel''s call list. Filtered in SQL, so it is bounded by what needs a call, not by all cases.';
 comment on function public.customer_vip_ticket_categories(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[]) is 'VIP cases by subject (null category = uncategorised). Ordering is left to the caller.';
 comment on function public.customer_vip_ticket_stats(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_closed_statuses text[], p_unhappy_from integer) is 'The Customers panel''s ticket figures, aggregated: cases linked to a customer, cases of VIPs (vip_customers()), distinct VIPs who wrote in, and lifetime spend behind open unhappy cases (once per customer).';
-comment on function public.dashboard_team() is 'The people a ticket can be assigned to: every dashboard account (developer, management, contact) that is not banned, as id, display name (the address before @ when none is set) and role.';
+comment on function public.dashboard_team() is 'The people a ticket can be assigned or forwarded to: every dashboard account (developer, management, contact) that is not banned, as id, display name (the address before @ when none is set), role and address. The address is for the server; the page shows names.';
 comment on function public.enqueue_mail_job(p_shop_id uuid, p_kind text, p_dedupe_key text, p_payload jsonb, p_run_at timestamp with time zone) is 'Queue one mail job, or bring an already-queued job with the same dedupe_key forward. Returns the queued row.';
 comment on function public.insights_agent_blockers(p_shop uuid, p_from timestamp without time zone, p_to timestamp without time zone, p_tz text) is 'investigation_evidence_gaps over the runs made in a date range. Satisfied needs are included, as in the view; the caller filters them.';
 comment on function public.insights_agent_funnel(p_shop uuid, p_from timestamp without time zone, p_to timestamp without time zone, p_tz text) is 'agent_pipeline_funnel over the tickets first written in a date range. Always one row.';
@@ -6587,6 +6626,7 @@ comment on table public.ticket_drafts is 'One customer-facing reply per case ver
 comment on view public.ticket_first_inbound is 'One row per ticket: its earliest inbound message, already stripped of quoted reply chains by ingestion. Read by order resolution, which needs the customer''s own words rather than the thread.';
 comment on table public.ticket_forwards is 'One row per email forwarded to a colleague, successful or not. Doubles as the idempotency ledger: unique(ticket_message_id) is what makes the forwarding step safe to re-run. Holds no message body -- the forwarded mail itself lives in the recipient mailbox and in ticket_messages.';
 comment on table public.ticket_investigations is 'One case file per investigation run: what the agent established from the retrieval tools, what it could not verify, what is missing, and what must not be claimed. Consumed by the drafting stage and by the human queue. unique(shop_id, trigger_message_id) makes the pass safe to re-run and keeps a thread''s successive readings as separate rows.';
+comment on table public.ticket_manual_forwards is 'A person forwarding a ticket''s whole thread to colleagues from the dashboard: recipients, note, and how far the worker got (queued → draft_created → send_requested → sent | held | failed). The Sent Items copy is matched back by internet_message_id.';
 comment on view public.ticket_message_counts is 'Message count and inbound/outbound activity per ticket, excluding soft-deleted messages. Read by the dashboard queue instead of counting rows client-side.';
 comment on table public.ticket_messages is 'Individual emails belonging to a ticket, one row per Microsoft Graph message. Inbound mail is ingested here idempotently (unique on shop_id + graph_message_id); outbound rows are the agent replies and team forwards.';
 comment on table public.ticket_notes is 'Notes the team leaves on a ticket. Never sent to the customer and not read by the drafting agent. Soft-deleted (deleted_at) so the timeline does not silently lose what someone wrote.';

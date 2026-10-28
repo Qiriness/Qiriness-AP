@@ -82,3 +82,9 @@ test('the timeline orders by email time across threads, undated last', () => {
   ]).map((m) => m.id);
   assert.deepEqual(ordered, ['a1', 'b1', 'u']);
 });
+
+test('a forward to a colleague does not answer the customer (06)', () => {
+  const forward = { ...msg('a2', 'A', 'outbound', '2026-09-02T09:00:00Z'), internal_only: true };
+  const target = caseReplyTarget([msg('a1', 'A', 'inbound', '2026-09-01T09:00:00Z'), forward]);
+  assert.deepEqual(target, { messageId: 'a1', threadId: 'A', at: '2026-09-01T09:00:00.000Z' });
+});

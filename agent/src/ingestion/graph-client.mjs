@@ -548,6 +548,69 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     return { id: draft.id, internetMessageId: updated?.internetMessageId || draft.internetMessageId || null };
   }
 
+  /**
+   * A forward draft of `graphMessageId` to colleagues: `createForward` makes the
+   * draft in the SAME CONVERSATION, with the original quoted below and its
+   * attachments already on it, so a colleague's reply comes back to the ticket.
+   * A PATCH then puts our `html` above the quoted original and sets the To line.
+   *
+   * Returns the draft's id and Internet-Message-Id (how the Sent Items copy is
+   * recognised when ingestion reads it back).
+   */
+  async function createForwardDraft(graphMessageId, { html, toRecipients }) {
+    if (!graphMessageId) throw new Error('createForwardDraft requires a Graph message id.');
+    const recipients = (Array.isArray(toRecipients) ? toRecipients : [toRecipients])
+      .map((address) => String(address || '').trim())
+      .filter(Boolean);
+    if (recipients.length === 0) throw new Error('createForwardDraft requires at least one recipient.');
+
+    const draft = await writeRequest(`/messages/${encodeURIComponent(graphMessageId)}/createForward`, {
+      body: {},
+      what: 'createForward'
+    });
+    if (!draft?.id) throw new Error('Graph createForward returned no draft id.');
+
+    const quoted = draft.body?.contentType === 'html' ? draft.body.content || '' : '';
+    const updated = await writeRequest(`/messages/${encodeURIComponent(draft.id)}`, {
+      method: 'PATCH',
+      body: {
+        body: { contentType: 'html', content: `${html}${quoted}` },
+        toRecipients: recipients.map((address) => ({ emailAddress: { address } })),
+        ccRecipients: []
+      },
+      what: 'forward draft update'
+    });
+    return { id: draft.id, internetMessageId: updated?.internetMessageId || draft.internetMessageId || null };
+  }
+
+  /**
+   * One file onto a draft. Graph takes a file this way up to about 3 MB; the
+   * caller checks the size first and lists anything larger instead.
+   */
+  async function addDraftAttachment(draftId, { name, contentType, bytes }) {
+    if (!draftId) throw new Error('addDraftAttachment requires a draft id.');
+    await writeRequest(`/messages/${encodeURIComponent(draftId)}/attachments`, {
+      body: {
+        '@odata.type': '#microsoft.graph.fileAttachment',
+        name: name || 'attachment',
+        contentType: contentType || 'application/octet-stream',
+        contentBytes: Buffer.from(bytes).toString('base64')
+      },
+      what: 'draft attachment'
+    });
+  }
+
+  /** Removes a draft we made and never sent: a forward restarted from scratch. */
+  async function deleteDraft(draftId) {
+    if (!draftId) throw new Error('deleteDraft requires a draft id.');
+    const token = await getToken();
+    const response = await fetchImpl(`${GRAPH_BASE}/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(draftId)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}`, Prefer: 'IdType="ImmutableId"' }
+    });
+    if (!response.ok && response.status !== 404) throw new Error(`Graph draft delete failed: HTTP ${response.status}`);
+  }
+
   /** Send a draft the mailbox holds. Graph answers 202 with no body. */
   async function sendDraft(draftId) {
     if (!draftId) throw new Error('sendDraft requires a draft id.');
@@ -678,6 +741,9 @@ export function createGraphClient(config, { fetchImpl = fetch } = {}) {
     getAttachmentContent,
     forwardMessage,
     createReplyDraft,
+    createForwardDraft,
+    addDraftAttachment,
+    deleteDraft,
     sendDraft,
     getDraftState,
     createSubscription,

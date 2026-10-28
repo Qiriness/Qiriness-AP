@@ -313,7 +313,7 @@ The owner's brief was that the page showed a great deal that was not helping any
 
 **The card's left edge now belongs to the category, not to priority.** One edge, one meaning, as before. With the score gone, the dot carries urgency in its own place (top right, by the age), which frees the edge for the subject. The category hues are `--cat-<key>` tokens chosen away from the priority red, orange and green, so that an edge is never read as urgency. The category list is the fixed taxonomy, not per-shop data, so a map from category to token is correct here. A re-skin changes tokens, not components.
 
-**States are icons with their meaning in the tooltip and the accessible name**: needs a human (with the level), waiting for the customer, forwarded, snoozed, linked threads, VIP. The text badge « L3 Needs a human - Awaiting human » was the widest thing on the card. The level is still in the header as a chip.
+**States are icons with their meaning in the tooltip and the accessible name**: needs a human (with the level), waiting for the customer, forwarded, snoozed, linked threads, VIP. The text badge « L3 Needs a human - Awaiting human » was the widest thing on the card. From 2026-10-28 the level is an icon too, at the owner's request: a robot (teal, « the agent can handle it ») for L1/L2, since those are usually the agent's tickets, beside the person icon for L3/L4. The header drops any chip an icon already says: the level, « awaiting human », « awaiting customer », a forward. The toolbar's Level and Category filters show the same marks and category colours (`FilterMenu.tsx`), so a filter reads like the cards it leaves on screen; a native select cannot draw them.
 
 **The queue collapses to a rail when a ticket opens.** The conversation needs the width more than the list does once a ticket is chosen. The rail keeps every ticket one click away (initials, category edge, priority dot), and the chevron restores the cards until the next ticket is opened. Below 1023 px the single-pane switch is unchanged.
 
@@ -376,3 +376,9 @@ Decisions taken with the owner:
 **The assignee must be an active account when it is set.** A menu left open can offer someone since disabled, so the server checks against `dashboard_team()` again. A ticket held by a since-disabled account still shows that it is assigned (« a former team member ») rather than looking free.
 
 **`ticket_assignments` keeps the history; the timeline shows the current assignment only.** « Who had this before » is answerable from the table. Putting every handover in the conversation would add noise the owner asked to remove.
+
+### Forwarding sits in the composer, and is purple (2026-10-28)
+
+« Transférer » is the composer's third mode, beside the reply and the internal note, because forwarding is also « what we do with this ticket now ». It is purple: everything that stays inside the company is purple, colleague mail included. The forward shows in the conversation from the moment it is queued (sending / sent / in Outlook Drafts / failed with « Retry »). Its copy from Sent Items is folded inside the card behind « See what was sent », because it repeats the whole thread the reader is already looking at.
+
+**Earlier messages now fold at the customer's latest message, not the latest inbound one.** A colleague answering a forward would otherwise fold away what the customer wrote. Details and the backend rules: `forwarding.md` § Manual forwards.

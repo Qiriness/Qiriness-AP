@@ -14,7 +14,8 @@ import { readSnoozeDelays } from "@/lib/server/snooze-service";
 import { NO_DELAYS, type SnoozeDelays } from "@/lib/snooze";
 import { listTeam } from "@/lib/server/team-service";
 import { getSession } from "@/lib/server/auth";
-import type { TeamMember } from "@/lib/types";
+import type { ForwardRecipientOption, TeamMember } from "@/lib/types";
+import { listForwardRecipients } from "@/lib/server/manual-forward-service";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,10 @@ export default async function TicketsPage({
   let team: TeamMember[] = [];
   const sessionRead = getSession().catch(() => null);
   const teamRead = listTeam().catch(() => [] as TeamMember[]);
+  // Who a ticket can be forwarded to: the team and the internal destinations.
+  const forwardRecipientsRead = getShopId()
+    .then((shopId) => listForwardRecipients(shopId))
+    .catch(() => [] as ForwardRecipientOption[]);
 
   try {
     const shopId = await getShopId();
@@ -112,6 +117,7 @@ export default async function TicketsPage({
 
   const [badges, session] = await Promise.all([badgesRead, sessionRead]);
   team = await teamRead;
+  const forwardRecipients = await forwardRecipientsRead;
   return (
     <AppShell activeHref="/tickets" {...badges}>
       <TicketsView
@@ -126,6 +132,8 @@ export default async function TicketsPage({
         snoozeDelays={snoozeDelays}
         team={team}
         currentUserId={session?.sub ?? null}
+        forwardRecipients={forwardRecipients}
+        forwardingEnabled={process.env.OUTBOUND_SEND_ENABLED === "true"}
       />
     </AppShell>
   );

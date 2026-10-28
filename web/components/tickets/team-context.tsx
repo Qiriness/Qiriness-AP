@@ -7,22 +7,50 @@
  * Loaded once by the page (`listTeam`, `getSession`).
  */
 import { createContext, useContext, useMemo, type ReactNode } from "react";
-import type { TeamMember } from "@/lib/types";
+import type { ForwardRecipientOption, TeamMember } from "@/lib/types";
 
 interface TeamContextValue {
   team: TeamMember[];
   currentUserId: string | null;
   /** The member, or null for an id no longer in the team (a disabled account). */
   memberOf: (id: string | null) => TeamMember | null;
+  /** Who a ticket can be forwarded to: the team, then the internal destinations (06). */
+  forwardRecipients: ForwardRecipientOption[];
+  /** OUTBOUND_SEND_ENABLED: off, the « Transférer » tab says so instead of offering a form. */
+  forwardingEnabled: boolean;
 }
 
-const TeamContext = createContext<TeamContextValue>({ team: [], currentUserId: null, memberOf: () => null });
+const TeamContext = createContext<TeamContextValue>({
+  team: [],
+  currentUserId: null,
+  memberOf: () => null,
+  forwardRecipients: [],
+  forwardingEnabled: false,
+});
 
-export function TeamProvider({ team, currentUserId, children }: { team: TeamMember[]; currentUserId: string | null; children: ReactNode }) {
+export function TeamProvider({
+  team,
+  currentUserId,
+  forwardRecipients = [],
+  forwardingEnabled = false,
+  children,
+}: {
+  team: TeamMember[];
+  currentUserId: string | null;
+  forwardRecipients?: ForwardRecipientOption[];
+  forwardingEnabled?: boolean;
+  children: ReactNode;
+}) {
   const value = useMemo(() => {
     const byId = new Map(team.map((member) => [member.id, member]));
-    return { team, currentUserId, memberOf: (id: string | null) => (id ? byId.get(id) ?? null : null) };
-  }, [team, currentUserId]);
+    return {
+      team,
+      currentUserId,
+      memberOf: (id: string | null) => (id ? byId.get(id) ?? null : null),
+      forwardRecipients,
+      forwardingEnabled,
+    };
+  }, [team, currentUserId, forwardRecipients, forwardingEnabled]);
   return <TeamContext.Provider value={value}>{children}</TeamContext.Provider>;
 }
 

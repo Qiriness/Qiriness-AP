@@ -18,7 +18,8 @@
  * message is never a reply target: they are not who we answer.
  *
  * WHAT COUNTS AS AN ANSWER: any outbound message, on any thread of the case,
- * dated after the customer's message. Same semantics as `answeredSince`
+ * dated after the customer's message — except mail that never left the company
+ * (`internal_only`: a forward to a colleague answered nobody). Same semantics as `answeredSince`
  * (agent/src/drafting/draft-rules.mjs), lifted from one thread to the case.
  *
  * An undated message can be neither a target nor an answer: placing it would be
@@ -54,6 +55,7 @@ export function caseReplyTarget(messages = []) {
     const at = messageTime(message);
     if (at === null) continue;
     if (message.direction === 'outbound') {
+      if (message.internal_only) continue;
       if (latestOutbound === null || at > latestOutbound) latestOutbound = at;
     } else if (isCustomerMessage(message) && message.id) {
       if (!latestCustomer || at > latestCustomer.at) latestCustomer = { message, at };

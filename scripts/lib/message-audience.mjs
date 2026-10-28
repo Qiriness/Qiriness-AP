@@ -92,3 +92,24 @@ export function partitionBy(messages, isInternal, key = 'from_email') {
   }
   return { customer, internal };
 }
+
+/**
+ * Whether an outbound message never left the company: every To and Cc address
+ * is on one of our domains (06_manual_forwards.sql, `ticket_messages.internal_only`).
+ * A forward to a colleague, a question to logistics.
+ *
+ * WHY IT MATTERS. Every reader that asks « have we answered the customer? »
+ * used to count any outbound message: the fold, drafting, the case's reply
+ * target, the waiting time. A forward to a colleague answered nobody, and
+ * counting it staled the customer's draft and could fold the case to resolved.
+ *
+ * A reply to the customer always has the customer in To, so it is never
+ * internal-only. A message with no recipients at all is not either: nothing
+ * says where it went, and the safe reading is the old one.
+ */
+export function isInternalOnlyMessage({ direction, to_emails = [], cc_emails = [] } = {}, internalDomains = []) {
+  if (direction !== 'outbound') return false;
+  const recipients = [...(to_emails ?? []), ...(cc_emails ?? [])].filter(Boolean);
+  if (recipients.length === 0) return false;
+  return recipients.every((address) => isInternalSender(address, internalDomains));
+}

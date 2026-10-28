@@ -133,3 +133,8 @@ test('a refund notice is not refused for the reply of ours it follows, only for 
   // A plain reply keeps the old rule.
   assert.deepEqual(preSendCheck(facts({ laterMessages: [ours] })), { ok: false, reason: 'already_answered' });
 });
+
+test('a forward to a colleague is not somebody answering (06)', () => {
+  const forward = [{ id: 'm3', direction: 'outbound', actor: 'support', internal_only: true }];
+  assert.deepEqual(preSendCheck(facts({ laterMessages: forward })), { ok: true });
+});

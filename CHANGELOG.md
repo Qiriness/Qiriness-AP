@@ -10,6 +10,48 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Ticket header, composer and filters follow the marks (2026-10-28)
+
+- **Header:** no chip for what a status icon already says (the level, « awaiting human », « awaiting customer », a forward). L1/L2 get a teal robot icon (« The agent can handle it »), on the cards and the rail too.
+- **Composer:** « Reply to customer » is tinted teal like our messages, as the note is amber and the forward purple.
+- **Toolbar:** Level, Category, Sender and Sort are one rounded menu (`FilterMenu.tsx`). Level and Category show the cards' icons and colours, with open-ticket counts.
+- **Proven so far:** `tsc`, lint and the full suite. Not checked in a browser.
+
+## Forwarding a ticket to colleagues, and mail that never left the company (2026-10-28)
+
+- **« Transférer »**, the composer's third mode, purple:
+  - Recipients: team members, internal forwarding destinations, or a typed internal address. External addresses are refused on the server.
+  - An optional note.
+  - The whole thread travels:
+    - Graph `createForward` on the latest customer message, so it stays in the same conversation.
+    - The note and a dated transcript of every message sit above the quoted original.
+    - Every message's files are added; any over about 3 MB is listed by name instead.
+  - Afterwards, a popup offers to snooze until the colleague replies (« Pas maintenant » / « Choisir une date »).
+  - In the conversation: a purple card from the moment it is queued, its Sent Items copy folded inside it, and « Retry » on a failure.
+  - The queue's forward icon and the Forwarded tab include manual forwards.
+  - Why: `docs/decisions/forwarding.md` § Manual forwards.
+- **Fix, worker:** a message of ours sent only to colleagues no longer counts as an answer to the customer.
+  - The new column `ticket_messages.internal_only` is set at ingestion.
+  - Every reader below now skips such mail:
+    - the fold (no draft staled, no « waiting for customer » snooze, no fold to resolved);
+    - `answeredSince`;
+    - `caseReplyTarget`;
+    - the pre-send « already answered » check;
+    - `after_first_reply`;
+    - the waiting-time views.
+  - This also covers the automatic pass's forwards to internal destinations, and forwards made from Outlook.
+- **Earlier messages fold at the customer's latest message,** not the latest inbound, so a colleague's reply never hides the customer's mail.
+- **Migration `06_manual_forwards.sql`:**
+  - `ticket_messages.internal_only`;
+  - `ticket_manual_forwards`;
+  - the two message-count views;
+  - `dashboard_team()` returns `email`.
+- **Proven so far:** unit tests for the guards (fold, drafting, reply target, pre-send) and the forward runner (sent, held, never sent twice, half-built draft rebuilt, file over the limit listed); `tsc` and lint clean; migration applied to production 2026-10-28, baseline regenerated, `--production` check identical, full suite 3875/3875.
+- **Not yet done:**
+  - The worker is not yet redeployed.
+  - No live forward has been sent.
+  - Whether `createForward` keeps the conversation id is still unverified on the real mailbox.
+
 ## Assigning tickets (2026-10-28)
 
 - **Who:** every active dashboard account, read from Supabase Auth by `dashboard_team()`. That is a database function, so the web app never holds the secret key.

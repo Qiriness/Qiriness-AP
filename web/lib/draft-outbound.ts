@@ -101,7 +101,9 @@ export function awaitingWorker(thread: TicketThread | null): boolean {
   if (!thread) return false;
   if (thread.draft && (awaitingDelivery(thread.draft) || thread.draft.outbound?.state === "send_requested")) return true;
   const newest = thread.reply?.manual?.[0];
-  return newest?.state === "approved" || newest?.state === "send_requested";
+  if (newest?.state === "approved" || newest?.state === "send_requested") return true;
+  // A forward to colleagues the worker has not finished (06).
+  return (thread.forwards ?? []).some((forward) => ["queued", "draft_created", "send_requested"].includes(forward.state));
 }
 
 /** How far a person's own reply got, in their words. */

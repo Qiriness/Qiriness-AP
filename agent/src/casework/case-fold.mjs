@@ -252,7 +252,12 @@ export function foldCase({
   // AN AUTOMATIC REPLY IS NOT PART OF THE CASE. It stays in the thread a person
   // reads, but here it would be « the customer spoke last », and a reading or a
   // case file written on it describes nothing the customer said.
-  const thread = orderedThread(messages).filter((message) => actorFor(message) !== AUTOMATED);
+  //
+  // NOR IS MAIL THAT NEVER LEFT THE COMPANY (06_manual_forwards.sql): a forward
+  // to a colleague is ours, but it answered nobody. Kept, it would be « we spoke
+  // last » — staling the customer's draft, snoozing for the customer, or folding
+  // the case to resolved. The colleague's reply, when it comes, is in the thread.
+  const thread = orderedThread(messages).filter((message) => actorFor(message) !== AUTOMATED && !message.internal_only);
   const position = new Map(thread.map((message, index) => [message.id, index]));
   const at = (row) => position.get(row?.trigger_message_id);
   const inThread = (rows) => rows.filter((row) => at(row) !== undefined).sort((a, b) => at(a) - at(b));

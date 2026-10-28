@@ -172,24 +172,6 @@
   font-size: var(--text-caption);
 }
 
-.select {
-  height: 34px;
-  min-width: 8.5rem;
-  padding: 0 28px 0 var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text-strong);
-  font: inherit;
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-
-.select:focus-visible {
-  outline: 2px solid var(--teal);
-  outline-offset: 1px;
-}
-
 .workspace {
   flex: 1;
   min-height: 0;
@@ -1627,8 +1609,7 @@
   }
 
   .searchWrap,
-  .selectLabel,
-  .select {
+  .selectLabel {
     width: 100%;
     max-width: none;
   }
@@ -2396,12 +2377,6 @@
   outline-offset: 1px;
 }
 
-.modeSwitch .modeActive {
-  background: var(--surface);
-  color: var(--teal-ink);
-  box-shadow: var(--shadow-xs);
-}
-
 .modeSwitch .modeNoteActive {
   background: var(--warning-050);
   color: var(--warning-ink);
@@ -2593,4 +2568,29 @@
   .contextSheetOpen .sheetPanel {
     animation: none;
   }
+}
+
+/* « Transférer »: purple, the colour of anything that stays inside the company (06). */
+.modeSwitch .modeForwardActive {
+  background: var(--forward-050);
+  color: var(--forward-ink);
+}
+
+.draftPanelForward {
+  background: #fcfbff;
+}
+
+.composeHintForward {
+  color: var(--forward-ink);
+}
+
+/* « Réponse client »: teal, the colour of our messages in the conversation,
+   tinted the way the note (orange) and the forward (purple) are. */
+.modeSwitch .modeReplyActive {
+  background: var(--teal-050);
+  color: var(--teal-ink);
+}
+
+.draftPanelReply {
+  background: #f6fbfb;
 }

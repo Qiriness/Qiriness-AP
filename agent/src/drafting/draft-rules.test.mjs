@@ -410,3 +410,12 @@ test('a reply on ANOTHER thread of the case answers the customer', () => {
   ];
   assert.equal(answeredSince({ conversation, triggerMessageId: 'b1' }), true);
 });
+
+test('a forward to a colleague after the customer wrote is not an answer (06)', () => {
+  const conversation = [
+    { id: 'c1', direction: 'inbound', received_at: '2026-09-01T09:00:00Z' },
+    { id: 'f1', direction: 'outbound', internal_only: true, received_at: '2026-09-01T10:00:00Z' }
+  ];
+  assert.equal(answeredSince({ conversation, triggerMessageId: 'c1' }), false);
+  assert.equal(answeredSince({ conversation: [...conversation, { id: 'r1', direction: 'outbound', received_at: '2026-09-01T11:00:00Z' }], triggerMessageId: 'c1' }), true);
+});

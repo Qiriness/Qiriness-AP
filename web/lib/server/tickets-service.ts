@@ -100,6 +100,7 @@ import type {
 } from "../types";
 import { TICKET_LANGUAGES } from "../types";
 import { listTeam } from "./team-service";
+import { readForwards } from "./manual-forward-service";
 
 function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
@@ -674,7 +675,7 @@ function summarisePolicy(
 export async function getTicketThread(shopId: string, ticketId: string): Promise<TicketThread> {
   const record = getRecord(shopId);
 
-  const [ticketRow, messageRows, draftRow, directory, actions] = await Promise.all([
+  const [ticketRow, messageRows, draftRow, directory, actions, forwarded] = await Promise.all([
     record.findForThread(ticketId),
     record.thread(ticketId),
     // Read alongside the thread rather than in the panel: the draft is what an
@@ -683,13 +684,15 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
     getDraftRecord(shopId).forTicket(ticketId),
     readSenderDirectory(shopId),
     readActions(shopId, ticketId),
+    // Forwards to colleagues made here (06): their sent copies show inside them.
+    readForwards(shopId, ticketId),
   ]);
 
   if (!ticketRow) {
     throw new KnowledgeNotFoundError(`Ticket not found: ${ticketId}`);
   }
 
-  const messages = (messageRows as any[]).map((row) => mapMessageRow(row, directory)).sort(byTimeAsc);
+  const messages = (messageRows as any[]).map((row) => mapMessageRow(row, directory, forwarded.byMessageId)).sort(byTimeAsc);
   const draft = draftRow ? mapDraftRow(draftRow, latestActionFor(actions, draftRow.id)) : null;
   const caseThreads = await readCaseThreads(shopId, ticketId, ticketRow.case_id ?? null, { withMessages: true, directory });
   const replyElsewhere = replyElsewhereOf(caseThreads, ticketId);
@@ -730,6 +733,7 @@ export async function getTicketThread(shopId: string, ticketId: string): Promise
     case: caseThreads,
     draft,
     messages,
+    forwards: forwarded.forwards,
     parcels,
     reply: {
       sendingEnabled: sendOnApprove(),
@@ -1299,7 +1303,7 @@ function byTimeAsc(a: TicketMessage, b: TicketMessage): number {
   return (Date.parse(a.at ?? "") || 0) - (Date.parse(b.at ?? "") || 0);
 }
 
-function mapMessageRow(row: any, directory: any): TicketMessage {
+function mapMessageRow(row: any, directory: any, forwardIds: Map<string, string> = new Map()): TicketMessage {
   const display = parseEmailForDisplay(row.body_text ?? null);
   const role = messageRole(row, directory);
   const recipients = [
@@ -1328,6 +1332,8 @@ function mapMessageRow(row: any, directory: any): TicketMessage {
       ),
     ].filter((label) => !(role === "qiriness" && label === ownMailboxLabel(directory))),
     hasAttachments: Boolean(row.has_attachments),
+    internalOnly: Boolean(row.internal_only),
+    forwardId: (row.internet_message_id && forwardIds.get(row.internet_message_id)) || null,
     // Our own replies carry `sent_at` and nothing else; inbound carries
     // `received_at`. One column would leave half the thread undated.
     at: row.received_at ?? row.sent_at ?? null,

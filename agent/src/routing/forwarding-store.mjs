@@ -130,6 +130,9 @@ export function createForwardingStore(supabase) {
           {
             shop_id: shopId,
             direction: 'outbound',
+            // A forward to a colleague (a manual one included) is not the first
+            // reply `after_first_reply` waits for (06_manual_forwards.sql).
+            internal_only: false,
             ticket_id: { operator: 'in', value: `(${routedIds.join(',')})` },
             deleted_at: { operator: 'is', value: 'null' }
           },
