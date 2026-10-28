@@ -1617,6 +1617,22 @@
     "sender_directory_shop_pattern_unique: UNIQUE (shop_id, pattern_type, pattern)"
    ]
   },
+  "public.shop_ticket_counters": {
+   "rls": true,
+   "force_rls": false,
+   "acl": {
+    "service_role": "Dadmrtwx"
+   },
+   "columns": [
+    "shop_id uuid not null",
+    "last_number integer not null default 0"
+   ],
+   "constraints": [
+    "shop_ticket_counters_last_number_check: CHECK ((last_number >= 0))",
+    "shop_ticket_counters_pkey: PRIMARY KEY (shop_id)",
+    "shop_ticket_counters_shop_id_fkey: FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE"
+   ]
+  },
   "public.shopify_content_sources": {
    "rls": true,
    "force_rls": false,
@@ -2610,6 +2626,30 @@
     "ticket_messages_ticket_id_fkey: FOREIGN KEY (ticket_id) REFERENCES public.tickets(id) ON DELETE CASCADE"
    ]
   },
+  "public.ticket_notes": {
+   "rls": true,
+   "force_rls": false,
+   "acl": {
+    "service_role": "Dadmrtwx"
+   },
+   "columns": [
+    "id uuid not null default gen_random_uuid()",
+    "shop_id uuid not null",
+    "ticket_id uuid not null",
+    "body text not null",
+    "author_id text",
+    "author_name text",
+    "created_at timestamp with time zone not null default now()",
+    "updated_at timestamp with time zone not null default now()",
+    "deleted_at timestamp with time zone"
+   ],
+   "constraints": [
+    "ticket_notes_body_check: CHECK (((length(btrim(body)) >= 1) AND (length(btrim(body)) <= 5000)))",
+    "ticket_notes_pkey: PRIMARY KEY (id)",
+    "ticket_notes_shop_id_fkey: FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE",
+    "ticket_notes_ticket_id_fkey: FOREIGN KEY (ticket_id) REFERENCES public.tickets(id) ON DELETE CASCADE"
+   ]
+  },
   "public.ticket_overrides": {
    "rls": true,
    "force_rls": false,
@@ -2766,7 +2806,8 @@
     "overrides jsonb not null default '{}'::jsonb",
     "case_id uuid not null",
     "case_link_state text not null default 'pending'::text",
-    "fact_drift jsonb"
+    "fact_drift jsonb",
+    "ticket_number integer not null"
    ],
    "constraints": [
     "tickets_case_id_fkey: FOREIGN KEY (case_id) REFERENCES public.cases(id) ON DELETE RESTRICT",
@@ -2799,6 +2840,7 @@
     "tickets_sender_label_check: CHECK (((sender_label IS NULL) OR (sender_label = ANY (ARRAY['internal'::text, 'contractor'::text, 'logistics'::text, 'courier'::text, 'retailer'::text, 'distributor'::text, 'supplier'::text, 'partner'::text]))))",
     "tickets_shop_conversation_unique: UNIQUE (shop_id, graph_conversation_id)",
     "tickets_shop_id_fkey: FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE",
+    "tickets_shop_ticket_number_unique: UNIQUE (shop_id, ticket_number)",
     "tickets_status_check: CHECK ((status = ANY (ARRAY['open'::text, 'awaiting_customer'::text, 'awaiting_human'::text, 'forwarded'::text, 'resolved'::text, 'closed'::text, 'spam'::text])))"
    ]
   }
@@ -2958,6 +3000,7 @@
   "CREATE INDEX ticket_messages_shop_internet_id_idx ON public.ticket_messages USING btree (shop_id, internet_message_id) WHERE (internet_message_id IS NOT NULL)",
   "CREATE INDEX ticket_messages_shop_received_at_idx ON public.ticket_messages USING btree (shop_id, received_at)",
   "CREATE INDEX ticket_messages_ticket_id_idx ON public.ticket_messages USING btree (ticket_id)",
+  "CREATE INDEX ticket_notes_ticket_created_idx ON public.ticket_notes USING btree (ticket_id, created_at)",
   "CREATE INDEX ticket_overrides_ticket_idx ON public.ticket_overrides USING btree (ticket_id, set_at)",
   "CREATE INDEX ticket_routing_shop_idx ON public.ticket_routing USING btree (shop_id)",
   "CREATE INDEX ticket_snoozes_due_idx ON public.ticket_snoozes USING btree (shop_id, wake_at) WHERE (woke_at IS NULL)",
@@ -3523,9 +3566,11 @@
     "case_level smallint",
     "case_status text",
     "resolved_at timestamp with time zone",
-    "closed_at timestamp with time zone"
+    "closed_at timestamp with time zone",
+    "ticket_number integer",
+    "language text"
    ],
-   "def": " SELECT t.id,\n    t.shop_id,\n    t.subject,\n    t.status,\n    t.category,\n    t.secondary_category,\n    t.level,\n    t.happiness,\n    t.responsible_team,\n    t.requester_name,\n    t.shopify_order_number,\n    t.first_message_at,\n    t.last_message_at,\n    t.archived_at,\n    t.duplicate_of_ticket_id,\n    t.duplicate_reason,\n    c.display_name AS customer_display_name,\n    c.first_name AS customer_first_name,\n    c.last_name AS customer_last_name,\n    c.rfm_group AS customer_rfm_group,\n    f.from_email AS requester_email,\n    COALESCE(n.message_count, 0::bigint) AS message_count,\n    COALESCE(n.inbound_count, 0::bigint) AS inbound_count,\n        CASE\n            WHEN n.latest_inbound_at IS NOT NULL AND (n.latest_outbound_at IS NULL OR n.latest_inbound_at > n.latest_outbound_at) THEN n.latest_inbound_at\n            ELSE NULL::timestamp with time zone\n        END AS waiting_since,\n    t.sender_label,\n    t.overrides,\n    t.case_id,\n    COALESCE(cf.lead_ticket_id = t.id, true) AS is_case_lead,\n    COALESCE(cn.thread_count, 1::bigint) AS case_thread_count,\n    COALESCE(cn.message_count, 0::bigint) AS case_message_count,\n    COALESCE(cn.inbound_count, 0::bigint) AS case_inbound_count,\n        CASE\n            WHEN cn.latest_inbound_at IS NOT NULL AND (cn.latest_outbound_at IS NULL OR cn.latest_inbound_at > cn.latest_outbound_at) THEN cn.latest_inbound_at\n            ELSE NULL::timestamp with time zone\n        END AS case_waiting_since,\n    cf.level AS case_level,\n    cf.status AS case_status,\n    t.resolved_at,\n    t.closed_at\n   FROM public.tickets t\n     LEFT JOIN public.customers c ON c.id = t.customer_id\n     LEFT JOIN public.ticket_message_counts n ON n.ticket_id = t.id\n     LEFT JOIN public.ticket_first_inbound f ON f.ticket_id = t.id\n     LEFT JOIN public.case_message_counts cn ON cn.case_id = t.case_id\n     LEFT JOIN public.case_facts cf ON cf.case_id = t.case_id\n  WHERE t.deleted_at IS NULL;",
+   "def": " SELECT t.id,\n    t.shop_id,\n    t.subject,\n    t.status,\n    t.category,\n    t.secondary_category,\n    t.level,\n    t.happiness,\n    t.responsible_team,\n    t.requester_name,\n    t.shopify_order_number,\n    t.first_message_at,\n    t.last_message_at,\n    t.archived_at,\n    t.duplicate_of_ticket_id,\n    t.duplicate_reason,\n    c.display_name AS customer_display_name,\n    c.first_name AS customer_first_name,\n    c.last_name AS customer_last_name,\n    c.rfm_group AS customer_rfm_group,\n    f.from_email AS requester_email,\n    COALESCE(n.message_count, 0::bigint) AS message_count,\n    COALESCE(n.inbound_count, 0::bigint) AS inbound_count,\n        CASE\n            WHEN n.latest_inbound_at IS NOT NULL AND (n.latest_outbound_at IS NULL OR n.latest_inbound_at > n.latest_outbound_at) THEN n.latest_inbound_at\n            ELSE NULL::timestamp with time zone\n        END AS waiting_since,\n    t.sender_label,\n    t.overrides,\n    t.case_id,\n    COALESCE(cf.lead_ticket_id = t.id, true) AS is_case_lead,\n    COALESCE(cn.thread_count, 1::bigint) AS case_thread_count,\n    COALESCE(cn.message_count, 0::bigint) AS case_message_count,\n    COALESCE(cn.inbound_count, 0::bigint) AS case_inbound_count,\n        CASE\n            WHEN cn.latest_inbound_at IS NOT NULL AND (cn.latest_outbound_at IS NULL OR cn.latest_inbound_at > cn.latest_outbound_at) THEN cn.latest_inbound_at\n            ELSE NULL::timestamp with time zone\n        END AS case_waiting_since,\n    cf.level AS case_level,\n    cf.status AS case_status,\n    t.resolved_at,\n    t.closed_at,\n    t.ticket_number,\n    t.language\n   FROM public.tickets t\n     LEFT JOIN public.customers c ON c.id = t.customer_id\n     LEFT JOIN public.ticket_message_counts n ON n.ticket_id = t.id\n     LEFT JOIN public.ticket_first_inbound f ON f.ticket_id = t.id\n     LEFT JOIN public.case_message_counts cn ON cn.case_id = t.case_id\n     LEFT JOIN public.case_facts cf ON cf.case_id = t.case_id\n  WHERE t.deleted_at IS NULL;",
    "options": [
     "security_invoker=true"
    ],
@@ -3561,6 +3606,15 @@
   "public.advisory_events_purge(p_before timestamp with time zone)": {
    "def": "CREATE OR REPLACE FUNCTION public.advisory_events_purge(p_before timestamp with time zone)\n RETURNS integer\n LANGUAGE sql\n SET search_path TO ''\nAS $function$\n  with gone as (\n    delete from public.advisory_events e\n    where e.created_at < p_before\n    returning 1\n  )\n  select count(*)::integer from gone;\n$function$\n",
    "acl": {
+    "service_role": "X"
+   }
+  },
+  "public.assign_ticket_number()": {
+   "def": "CREATE OR REPLACE FUNCTION public.assign_ticket_number()\n RETURNS trigger\n LANGUAGE plpgsql\n SET search_path TO 'public'\nAS $function$\nbegin\n  if new.ticket_number is null then\n    insert into public.shop_ticket_counters as c (shop_id, last_number)\n    values (new.shop_id, 1)\n    on conflict (shop_id) do update set last_number = c.last_number + 1\n    returning c.last_number into new.ticket_number;\n  end if;\n  return new;\nend;\n$function$\n",
+   "acl": {
+    "PUBLIC": "X",
+    "anon": "X",
+    "authenticated": "X",
     "service_role": "X"
    }
   },
@@ -4097,6 +4151,8 @@
   "CREATE TRIGGER support_parameters_set_updated_at BEFORE UPDATE ON public.support_parameters FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
   "CREATE TRIGGER ticket_drafts_set_updated_at BEFORE UPDATE ON public.ticket_drafts FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
   "CREATE TRIGGER ticket_messages_set_updated_at BEFORE UPDATE ON public.ticket_messages FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
+  "CREATE TRIGGER ticket_notes_set_updated_at BEFORE UPDATE ON public.ticket_notes FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()",
+  "CREATE TRIGGER tickets_assign_ticket_number BEFORE INSERT ON public.tickets FOR EACH ROW EXECUTE FUNCTION public.assign_ticket_number()",
   "CREATE TRIGGER tickets_open_case BEFORE INSERT ON public.tickets FOR EACH ROW EXECUTE FUNCTION public.tickets_open_case()",
   "CREATE TRIGGER tickets_set_updated_at BEFORE UPDATE ON public.tickets FOR EACH ROW EXECUTE FUNCTION public.set_updated_at()"
  ],
@@ -4419,6 +4475,7 @@
   "column public.tickets.sender_label: The sender_directory label of the address that OPENED this thread, when that address is one of ours -- internal (qiriness.com, lap-groupe.com) or contractor. Null means a consumer, the ordinary case. Set deterministically at ticket creation from the address, never by a model: who wrote to us is a fact we hold before any pass runs. The drafting queue skips a labelled ticket, because a customer-voice reply addressed to a colleague is never the right output; investigation still runs, because a colleague chasing a real order still needs the order facts gathered for whoever picks it up.",
   "column public.tickets.shopify_order_number: Shopify order number resolved for this ticket (the workflow's source-of-truth lookup key). Stored as text to preserve the customer-facing #XXXX form; matched against orders.name / orders.order_number by the order-lookup tool.",
   "column public.tickets.status: Ticket lifecycle: open, awaiting_customer, awaiting_human, forwarded, resolved, closed, or spam. In draft-only mode nothing is auto-sent, so agent-drafted replies sit at awaiting_human until approved.",
+  "column public.tickets.ticket_number: Per-shop running number, shown as T-<n>. Assigned on insert by assign_ticket_number(); existing tickets were numbered oldest first by first_message_at.",
   "function chat.vip_customer_rows(): The shop's VIP customers, through public.vip_customers() with the shop's own thresholds and marketplaces excluded. Security definer, no arguments. Read it through chat.vip_customers.",
   "function public.claim_mail_jobs(p_shop_id uuid, p_kinds text[], p_limit integer, p_lease_seconds integer): Take up to p_limit due jobs of the given kinds: queued and due, or running with an expired lease (counted as a failed attempt). Marks them running with a lease of p_lease_seconds.",
   "function public.customer_segment_find(p_shop uuid, p_window_months integer, p_groups jsonb, p_not_channels text[], p_limit integer): Segment Finder: customers matching OR-of-AND groups of {metric: orders | spend | lifetime_spend, op: gt | lt, value} conditions, with orders and spend counted over the last p_window_months and lifetime over all uncancelled Shopify orders (net of refunds). Every customer on file except marketplace-synthetic ones. Always one totals row; up to p_limit members by lifetime spend.",
@@ -4558,6 +4615,7 @@
   "table public.promotions: Shopify discount and promotion snapshots for support workflows. Shopify remains the source of truth.",
   "table public.sales_channels: The marketplaces this shop sells on: a name and the Shopify sales channel handles behind it. Every handle not listed is the shop's own store. Marketplaces mint one customer per order, so their buyers are left out of every per-person figure. Edited in Setup -> Sales channels.",
   "table public.sender_directory: Who a sender is to us, by email address or domain. Read as context (into the investigation case file) and by the clustering report to tell customer demand from our own mail. Replaces the INTERNAL_EMAIL_DOMAINS env var, which did not survive a project move. Rows are exceptions -- an unlisted sender is an ordinary consumer.",
+  "table public.shop_ticket_counters: The last ticket number handed out per shop. Written only by assign_ticket_number() on insert into tickets; never edited by hand.",
   "table public.shopify_content_sources: Lightweight index of live Shopify Online Store pages and shop policies (refund, privacy, shipping, terms of service, etc.), used to populate the Agent Setup source dropdown. Holds identity only; content is resolved on demand at import/resync time and is not stored here.",
   "table public.shopify_metaobjects: Shopify metaobject snapshots shared across products, such as predefined product FAQs and ingredients.",
   "table public.shops: Shopify shop records and app-level sync state. Shopify remains the source of truth.",
@@ -4591,6 +4649,7 @@
   "table public.ticket_investigations: One case file per investigation run: what the agent established from the retrieval tools, what it could not verify, what is missing, and what must not be claimed. Consumed by the drafting stage and by the human queue. unique(shop_id, trigger_message_id) makes the pass safe to re-run and keeps a thread's successive readings as separate rows.",
   "table public.ticket_message_counts: Message count and inbound/outbound activity per ticket, excluding soft-deleted messages. Read by the dashboard queue instead of counting rows client-side.",
   "table public.ticket_messages: Individual emails belonging to a ticket, one row per Microsoft Graph message. Inbound mail is ingested here idempotently (unique on shop_id + graph_message_id); outbound rows are the agent replies and team forwards.",
+  "table public.ticket_notes: Notes the team leaves on a ticket. Never sent to the customer and not read by the drafting agent. Soft-deleted (deleted_at) so the timeline does not silently lose what someone wrote.",
   "table public.ticket_overrides: Every correction a person made to a ticket from the dashboard, and every reset to automatic. Append-only audit: the active values live in tickets.overrides.",
   "table public.ticket_queue: One row per live ticket with its customer, message count and priority activity facts already joined -- the projection the dashboard list renders and the status write returns. Soft-deleted tickets are excluded here rather than by the caller; archived ones are kept and filtered in the UI. LEFT JOIN on customers: most tickets are unlinked until the customer-resolution pass runs.",
   "table public.ticket_reply_times: First-response time per ticket: earliest inbound to the earliest outbound that came after it. `reply_hours` is null on a ticket the desk has not answered from the synced mailbox, which is the denominator the panel has to declare.",

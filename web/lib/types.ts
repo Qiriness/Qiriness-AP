@@ -456,6 +456,10 @@ export const RESPONSIBLE_TEAM_LABELS: Record<ResponsibleTeam, string> = {
 /** One row of the ticket list. */
 export interface TicketListItem {
   id: string;
+  /** Per-shop running number (`tickets.ticket_number`), shown as « T-1042 » by `formatTicketNumber`. */
+  ticketNumber: number | null;
+  /** The language the reply should be written in, read from the customer's mail; null until categorised. */
+  language: TicketLanguage | null;
   subject: string | null;
   status: TicketStatus;
   category: KnowledgeCategory | null;
@@ -566,6 +570,30 @@ export interface TicketListItem {
   lastWake: TicketWake | null;
   /** Handed, or about to be handed, to a colleague by the forwarding pass. Null when not. */
   forwarding: TicketForwarding | null;
+}
+
+/** Mirrors tickets_language_check and ticket_drafts_language_check. */
+export type TicketLanguage = "fr" | "en" | "es" | "de" | "it" | "nl" | "pt" | "other";
+
+export const TICKET_LANGUAGES: readonly TicketLanguage[] = ["fr", "en", "es", "de", "it", "nl", "pt", "other"];
+
+/**
+ * « T-1042 ». The prefix is the point: order numbers are shown as « #NNNN » and
+ * the two ranges overlap, so a bare number would read as an order.
+ */
+export function formatTicketNumber(ticketNumber: number | null | undefined): string | null {
+  return typeof ticketNumber === "number" && Number.isFinite(ticketNumber) ? `T-${ticketNumber}` : null;
+}
+
+/** A note the team left on a ticket (`ticket_notes`). Never sent, never read by the agent. */
+export interface TicketNote {
+  id: string;
+  body: string;
+  /** The writer's name when they wrote it; null when their account had none. */
+  authorName: string | null;
+  /** Whether the person reading wrote it, so only they are offered « Delete ». */
+  isMine: boolean;
+  createdAt: string;
 }
 
 /** Mirrors FORWARDING_TAG_STATES in scripts/lib/forwarding-tag.mjs. */
@@ -1259,6 +1287,8 @@ export interface TicketDraft {
    */
   disposition: "terminal" | "intermediary";
   status: TicketDraftStatus;
+  /** The language the draft is written in; null on drafts from before it was recorded. */
+  language: TicketLanguage | null;
   /** Why a `stale` draft went stale: the case moved on, or we replied ourselves. */
   staleReason: "case_changed" | "superseded_by_outbound" | null;
   /**

@@ -6,9 +6,12 @@ import {
   AlertIcon,
   CheckCircleIcon,
   CheckIcon,
-  ChevronLeftIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  CloseIcon,
   ClockIcon,
-  CrownIcon,
+  GlobeIcon,
+  LockIcon,
   MailInIcon,
   PencilIcon,
   PlusIcon,
@@ -38,11 +41,21 @@ import {
   replyDelivered,
   replyInFlight,
 } from "@/lib/draft-outbound";
-import { actOnObligation, decideOnDraft, fetchTicketDetail, fetchTicketThread, saveTicketOverrides, sendManualReply, setTicketStatus } from "@/lib/api/tickets";
+import {
+  actOnObligation,
+  addTicketNote,
+  decideOnDraft,
+  deleteTicketNote,
+  fetchTicketDetail,
+  fetchTicketNotes,
+  fetchTicketThread,
+  saveTicketOverrides,
+  sendManualReply,
+  setTicketStatus,
+} from "@/lib/api/tickets";
 import { replyHtmlIsEmpty, textToReplyHtml } from "@/lib/reply-html";
 import { ReplyEditor, ReplyHtmlView } from "./ReplyEditor";
-import { SnoozeBanner, SnoozeChip, SnoozeControl, type SnoozeChange } from "./SnoozeControl";
-import { ForwardingBanner, ForwardingChip } from "./ForwardingTag";
+import type { SnoozeChange } from "./SnoozeControl";
 import { NO_DELAYS, isSnoozed, type SnoozeDelays } from "@/lib/snooze";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isBacklogTicket, isClosed, summariseTickets } from "@/lib/ticket-stats";
@@ -61,6 +74,7 @@ import type {
   TicketManualReply,
   TicketListItem,
   TicketMessage,
+  TicketNote,
   TicketOrderChange,
   TicketOrderFacts,
   TicketOrderLinkSource,
@@ -78,12 +92,12 @@ import {
   RESPONSIBLE_TEAM_LABELS,
   SENDER_LABELS,
   TICKET_CATEGORIES,
-  TICKET_LEVEL_MEANINGS,
   TICKET_STATUS_LABELS,
 } from "@/lib/types";
-import { HappinessFace } from "./HappinessFace";
 import { OrderLinkDialog } from "./OrderLinkDialog";
-import { LevelChip } from "./LevelChip";
+import { TicketQueue, type QueueMode } from "./TicketQueue";
+import { TicketHeader } from "./TicketHeader";
+import { contactingAddress, requesterName, ticketAge, ticketTitle } from "./ticket-text";
 import styles from "./TicketsView.module.css";
 
 interface TicketsViewProps {
@@ -147,8 +161,14 @@ function matches(query: string, fields: (string | null | undefined)[]): boolean 
   return fields.filter(Boolean).join(" ").toLowerCase().includes(needle);
 }
 
+/**
+ * Subject, names, order number, ticket number. « T-1042 », « t1042 » and a bare
+ * « 1042 » all find ticket 1042; a bare number also finds order #1042, which is
+ * the point of searching by number.
+ */
 function matchesTicket(ticket: TicketListItem, query: string): boolean {
-  return matches(query, [ticket.subject, ticket.requesterName, ticket.customerName, ticket.orderNumber]);
+  const ticketNumber = ticket.ticketNumber === null ? null : `T-${ticket.ticketNumber} t${ticket.ticketNumber} ${ticket.ticketNumber}`;
+  return matches(query, [ticket.subject, ticket.requesterName, ticket.customerName, ticket.orderNumber, ticketNumber]);
 }
 
 function matchesDroppedMail(mail: DroppedMail, query: string): boolean {
@@ -307,31 +327,8 @@ function reconcilePageState(
   return next;
 }
 
-function formatPriorityScore(score: number): string {
-  return Number.isInteger(score) ? String(score) : score.toFixed(1);
-}
-
-function ticketTitle(ticket: TicketListItem, t: Translate): string {
-  return ticket.subject?.trim() || t("tickets.view.noSubject");
-}
-
-function requesterName(ticket: TicketListItem, t: Translate): string {
-  return ticket.customerName?.trim() || ticket.requesterName?.trim() || t("tickets.view.unknownRequester");
-}
-
-function ticketAge(ticket: TicketListItem, t: Translate): string {
-  return formatRelativeTime(ticket.lastMessageAt ?? ticket.firstMessageAt, t) || "-";
-}
-
 function priorityLabel(ticket: TicketListItem, t: Translate): string {
   return t(`tickets.view.priority.${ticket.priorityBand === "high" || ticket.priorityBand === "medium" ? ticket.priorityBand : "low"}`);
-}
-
-function statusClass(ticket: TicketListItem): string {
-  if (ticket.status === "awaiting_human") return styles.statusWarning;
-  if (ticket.status === "awaiting_customer" || ticket.status === "forwarded") return styles.statusInfo;
-  if (isClosed(ticket)) return styles.statusDone;
-  return styles.statusNeutral;
 }
 
 export function TicketsView({
@@ -1290,9 +1287,87 @@ function TicketWorkspace({
   onCaseStateChanged,
 }: TicketWorkspaceProps) {
   const t = useT();
+  // THE QUEUE GIVES WAY TO THE TICKET. Opening one collapses the cards to a rail
+  // of initials; the expand button brings them back until the next one is opened.
+  const [queueMode, setQueueMode] = useState<QueueMode>(selectedId ? "compact" : "full");
+  // Focus: no queue and no panel, just the conversation and the draft. Leaving it
+  // puts back the queue as it was.
+  const [focus, setFocus] = useState(false);
+  const [beforeFocus, setBeforeFocus] = useState<QueueMode>("compact");
+
+  function select(id: string) {
+    onSelect(id);
+    if (id) setQueueMode("compact");
+    else setQueueMode("full");
+  }
+
+  function toggleFocus() {
+    if (focus) {
+      setFocus(false);
+      setQueueMode(beforeFocus);
+    } else {
+      setBeforeFocus(queueMode);
+      setFocus(true);
+      onCloseContext();
+    }
+  }
+
+  // Nothing open: the cards, always. A tab switch clears the selection.
+  useEffect(() => {
+    if (!selectedTicket) {
+      setQueueMode("full");
+      setFocus(false);
+    }
+  }, [selectedTicket]);
+
+  // « [ » the queue, « ] » the panel, Escape closes the panel. Never while typing.
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const target = event.target as HTMLElement | null;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
+      if (event.key === "Escape" && contextOpen) {
+        onCloseContext();
+      } else if (event.key === "[" && selectedTicket) {
+        setFocus(false);
+        setQueueMode((mode) => (mode === "full" ? "compact" : "full"));
+      } else if (event.key === "]" && selectedTicket) {
+        if (contextOpen) onCloseContext();
+        else onOpenContext();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [contextOpen, selectedTicket, onOpenContext, onCloseContext]);
+
+  const layout = focus ? styles.queueHidden : queueMode === "compact" ? styles.queueCompact : styles.queueFull;
   return (
-    <div className={`${styles.workspace} ${selectedTicket ? styles.hasSelection : ""}`}>
-      <TicketListPane view={view} tickets={tickets} selectedId={selectedId} onSelect={onSelect} notice={listNotice} />
+    <div className={`${styles.workspace} ${styles.ticketWorkspace} ${layout} ${selectedTicket ? styles.hasSelection : ""}`}>
+      {!focus && (
+        <div className={styles.queueSlot}>
+        <TicketQueue
+          viewLabel={t(`tickets.view.tab.${view}`)}
+          orderLabel={
+            view === "closed"
+              ? t("tickets.panels.list.recentlyClosed")
+              : view === "snoozed"
+                ? t("tickets.panels.list.soonestBack")
+                : view === "forwarded"
+                  ? t("tickets.panels.list.latestForwarded")
+                  : t("tickets.panels.list.priorityFirst")
+          }
+          tickets={tickets}
+          selectedId={selectedId}
+          onSelect={select}
+          notice={listNotice}
+          mode={selectedTicket ? queueMode : "full"}
+          onModeChange={(mode) => {
+            setFocus(false);
+            setQueueMode(mode);
+          }}
+        />
+        </div>
+      )}
 
       <section className={styles.detailPane} aria-label={t("tickets.view.detailLabel")}>
         {selectedTicket ? (
@@ -1309,120 +1384,32 @@ function TicketWorkspace({
             onSnoozeChanged={onSnoozeChanged}
             pendingId={pendingId}
             onOpenContext={onOpenContext}
-            onBack={() => onSelect("")}
+            onBack={() => select("")}
+            focus={focus}
+            onToggleFocus={toggleFocus}
           />
         ) : (
           <EmptyDetail title={t("tickets.view.emptyDetail.title")} body={t("tickets.view.emptyDetail.body")} />
         )}
       </section>
 
-      <aside className={styles.contextPane} aria-label={t("tickets.view.contextLabel")}>
-        {selectedTicket ? (
-          <TicketContextPane ticket={selectedTicket} detail={detail} thread={thread} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
-        ) : (
-          <EmptyDetail title={t("tickets.view.emptyContext.title")} body={t("tickets.view.emptyContext.body")} />
-        )}
-      </aside>
-
+      {/* THE PANEL IS ALWAYS A SHEET, at every width: the ticket's facts on demand
+          rather than a third column the conversation pays for. */}
       {selectedTicket && (
         <div className={`${styles.contextSheet} ${contextOpen ? styles.contextSheetOpen : ""}`} aria-hidden={!contextOpen}>
           <button className={styles.sheetScrim} type="button" aria-label={t("tickets.view.closeContext")} onClick={onCloseContext} />
           <aside className={styles.sheetPanel} role="dialog" aria-modal="true" aria-labelledby="ticket-context-title">
             <header className={styles.sheetHeader}>
               <h2 id="ticket-context-title">{t("tickets.view.contextLabel")}</h2>
-              <Button size="sm" variant="tertiary" onClick={onCloseContext}>{t("tickets.view.close")}</Button>
+              <button type="button" className={styles.sheetClose} onClick={onCloseContext} aria-label={t("tickets.view.closeContext")} title={t("tickets.view.closeContext")}>
+                <CloseIcon size={16} />
+              </button>
             </header>
             <TicketContextPane ticket={selectedTicket} detail={detail} thread={thread} error={detailError} onOrderChanged={onOrderChanged} onCaseStateChanged={onCaseStateChanged} />
           </aside>
         </div>
       )}
     </div>
-  );
-}
-
-function TicketListPane({
-  view,
-  tickets,
-  selectedId,
-  onSelect,
-  notice = null,
-}: {
-  view: TicketView;
-  tickets: TicketListItem[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
-  notice?: string | null;
-}) {
-  const t = useT();
-  return (
-    <aside className={styles.listPane} aria-label={t("tickets.view.listLabel", { view: t(`tickets.view.tab.${view}`) })}>
-      <div className={styles.listHeader}>
-        <div>
-          <h2>{t(`tickets.view.tab.${view}`)}</h2>
-          <p>{t("tickets.panels.list.count", { count: tickets.length })}</p>
-        </div>
-        <span>
-          {view === "closed"
-            ? t("tickets.panels.list.recentlyClosed")
-            : view === "snoozed"
-              ? t("tickets.panels.list.soonestBack")
-              : view === "forwarded"
-                ? t("tickets.panels.list.latestForwarded")
-                : t("tickets.panels.list.priorityFirst")}
-        </span>
-      </div>
-
-      {tickets.length === 0 && notice ? (
-        <p className={styles.placeholder}>{notice}</p>
-      ) : tickets.length === 0 ? (
-        <CompactEmpty title={t("tickets.panels.list.emptyTitle")} body={t("tickets.panels.list.emptyBody")} />
-      ) : (
-        <ol className={styles.ticketList} role="listbox" aria-label={t("tickets.panels.list.ticketsLabel", { view: t(`tickets.view.tab.${view}`) })}>
-          {tickets.map((ticket) => (
-            <li key={ticket.id}>
-              <button
-                type="button"
-                role="option"
-                aria-selected={selectedId === ticket.id}
-                className={[
-                  styles.ticketItem,
-                  selectedId === ticket.id ? styles.ticketItemSelected : "",
-                  styles[`priority${ticket.priorityBand[0].toUpperCase()}${ticket.priorityBand.slice(1)}`],
-                ].filter(Boolean).join(" ")}
-                onClick={() => onSelect(ticket.id)}
-              >
-                <span className={styles.itemTop}>
-                  <span className={styles.priorityGroup}>
-                    <span className={styles.priorityScore}>{formatPriorityScore(ticket.priorityScore)}</span>
-                    <span className={styles.priorityWord}>{priorityLabel(ticket, t)}</span>
-                  </span>
-                  <time dateTime={ticket.lastMessageAt ?? undefined}>{ticketAge(ticket, t)}</time>
-                </span>
-                <span className={styles.itemSubject} title={ticketTitle(ticket, t)}>
-                  {ticketTitle(ticket, t)}
-                </span>
-                <span className={styles.itemRequester} title={`${requesterName(ticket, t)}${ticket.orderNumber ? ` - ${t("tickets.panels.orderNumber", { number: ticket.orderNumber })}` : ""}`}>
-                  {requesterName(ticket, t)}
-                  {ticket.orderNumber ? ` - ${t("tickets.panels.orderNumber", { number: ticket.orderNumber })}` : ""}
-                  {ticket.isVip && (
-                    <span className={styles.vipInline} title={t("tickets.panels.vipTitle")}>
-                      <CrownIcon size={12} />
-                      <span className={styles.srOnly}>{t("tickets.panels.vip")}</span>
-                    </span>
-                  )}
-                </span>
-                <span className={styles.itemMeta}>
-                  <span>{ticket.category ? t(`category.${ticket.category}`) : t("tickets.panels.uncategorised")}</span>
-                  <SnoozeChip ticket={ticket} />
-                  <ForwardingChip forwarding={ticket.forwarding} />
-                  <TicketLevelBadge ticket={ticket} />
-                </span>
-              </button>
-            </li>
-          ))}
-        </ol>
-      )}
-    </aside>
   );
 }
 
@@ -1440,6 +1427,8 @@ function TicketDetailWorkspace({
   pendingId,
   onOpenContext,
   onBack,
+  focus,
+  onToggleFocus,
 }: {
   ticket: TicketListItem;
   detail: TicketDetail | null;
@@ -1454,19 +1443,46 @@ function TicketDetailWorkspace({
   pendingId: string | null;
   onOpenContext: () => void;
   onBack: () => void;
+  focus: boolean;
+  onToggleFocus: () => void;
 }) {
   const t = useT();
-  const closed = isClosed(ticket);
   const frameRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLElement>(null);
   const [draftHeight, setDraftHeight] = useState<number | null>(readDraftHeight);
-  const [middleTab, setMiddleTab] = useState<"conversation" | "activity" | "linked">("conversation");
+  const [middleTab, setMiddleTab] = useState<"conversation" | "notes" | "activity" | "linked">("conversation");
+  const [composeMode, setComposeMode] = useState<ComposeMode>("reply");
+  // The team's notes on this ticket (04_ticket_numbers_and_notes.sql), read with the ticket.
+  const [notes, setNotes] = useState<TicketNote[] | null>(null);
+  const [notesError, setNotesError] = useState<string | null>(null);
   // The case's other threads, when this thread is one of several (61_cases.sql).
   const linkedThreads = thread?.case?.threads.filter((row) => !row.isThisThread) ?? [];
 
   useEffect(() => {
     setMiddleTab("conversation");
+    setComposeMode("reply");
+    setNotes(null);
+    setNotesError(null);
+    let live = true;
+    fetchTicketNotes(ticket.id)
+      .then((loaded) => {
+        if (live) setNotes(loaded);
+      })
+      .catch((cause) => {
+        if (live) setNotesError(knowledgeErrorMessage(cause));
+      });
+    return () => {
+      live = false;
+    };
   }, [ticket.id]);
+
+  function noteAdded(note: TicketNote) {
+    setNotes((current) => [...(current ?? []), note]);
+  }
+
+  function noteDeleted(noteId: string) {
+    setNotes((current) => (current ?? []).filter((note) => note.id !== noteId));
+  }
 
   // The panel may take everything except the header and a strip of conversation,
   // so the thread can be squeezed but never pushed off screen entirely.
@@ -1541,60 +1557,20 @@ function TicketDetailWorkspace({
 
   return (
     <div className={styles.detailFrame} ref={frameRef}>
-      {/* One block: title row, what has to happen next, and the tabs as its
-          bottom edge — three stacked bands read as three unrelated things. */}
       <header className={styles.ticketHeaderBlock} ref={headerRef}>
-      <div className={styles.ticketHeader}>
-        <button type="button" className={styles.mobileBack} onClick={onBack}>
-          <ChevronLeftIcon size={15} />
-          {t("tickets.panels.backToTickets")}
-        </button>
-        <div className={styles.ticketHeaderText}>
-          <h2 title={ticketTitle(ticket, t)}>{ticketTitle(ticket, t)}</h2>
-          <p>
-            {requesterName(ticket, t)}
-            {ticket.orderNumber ? ` - ${t("tickets.panels.orderNumber", { number: ticket.orderNumber })}` : ""}
-            {ticket.category ? ` - ${t(`category.${ticket.category}`)}` : ""}
-            {ticket.lastMessageAt ? ` - ${t("tickets.panels.lastActivity", { when: formatRelativeTime(ticket.lastMessageAt, t) })}` : ""}
-          </p>
-        </div>
-        <div className={styles.ticketHeaderActions}>
-          <TicketLevelBadge ticket={ticket} />
-          {ticket.responsibleTeam && (
-            <span className={styles.assignment}>{t("tickets.panels.team", { team: t(`team.${ticket.responsibleTeam}`) })}</span>
-          )}
-          <Button size="sm" variant="secondary" className={styles.contextButton} onClick={onOpenContext}>
-            {t("tickets.panels.context")}
-          </Button>
-          {!closed && (
-            <SnoozeControl
-              ticket={ticket}
-              delays={snoozeDelays}
-              disabled={pendingId !== null && pendingId !== ticket.id}
-              onChanged={onSnoozeChanged}
-            />
-          )}
-          <Button
-            size="sm"
-            variant={closed ? "secondary" : "danger"}
-            loading={pendingId === ticket.id}
-            disabled={pendingId !== null && pendingId !== ticket.id}
-            onClick={() => onChangeStatus(ticket, closed ? "open" : "closed")}
-          >
-            {closed ? t("tickets.panels.reopenTicket") : t("tickets.panels.closeTicket")}
-          </Button>
-        </div>
-      </div>
-
-      {ticket.snooze && !isClosed(ticket) && <SnoozeBanner snooze={ticket.snooze} />}
-      {ticket.forwarding && <ForwardingBanner forwarding={ticket.forwarding} />}
-
-      {detail?.results?.action && (
-        <p className={styles.nextAction} title={detail.results.action}>
-          <span>{t("tickets.panels.nextAction")}</span>
-          {detail.results.action}
-        </p>
-      )}
+      <TicketHeader
+        ticket={ticket}
+        detail={detail}
+        thread={thread}
+        snoozeDelays={snoozeDelays}
+        onSnoozeChanged={onSnoozeChanged}
+        onChangeStatus={onChangeStatus}
+        pendingId={pendingId}
+        onBack={onBack}
+        onOpenContext={onOpenContext}
+        focus={focus}
+        onToggleFocus={onToggleFocus}
+      />
 
       <div className={styles.middleTabs} role="tablist" aria-label={t("tickets.panels.historyLabel")}>
         <button
@@ -1606,6 +1582,16 @@ function TicketDetailWorkspace({
         >
           {t("tickets.panels.conversation")}
           {thread && <span>{thread.messages.length}</span>}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={middleTab === "notes"}
+          className={middleTab === "notes" ? styles.middleTabActive : undefined}
+          onClick={() => setMiddleTab("notes")}
+        >
+          {t("tickets.panels.notes.tab")}
+          {notes && <span>{notes.length}</span>}
         </button>
         <button
           type="button"
@@ -1634,7 +1620,22 @@ function TicketDetailWorkspace({
 
       <div className={styles.conversationArea}>
         {middleTab === "conversation" ? (
-          <ConversationThread thread={thread} error={threadError} />
+          <ConversationThread
+            ticket={ticket}
+            thread={thread}
+            error={threadError}
+            detail={detail}
+            notes={notes ?? []}
+            onDeleteNote={noteDeleted}
+          />
+        ) : middleTab === "notes" ? (
+          <NotesList
+            ticket={ticket}
+            notes={notes}
+            error={notesError}
+            onDelete={noteDeleted}
+            onAdd={() => setComposeMode("note")}
+          />
         ) : middleTab === "linked" && thread && linkedThreads.length > 0 ? (
           <LinkedThreads threads={linkedThreads} parcels={thread.parcels} />
         ) : (
@@ -1666,6 +1667,9 @@ function TicketDetailWorkspace({
         onManualReply={onManualReply}
         detail={detail}
         detailError={detailError}
+        mode={composeMode}
+        onModeChange={setComposeMode}
+        onNoteAdded={noteAdded}
       />
     </div>
   );
@@ -1722,47 +1726,325 @@ function LinkedThreads({
   );
 }
 
-function ConversationThread({ thread, error }: { thread: TicketThread | null; error: string | null }) {
+const SHOW_CASE_EVENTS_KEY = "tickets.showCaseEvents";
+
+function readShowCaseEvents(): boolean {
+  try {
+    return window.localStorage.getItem(SHOW_CASE_EVENTS_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
+type TimelineItem =
+  | { type: "message"; id: string; at: string | null; message: TicketMessage }
+  | { type: "note"; id: string; at: string | null; note: TicketNote }
+  | { type: "event"; id: string; at: string | null; event: CaseEvent };
+
+type CaseEventKind = "investigation" | "draft" | "override" | "snooze" | "wake" | "obligation";
+
+type CaseEvent = { kind: CaseEventKind; title: string; detail: string | null };
+
+const CASE_EVENT_ICONS: Record<CaseEventKind, (props: { size?: number }) => ReactNode> = {
+  investigation: SparkleIcon,
+  draft: PencilIcon,
+  override: PencilIcon,
+  snooze: ClockIcon,
+  wake: ClockIcon,
+  obligation: CheckCircleIcon,
+};
+
+/**
+ * THE DOSSIER, BETWEEN THE MESSAGES. What the agent and the team did on the
+ * case, at the time they did it, so the thread reads as one story instead of
+ * leaving it in the Activity tab. Only the moments that change what a reviewer
+ * thinks: the case analysed, a draft written, a person's correction, a snooze
+ * and its wake, a check opened. The agent's individual lookups stay in Activity.
+ */
+function caseEvents(ticket: TicketListItem, detail: TicketDetail | null, thread: TicketThread, t: Translate): TimelineItem[] {
+  const items: TimelineItem[] = [];
+  const push = (id: string, at: string | null | undefined, event: CaseEvent) => {
+    if (at) items.push({ type: "event", id, at, event });
+  };
+
+  for (const event of detail?.activity ?? []) {
+    if (event.kind !== "investigation") continue;
+    const verdictKnown = event.verdict && ["answerable", "needs_customer_input", "needs_human"].includes(event.verdict);
+    push(`event-${event.id}`, event.at, {
+      kind: "investigation",
+      title: t("tickets.panels.activityFeed.analysisDone"),
+      detail: verdictKnown ? t(`tickets.panels.activityFeed.verdict.${event.verdict}`) : event.detail,
+    });
+  }
+  if (thread.draft) {
+    push(`event-draft-${thread.draft.id}`, thread.draft.draftedAt, {
+      kind: "draft",
+      title: t("tickets.panels.activityFeed.draftGenerated"),
+      detail: draftStatusText(thread.draft, t),
+    });
+  }
+  for (const [field, override] of Object.entries(ticket.overrides ?? {})) {
+    push(`event-override-${field}`, override?.setAt, {
+      kind: "override",
+      title: t("tickets.panels.timeline.override", { field: t(`tickets.panels.timeline.field.${field}`) }),
+      detail: null,
+    });
+  }
+  if (ticket.snooze) {
+    push(`event-snooze-${ticket.snooze.id}`, ticket.snooze.snoozedAt, {
+      kind: "snooze",
+      title: t("tickets.panels.timeline.snoozed"),
+      detail: ticket.snooze.reason,
+    });
+  }
+  if (ticket.lastWake) {
+    push("event-wake", ticket.lastWake.at, { kind: "wake", title: t("tickets.panels.timeline.woke"), detail: null });
+  }
+  for (const obligation of detail?.caseState?.obligations ?? []) {
+    if (obligation.status === "queued") continue;
+    push(`event-obligation-${obligation.id}`, obligation.openedAt, {
+      kind: "obligation",
+      title: t("tickets.panels.timeline.checkOpened"),
+      detail: needText(t, obligation.need, obligation.needLabel),
+    });
+  }
+  return items;
+}
+
+function timeOf(item: { at: string | null }): number {
+  return Date.parse(item.at ?? "") || 0;
+}
+
+function ConversationThread({
+  ticket,
+  thread,
+  error,
+  detail,
+  notes,
+  onDeleteNote,
+}: {
+  ticket: TicketListItem;
+  thread: TicketThread | null;
+  error: string | null;
+  detail: TicketDetail | null;
+  notes: TicketNote[];
+  onDeleteNote: (noteId: string) => void;
+}) {
   const t = useT();
   const locale = useLocale();
   const latestRef = useRef<HTMLLIElement>(null);
+  const [showEarlier, setShowEarlier] = useState(false);
+  const [showEvents, setShowEvents] = useState(true);
+
+  useEffect(() => {
+    setShowEvents(readShowCaseEvents());
+  }, []);
+
+  useEffect(() => {
+    setShowEarlier(false);
+  }, [ticket.id]);
+
   if (error) {
     return <p className={styles.inlineError} role="alert">{error}</p>;
   }
   if (!thread) {
     return <ThreadSkeleton />;
   }
-  if (thread.messages.length === 0) {
+  if (thread.messages.length === 0 && notes.length === 0) {
     return <CompactEmpty title={t("tickets.panels.thread.emptyTitle")} body={t("tickets.panels.thread.emptyBody")} />;
   }
+
+  const events = caseEvents(ticket, detail, thread, t);
+  const items: TimelineItem[] = [
+    ...thread.messages.map((message) => ({ type: "message" as const, id: `message-${message.id}`, at: message.at, message })),
+    ...notes.map((note) => ({ type: "note" as const, id: `note-${note.id}`, at: note.createdAt, note })),
+    ...(showEvents ? events : []),
+  ].sort((a, b) => timeOf(a) - timeOf(b));
+
+  // EARLIER MESSAGES FOLD AWAY. What is read first is the latest message from
+  // outside and everything after it; the rest is one click up.
+  let latestInbound = -1;
+  thread.messages.forEach((message, index) => {
+    if (message.direction === "inbound") latestInbound = index;
+  });
+  const cutoff = latestInbound > 0 ? timeOf(thread.messages[latestInbound]) : null;
+  const earlier = cutoff === null ? [] : items.filter((item) => timeOf(item) < cutoff);
+  const earlierMessages = earlier.filter((item) => item.type === "message").length;
+  const shown = showEarlier || earlierMessages === 0 ? items : items.filter((item) => !earlier.includes(item));
+  const lastMessageId = thread.messages.length > 0 ? `message-${thread.messages[thread.messages.length - 1].id}` : null;
 
   return (
     <section className={styles.threadSection} aria-label={t("tickets.panels.thread.label")}>
       <div className={styles.sectionHead}>
         <h3>{t("tickets.panels.conversation")}</h3>
-        <button type="button" className={styles.jumpLatest} onClick={() => latestRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}>
-          {t("tickets.panels.thread.jumpLatest")}
-        </button>
+        <div className={styles.sectionHeadActions}>
+          {events.length > 0 && (
+            <label className={styles.eventsToggle}>
+              <input
+                type="checkbox"
+                checked={showEvents}
+                onChange={(event) => {
+                  setShowEvents(event.target.checked);
+                  try {
+                    window.localStorage.setItem(SHOW_CASE_EVENTS_KEY, event.target.checked ? "1" : "0");
+                  } catch {
+                    // Storage blocked: the choice lasts until the page is left.
+                  }
+                }}
+              />
+              {t("tickets.panels.timeline.showEvents")}
+            </label>
+          )}
+          <button type="button" className={styles.jumpLatest} onClick={() => latestRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })}>
+            {t("tickets.panels.thread.jumpLatest")}
+          </button>
+        </div>
       </div>
+      {earlierMessages > 0 && (
+        <button type="button" className={styles.earlierToggle} aria-expanded={showEarlier} onClick={() => setShowEarlier((open) => !open)}>
+          {showEarlier ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+          {showEarlier
+            ? t("tickets.panels.timeline.hideEarlier", { count: earlierMessages })
+            : t("tickets.panels.timeline.showEarlier", { count: earlierMessages })}
+        </button>
+      )}
       <div className={styles.dateGroups}>
-        {groupMessagesByDate(thread.messages, t, locale).map((group) => (
+        {groupByDate(shown, t, locale).map((group) => (
           <section className={styles.dateGroup} key={group.key} aria-label={group.label}>
             <div className={styles.dateDivider}>
               <time dateTime={group.key}>{group.label}</time>
             </div>
             <ol className={styles.messages}>
-              {group.messages.map((message, index) => (
-                <MessageBlock
-                  key={message.id}
-                  message={message}
-                  parcels={thread.parcels}
-                  itemRef={group.isLast && index === group.messages.length - 1 ? latestRef : undefined}
-                />
-              ))}
+              {group.items.map((item) =>
+                item.type === "message" ? (
+                  <MessageBlock
+                    key={item.id}
+                    message={item.message}
+                    parcels={thread.parcels}
+                    itemRef={item.id === lastMessageId ? latestRef : undefined}
+                  />
+                ) : item.type === "note" ? (
+                  <NoteBlock key={item.id} ticketId={ticket.id} note={item.note} onDeleted={onDeleteNote} />
+                ) : (
+                  <CaseEventRow key={item.id} at={item.at} event={item.event} />
+                )
+              )}
             </ol>
           </section>
         ))}
       </div>
+    </section>
+  );
+}
+
+function CaseEventRow({ at, event }: { at: string | null; event: CaseEvent }) {
+  const locale = useLocale();
+  const Icon = CASE_EVENT_ICONS[event.kind];
+  return (
+    <li className={`${styles.caseEvent} ${styles[`caseEvent_${event.kind}`]}`}>
+      <span className={styles.caseEventIcon}>
+        <Icon size={13} />
+      </span>
+      <span className={styles.caseEventText}>
+        <strong>{event.title}</strong>
+        {event.detail && <span> · {event.detail}</span>}
+      </span>
+      {at && <time dateTime={at}>{formatExactTime(at, locale)}</time>}
+    </li>
+  );
+}
+
+/** A note in the timeline: amber, locked, never mistaken for mail. Only its writer may delete it. */
+function NoteBlock({ ticketId, note, onDeleted }: { ticketId: string; note: TicketNote; onDeleted: (noteId: string) => void }) {
+  const t = useT();
+  const locale = useLocale();
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  return (
+    <li className={`${styles.message} ${styles.noteMessage}`}>
+      <span className={`${styles.timelineAvatar} ${styles.noteAvatar}`}>
+        <LockIcon size={14} />
+      </span>
+      <article className={`${styles.messageContent} ${styles.noteContent}`}>
+        <header className={styles.messageHead}>
+          <div className={styles.senderLine}>
+            <span className={styles.sender}>{note.authorName ?? t("tickets.panels.notes.someone")}</span>
+            <span className={styles.noteBadge}>
+              <LockIcon size={11} />
+              {t("tickets.panels.notes.private")}
+            </span>
+          </div>
+          <span className={styles.noteHeadEnd}>
+            {note.isMine && (
+              <button
+                type="button"
+                className={styles.noteDelete}
+                disabled={deleting}
+                onClick={async () => {
+                  setDeleting(true);
+                  setDeleteError(null);
+                  try {
+                    await deleteTicketNote(ticketId, note.id);
+                    onDeleted(note.id);
+                  } catch (cause) {
+                    setDeleteError(knowledgeErrorMessage(cause));
+                    setDeleting(false);
+                  }
+                }}
+              >
+                {t("tickets.panels.notes.delete")}
+              </button>
+            )}
+            <time className={styles.when} dateTime={note.createdAt}>{formatEventTime(note.createdAt, locale)}</time>
+          </span>
+        </header>
+        <p className={styles.noteBody}>{note.body}</p>
+        {deleteError && <p className={styles.inlineError} role="alert">{deleteError}</p>}
+      </article>
+    </li>
+  );
+}
+
+/** The Notes tab: the team's notes alone, oldest first, and the way to add one. */
+function NotesList({
+  ticket,
+  notes,
+  error,
+  onDelete,
+  onAdd,
+}: {
+  ticket: TicketListItem;
+  notes: TicketNote[] | null;
+  error: string | null;
+  onDelete: (noteId: string) => void;
+  onAdd: () => void;
+}) {
+  const t = useT();
+  if (error) return <p className={styles.inlineError} role="alert">{error}</p>;
+  if (!notes) return <ThreadSkeleton />;
+  return (
+    <section className={styles.threadSection} aria-label={t("tickets.panels.notes.tab")}>
+      <div className={styles.sectionHead}>
+        <div>
+          <h3>{t("tickets.panels.notes.tab")}</h3>
+          <span>{t("tickets.panels.notes.hint")}</span>
+        </div>
+        <Button size="sm" variant="secondary" leadingIcon={<PlusIcon size={14} />} onClick={onAdd}>
+          {t("tickets.panels.notes.add")}
+        </Button>
+      </div>
+      {notes.length === 0 ? (
+        <div className={styles.notesEmpty}>
+          <LockIcon size={18} />
+          <p>{t("tickets.panels.notes.empty")}</p>
+        </div>
+      ) : (
+        <ol className={styles.messages}>
+          {notes.map((note) => (
+            <NoteBlock key={note.id} ticketId={ticket.id} note={note} onDeleted={onDelete} />
+          ))}
+        </ol>
+      )}
     </section>
   );
 }
@@ -1958,6 +2240,8 @@ function messageSnippet(message: TicketMessage, t: Translate): string | null {
   return `${text.length > 140 ? `${text.slice(0, 140).trimEnd()}…` : text}${attachment}`;
 }
 
+type ComposeMode = "reply" | "note";
+
 function DraftResponsePanel({
   height,
   ticket,
@@ -1967,6 +2251,9 @@ function DraftResponsePanel({
   onManualReply,
   detail,
   detailError,
+  mode,
+  onModeChange,
+  onNoteAdded,
 }: {
   height: number | null;
   ticket: TicketListItem;
@@ -1976,6 +2263,9 @@ function DraftResponsePanel({
   onManualReply: ManualReplyHandler;
   detail: TicketDetail | null;
   detailError: string | null;
+  mode: ComposeMode;
+  onModeChange: (mode: ComposeMode) => void;
+  onNoteAdded: (note: TicketNote) => void;
 }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
@@ -2011,190 +2301,317 @@ function DraftResponsePanel({
     }
   }
 
+  const live = draft && !replyDelivered(draft) && !awaitingDelivery(draft) && draft.status !== "stale";
+  // WHAT STOPS OR CHANGES THE SEND stays in view, one line each. Everything else
+  // worth a look folds into one amber line that opens on demand.
+  const blocking: string[] = draft
+    ? [
+        ...(draft.status === "stale"
+          ? [draft.staleReason === "superseded_by_outbound" ? t("tickets.panels.draft.staleSent") : t("tickets.panels.draft.staleMoved")]
+          : []),
+        ...(draft.outbound?.state === "cancelled" || draft.outbound?.state === "failed" ? [outboundLine(draft.outbound, t) ?? ""] : []),
+        ...(draft.status !== "stale" && !draft.checksPassed
+          ? [
+              `${t("tickets.panels.draft.notSendable", { count: draft.failedChecks.length })} ${
+                draft.failedChecks.join("; ") || t("tickets.panels.draft.seeRecord")
+              }.`,
+            ]
+          : []),
+        ...(draft.status !== "stale" ? autoSendHoldLines(draft, t) : []),
+      ].filter(Boolean)
+    : [];
+  const toCheck: string[] = [
+    ...(thread?.duplicateOf ? [t("tickets.panels.draft.duplicate")] : []),
+    ...(live && detail?.results?.action ? [t("tickets.panels.draft.beforeSending", { action: detail.results.action })] : []),
+    ...(draft && draft.status !== "stale" ? (draft.warnings ?? []).map((detail) => t("tickets.panels.draft.warning", { detail })) : []),
+  ];
+  const info: string[] = [
+    ...(thread?.case && !thread.duplicateOf
+      ? [
+          thread.reply.replyElsewhere
+            ? t("tickets.panels.draft.caseElsewhere", { n: thread.case.threads.length, subject: thread.reply.replyElsewhere.subject ?? "—" })
+            : t("tickets.panels.draft.caseThreads", { n: thread.case.threads.length }),
+        ]
+      : []),
+    ...(thread?.relatedTo && !thread.case && !thread.duplicateOf ? [t("tickets.panels.draft.related")] : []),
+    ...(draft && !(draft.outbound?.state === "cancelled" || draft.outbound?.state === "failed") && outboundLine(draft.outbound, t)
+      ? [outboundLine(draft.outbound, t) as string]
+      : []),
+  ];
+
+  const to = thread ? contactingAddress(thread) : null;
+  const ticketLanguage = ticket.language;
+  const draftLanguage = draft?.language ?? null;
+  const language = draftLanguage ?? ticketLanguage;
+  const languageMismatch = Boolean(draftLanguage && ticketLanguage && draftLanguage !== ticketLanguage);
+
   return (
     <section
-      className={`${styles.draftPanel} ${height !== null ? styles.draftPanelSized : ""}`}
+      className={`${styles.draftPanel} ${height !== null ? styles.draftPanelSized : ""} ${mode === "note" ? styles.draftPanelNote : ""}`}
       style={height !== null ? { height, maxHeight: "none" } : undefined}
-      aria-label={t("tickets.panels.draft.aiDraft")}
+      aria-label={mode === "note" ? t("tickets.panels.notes.compose") : t("tickets.panels.draft.aiDraft")}
     >
-      <div className={styles.draftHead}>
-        <div>
-          <h3>{t("tickets.panels.draft.replyTo", { name: requesterName(ticket, t) })}</h3>
-          {draft && !replyDelivered(draft) && <p>{draftStatusText(draft, t)}</p>}
+      <div className={styles.composeTop}>
+        <div className={styles.modeSwitch} role="tablist" aria-label={t("tickets.panels.compose.modeLabel")}>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "reply"}
+            className={mode === "reply" ? styles.modeActive : undefined}
+            onClick={() => onModeChange("reply")}
+          >
+            <MailInIcon size={14} />
+            {t("tickets.panels.compose.replyMode")}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "note"}
+            className={mode === "note" ? styles.modeNoteActive : undefined}
+            onClick={() => onModeChange("note")}
+          >
+            <LockIcon size={14} />
+            {t("tickets.panels.compose.noteMode")}
+          </button>
         </div>
-        {draft && !replyDelivered(draft) && (
+        {mode === "reply" && draft && !replyDelivered(draft) && (
           <div className={styles.draftLabels}>
             <span className={styles.aiDraftLabel}>{t("tickets.panels.draft.aiDraft")}</span>
-            <span className={styles.draftStatus}>{t(`tickets.panels.draft.status.${draft.status}`)}</span>
+            <span className={styles.draftStatus} title={draftStatusText(draft, t)}>
+              {t(`tickets.panels.draft.status.${draft.status}`)}
+            </span>
           </div>
+        )}
+        {mode === "note" && (
+          <span className={styles.composeHint}>
+            <LockIcon size={12} />
+            {t("tickets.panels.notes.visibility")}
+          </span>
         )}
       </div>
 
-      {thread?.duplicateOf && (
-        <p className={styles.duplicate} role="alert">
-          {t("tickets.panels.draft.duplicate")}
-        </p>
-      )}
-
-      {/* A CASE OF SEVERAL THREADS (61_cases.sql) replaces the related line:
-          it says the agent read every thread, and where the reply goes. */}
-      {thread?.case && !thread.duplicateOf && (
-        <p className={styles.related}>
-          {thread.reply.replyElsewhere
-            ? t("tickets.panels.draft.caseElsewhere", { n: thread.case.threads.length, subject: thread.reply.replyElsewhere.subject ?? "—" })
-            : t("tickets.panels.draft.caseThreads", { n: thread.case.threads.length })}
-        </p>
-      )}
-      {thread?.relatedTo && !thread.case && !thread.duplicateOf && (
-        <p className={styles.related}>{t("tickets.panels.draft.related")}</p>
-      )}
-
-      {error ? (
-        <p className={styles.inlineError} role="alert">{error}</p>
-      ) : !thread ? (
-        <DraftSkeleton />
-      ) : draft && replyDelivered(draft) ? (
-        // IN THE MAILBOX NOW. The approved reply is Outlook's from here (in
-        // Drafts, or sent), so it is no longer shown as a draft: one line says
-        // where it went, and « Create draft » below lets a person add to it.
-        <p className={styles.related} role="status">{deliveredLine(draft, t)}</p>
-      ) : draft ? (
-        <div className={awaitingDelivery(draft) ? styles.draftAwaiting : styles.draftLive} aria-busy={awaitingDelivery(draft) || undefined}>
-          {detail?.results?.action && !awaitingDelivery(draft) && (
-            <div className={styles.requiredAction}>
-              <span>{t("tickets.panels.draft.requiredBeforeSending")}</span>
-              <p><span aria-hidden="true">●</span> {detail.results.action}</p>
-            </div>
-          )}
-
-          {draft.status === "stale" && (
-            <p className={styles.blocked} role="status">
-              {draft.staleReason === "superseded_by_outbound"
-                ? t("tickets.panels.draft.staleSent")
-                : t("tickets.panels.draft.staleMoved")}
-            </p>
-          )}
-
-          {outboundLine(draft.outbound, t) && (
-            <p className={draft.outbound?.state === "cancelled" || draft.outbound?.state === "failed" ? styles.blocked : styles.related} role="status">
-              {outboundLine(draft.outbound, t)}
-            </p>
-          )}
-
-          {draft.status !== "stale" && !draft.checksPassed && (
-            <p className={styles.blocked} role="alert">
-              {t("tickets.panels.draft.notSendable", { count: draft.failedChecks.length })}{" "}
-              {draft.failedChecks.join("; ") || t("tickets.panels.draft.seeRecord")}.
-            </p>
-          )}
-
-          {draft.status !== "stale" &&
-            (draft.warnings ?? []).map((detail) => (
-              <p key={detail} className={styles.caution} role="status">
-                {t("tickets.panels.draft.warning", { detail })}
-              </p>
-            ))}
-
-          {draft.status !== "stale" &&
-            autoSendHoldLines(draft, t).map((line) => (
-              <p key={line} className={styles.blocked} role="status">
-                {line}
-              </p>
-            ))}
-
-          {editing ? (
-            // The draft's [[marker]] opens as the real link, so a reviewer
-            // edits what the customer will see rather than a placeholder.
-            <ReplyEditor
-              key={draft.id}
-              initialHtml={edited}
-              onChange={setEdited}
-              label={t("tickets.panels.draft.editLabel")}
-            />
-          ) : (
-            <pre className={styles.draftBody}>
-              <TrackingText text={draft.body} parcels={thread.parcels} link={draft.replyLink} />
-            </pre>
-          )}
-
-          {draft.approvedBody && (
-            <div className={styles.reviewerVersion}>
-              <h4>{t("tickets.panels.draft.reviewerVersion")}</h4>
-              {draft.approvedBodyHtml ? (
-                <ReplyHtmlView html={draft.approvedBodyHtml} />
-              ) : (
-                <pre className={styles.draftBody}>
-                  <TrackingText text={draft.approvedBody} parcels={thread.parcels} link={draft.replyLink} />
-                </pre>
-              )}
-            </div>
-          )}
-
-          <div className={styles.draftFoot}>
-            <div className={styles.draftActions}>
-              {draft.status === "stale" || replyInFlight(draft) || awaitingDelivery(draft) ? null : editing ? (
-                <>
-                  <Button size="sm" variant="primary" loading={saving === "edited"} disabled={saving !== null || replyHtmlIsEmpty(edited)} onClick={() => decide("edited")}>
-                    {decisionLabel(draft, "save", t)}
-                  </Button>
-                  <Button size="sm" variant="secondary" disabled={saving !== null} onClick={() => setEditing(false)}>
-                    {t("tickets.panels.draft.cancel")}
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <span className={styles.draftActionsStart}>
-                    <Button
-                      size="sm"
-                      variant="secondary"
-                      disabled={saving !== null}
-                      onClick={() => {
-                        setEdited(draft.approvedBodyHtml ?? textToReplyHtml(draft.approvedBody ?? draft.body, draft.replyLink));
-                        setEditing(true);
-                      }}
-                    >
-                      {t("tickets.panels.draft.edit")}
-                    </Button>
-                  </span>
-                  <span className={styles.draftActionsEnd}>
-                    <Button size="sm" variant="secondary" loading={saving === "rejected"} disabled={saving !== null} onClick={() => decide("rejected")}>
-                      {t("tickets.panels.draft.reject")}
-                    </Button>
-                    <Button size="sm" variant="primary" loading={saving === "approved"} disabled={saving !== null} onClick={() => decide("approved")}>
-                      {decisionLabel(draft, "approve", t)}
-                    </Button>
-                  </span>
-                </>
-              )}
-            </div>
-            {draft.draftedAt && (
-              <p className={styles.stamp}>
-                {t("tickets.panels.draft.drafted")} <time dateTime={draft.draftedAt}>{formatRelativeTime(draft.draftedAt, t)}</time>
-              </p>
+      {mode === "note" ? (
+        <NoteComposer ticketId={ticket.id} onAdded={onNoteAdded} />
+      ) : (
+        <>
+          <div className={styles.addressLine}>
+            <span>
+              {t("tickets.panels.compose.to")} <strong>{to ?? requesterName(ticket, t)}</strong>
+            </span>
+            {language && (
+              <span
+                className={`${styles.languageTag} ${languageMismatch ? styles.languageMismatch : ""}`}
+                title={
+                  languageMismatch
+                    ? t("tickets.panels.compose.languageMismatch", {
+                        draft: t(`tickets.panels.lang.${draftLanguage}`),
+                        customer: t(`tickets.panels.lang.${ticketLanguage}`),
+                      })
+                    : t("tickets.panels.compose.languageHint")
+                }
+              >
+                <GlobeIcon size={12} />
+                {t(`tickets.panels.lang.${language}`)}
+              </span>
             )}
           </div>
 
-          <DraftExplanation detail={detail} draft={draft} />
+          {blocking.map((line) => (
+            <p key={line} className={styles.alertRow} role="alert" title={line}>
+              <AlertIcon size={13} />
+              <span>{line}</span>
+            </p>
+          ))}
 
-          {decideError && <p className={styles.inlineError} role="alert">{decideError}</p>}
-        </div>
-      ) : (
-        <p className={styles.placeholder}>
-          {t("tickets.panels.draft.none")}
-        </p>
-      )}
-
-      {thread && !error && (
-        <>
-          <ManualReplyStatus replies={thread.reply.manual} />
-          {canComposeReply(draft) && (
-            <ReplyComposer ticket={ticket} thread={thread} onSent={onManualReply} />
+          {(toCheck.length > 0 || info.length > 0) && (
+            <details className={`${styles.checkSummary} ${toCheck.length === 0 ? styles.checkSummaryInfo : ""}`}>
+              <summary>
+                {toCheck.length > 0 ? <AlertIcon size={13} /> : <CheckCircleIcon size={13} />}
+                {toCheck.length > 0
+                  ? t("tickets.panels.draft.toCheck", { count: toCheck.length })
+                  : t("tickets.panels.draft.notes", { count: info.length })}
+                {toCheck.length > 0 && info.length > 0 && <span className={styles.checkSummaryExtra}>{t("tickets.panels.draft.notes", { count: info.length })}</span>}
+                <ChevronDownIcon size={13} />
+              </summary>
+              <ul>
+                {toCheck.map((line) => (
+                  <li key={line} className={styles.checkItem}>{line}</li>
+                ))}
+                {info.map((line) => (
+                  <li key={line} className={styles.infoItem}>{line}</li>
+                ))}
+              </ul>
+            </details>
           )}
+
+          {error ? (
+            <p className={styles.inlineError} role="alert">{error}</p>
+          ) : !thread ? (
+            <DraftSkeleton />
+          ) : draft && replyDelivered(draft) ? (
+            // IN THE MAILBOX NOW. The approved reply is Outlook's from here (in
+            // Drafts, or sent), so it is no longer shown as a draft: one line says
+            // where it went, and « Create draft » below lets a person add to it.
+            <p className={styles.related} role="status">{deliveredLine(draft, t)}</p>
+          ) : draft ? (
+            <div className={awaitingDelivery(draft) ? styles.draftAwaiting : styles.draftLive} aria-busy={awaitingDelivery(draft) || undefined}>
+              {editing ? (
+                // The draft's [[marker]] opens as the real link, so a reviewer
+                // edits what the customer will see rather than a placeholder.
+                <ReplyEditor
+                  key={draft.id}
+                  initialHtml={edited}
+                  onChange={setEdited}
+                  label={t("tickets.panels.draft.editLabel")}
+                />
+              ) : (
+                <pre className={styles.draftBody}>
+                  <TrackingText text={draft.body} parcels={thread.parcels} link={draft.replyLink} />
+                </pre>
+              )}
+
+              {draft.approvedBody && (
+                <div className={styles.reviewerVersion}>
+                  <h4>{t("tickets.panels.draft.reviewerVersion")}</h4>
+                  {draft.approvedBodyHtml ? (
+                    <ReplyHtmlView html={draft.approvedBodyHtml} />
+                  ) : (
+                    <pre className={styles.draftBody}>
+                      <TrackingText text={draft.approvedBody} parcels={thread.parcels} link={draft.replyLink} />
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              <div className={styles.draftFoot}>
+                <div className={styles.draftActions}>
+                  {draft.status === "stale" || replyInFlight(draft) || awaitingDelivery(draft) ? null : editing ? (
+                    <>
+                      <Button size="sm" variant="primary" loading={saving === "edited"} disabled={saving !== null || replyHtmlIsEmpty(edited)} onClick={() => decide("edited")}>
+                        {decisionLabel(draft, "save", t)}
+                      </Button>
+                      <Button size="sm" variant="secondary" disabled={saving !== null} onClick={() => setEditing(false)}>
+                        {t("tickets.panels.draft.cancel")}
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <span className={styles.draftActionsStart}>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          disabled={saving !== null}
+                          onClick={() => {
+                            setEdited(draft.approvedBodyHtml ?? textToReplyHtml(draft.approvedBody ?? draft.body, draft.replyLink));
+                            setEditing(true);
+                          }}
+                        >
+                          {t("tickets.panels.draft.edit")}
+                        </Button>
+                      </span>
+                      <span className={styles.draftActionsEnd}>
+                        <Button size="sm" variant="secondary" loading={saving === "rejected"} disabled={saving !== null} onClick={() => decide("rejected")}>
+                          {t("tickets.panels.draft.reject")}
+                        </Button>
+                        <Button size="sm" variant="primary" loading={saving === "approved"} disabled={saving !== null} onClick={() => decide("approved")}>
+                          {decisionLabel(draft, "approve", t)}
+                        </Button>
+                      </span>
+                    </>
+                  )}
+                </div>
+                {draft.draftedAt && (
+                  <p className={styles.stamp}>
+                    {t("tickets.panels.draft.drafted")} <time dateTime={draft.draftedAt}>{formatRelativeTime(draft.draftedAt, t)}</time>
+                  </p>
+                )}
+              </div>
+
+              <DraftExplanation detail={detail} draft={draft} />
+
+              {decideError && <p className={styles.inlineError} role="alert">{decideError}</p>}
+            </div>
+          ) : (
+            <p className={styles.placeholder}>
+              {t("tickets.panels.draft.none")}
+            </p>
+          )}
+
+          {thread && !error && (
+            <>
+              <ManualReplyStatus replies={thread.reply.manual} />
+              {canComposeReply(draft) && (
+                <ReplyComposer ticket={ticket} thread={thread} onSent={onManualReply} />
+              )}
+            </>
+          )}
+
+          {detailError && <p className={styles.inlineError} role="alert">{detailError}</p>}
         </>
       )}
-
-      {detailError && <p className={styles.inlineError} role="alert">{detailError}</p>}
     </section>
+  );
+}
+
+/**
+ * « Internal note »: a few lines for the team, saved at once and shown in the
+ * timeline. Never sent, never read by the agent. The text survives switching
+ * back to the reply and back again, not leaving the ticket.
+ */
+function NoteComposer({ ticketId, onAdded }: { ticketId: string; onAdded: (note: TicketNote) => void }) {
+  const t = useT();
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setText("");
+    setSaveError(null);
+  }, [ticketId]);
+
+  async function save() {
+    if (!text.trim()) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      onAdded(await addTicketNote(ticketId, text));
+      setText("");
+    } catch (cause) {
+      setSaveError(knowledgeErrorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className={styles.noteComposer}>
+      <textarea
+        className={styles.noteInput}
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+            event.preventDefault();
+            void save();
+          }
+        }}
+        placeholder={t("tickets.panels.notes.placeholder")}
+        aria-label={t("tickets.panels.notes.compose")}
+        maxLength={5000}
+        disabled={saving}
+      />
+      <div className={styles.draftActions}>
+        <span className={styles.draftActionsStart}>
+          <span className={styles.stamp}>{t("tickets.panels.notes.shortcut")}</span>
+        </span>
+        <span className={styles.draftActionsEnd}>
+          <Button size="sm" variant="primary" leadingIcon={<PlusIcon size={14} />} loading={saving} disabled={saving || !text.trim()} onClick={save}>
+            {t("tickets.panels.notes.add")}
+          </Button>
+        </span>
+      </div>
+      {saveError && <p className={styles.inlineError} role="alert">{saveError}</p>}
+    </div>
   );
 }
 
@@ -2634,7 +3051,7 @@ function TicketContextPane({
               t("tickets.panels.row.priority"),
               field(
                 "priority",
-                `${formatPriorityScore(ticket.priorityScore)} (${priorityLabel(ticket, t)})`,
+                priorityLabel(ticket, t),
                 PRIORITY_BANDS.map((band) => ({ value: band, label: t(`tickets.view.priority.${band}`) })),
                 ticket.priorityBand
               ),
@@ -3394,17 +3811,6 @@ function InvestigationBlock({ detail }: { detail: TicketDetail }) {
   );
 }
 
-function TicketLevelBadge({ ticket }: { ticket: TicketListItem }) {
-  const t = useT();
-  const status = t(`status.${ticket.status}`);
-  return (
-    <span className={`${styles.levelBadge} ${statusClass(ticket)}`}>
-      {ticket.level ? `L${ticket.level} ${t(`levelMeaning.${ticket.level}`)}` : t("tickets.panels.uncategorised")}
-      {ticket.status !== "open" ? ` - ${status}` : ""}
-    </span>
-  );
-}
-
 function MessageBlock({
   message,
   parcels,
@@ -3418,11 +3824,13 @@ function MessageBlock({
   const locale = useLocale();
   const role = t(`tickets.panels.role.${message.role}`);
   const route = message.routeTo.length > 0 ? `${role} → ${message.routeTo.join(" + ")}` : null;
-  const entities = messageEntities(message, parcels);
   const address = message.fromEmail?.trim() || undefined;
 
   return (
-    <li className={styles.message} ref={itemRef}>
+    <li
+      className={`${styles.message} ${message.direction === "outbound" ? styles.messageOurs : ""} ${message.role === "internal" ? styles.messageInternal : ""}`}
+      ref={itemRef}
+    >
       <span className={`${styles.timelineAvatar} ${styles[`role_${message.role}`]}`} data-email={address}>
         <span aria-hidden="true">{senderInitials(message, t)}</span>
       </span>
@@ -3446,20 +3854,6 @@ function MessageBlock({
           <p className={styles.forwardLabel}>{t("tickets.panels.message.forwardedEmail")}</p>
         ) : (
           <p className={styles.placeholder}>{t("tickets.panels.message.noBody")}</p>
-        )}
-
-        {entities.length > 0 && (
-          <div className={styles.entityList} aria-label={t("tickets.panels.message.references")}>
-            {entities.map((entity) => (
-              <span className={styles.entityChip} key={`${entity.kind}-${entity.value}`}>
-                {entity.kind === "tracking" ? (
-                  <TrackingText text={t("tickets.panels.tracking", { number: entity.value })} parcels={parcels} />
-                ) : (
-                  `${t(`tickets.panels.entity.${entity.kind}`)} ${entity.value}`
-                )}
-              </span>
-            ))}
-          </div>
         )}
 
         <div className={styles.messageDisclosures}>
@@ -3503,34 +3897,16 @@ function senderDisplayName(message: TicketMessage, t: Translate): string {
   return senderIdentity(message, message.direction === "outbound", t).name;
 }
 
-/**
- * The address the requester is writing from: their latest inbound message's, so
- * someone who switched mailboxes mid-thread shows the one a reply goes to. Any
- * outside sender counts — a retailer or partner is the requester on its own
- * threads — and only a colleague's inbound note is skipped. The
- * thread route already ships (and audits) every sender address; the ticket list
- * never carries one, which is why this reads the thread and not the ticket.
- */
-function contactingAddress(thread: TicketThread): string | null {
-  for (let i = thread.messages.length - 1; i >= 0; i--) {
-    const message = thread.messages[i];
-    if (message.direction === "inbound" && message.role !== "internal" && message.fromEmail?.trim()) {
-      return message.fromEmail.trim();
-    }
-  }
-  return null;
-}
-
 function senderInitials(message: TicketMessage, t: Translate): string {
   const name = senderDisplayName(message, t).replace(/[^\p{L}\p{N} ]/gu, " ").trim();
   const parts = name.split(/\s+/).filter(Boolean);
   return (parts.length > 1 ? `${parts[0][0]}${parts[parts.length - 1][0]}` : parts[0]?.slice(0, 2) || "?").toUpperCase();
 }
 
-function groupMessagesByDate(messages: TicketMessage[], t: Translate, locale: Locale) {
-  const groups: { key: string; label: string; messages: TicketMessage[]; isLast: boolean }[] = [];
-  for (const message of messages) {
-    const date = message.at ? new Date(message.at) : null;
+function groupByDate<T extends { at: string | null }>(items: T[], t: Translate, locale: Locale) {
+  const groups: { key: string; label: string; items: T[] }[] = [];
+  for (const item of items) {
+    const date = item.at ? new Date(item.at) : null;
     const valid = date && !Number.isNaN(date.getTime());
     // The local day, matching the label: a UTC key splits a 00:30 Paris message
     // off from the rest of its day under a duplicate divider.
@@ -3541,10 +3917,9 @@ function groupMessagesByDate(messages: TicketMessage[], t: Translate, locale: Lo
       ? new Intl.DateTimeFormat(intlTag(locale), { day: "numeric", month: "short", year: date.getFullYear() === new Date().getFullYear() ? undefined : "numeric" }).format(date).toUpperCase()
       : t("tickets.panels.message.dateUnknown");
     const previous = groups[groups.length - 1];
-    if (previous?.key === key) previous.messages.push(message);
-    else groups.push({ key, label, messages: [message], isLast: false });
+    if (previous?.key === key) previous.items.push(item);
+    else groups.push({ key, label, items: [item] });
   }
-  if (groups.length > 0) groups[groups.length - 1].isLast = true;
   return groups;
 }
 
@@ -3560,31 +3935,6 @@ function formatEventTime(value: string | null, locale: Locale): string {
   return new Intl.DateTimeFormat(intlTag(locale), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(date);
 }
 
-
-function messageEntities(message: TicketMessage, parcels: TicketTracking[]) {
-  const text = message.bodyClean ?? "";
-  const entities: { kind: "order" | "reference" | "tracking" | "carrier"; label: string; value: string }[] = [];
-  const seen = new Set<string>();
-  const add = (kind: "order" | "reference" | "tracking" | "carrier", label: string, value: string) => {
-    const key = `${kind}:${value.toLowerCase()}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      entities.push({ kind, label, value });
-    }
-  };
-
-  for (const match of text.matchAll(/(?:commande|order)\s*(?:n[°ºo.]?\s*)?#?\s*(\d{4,})|#(\d{4,})/gi)) {
-    add("order", "Order", `#${match[1] ?? match[2]}`);
-  }
-  for (const match of text.matchAll(/\b(Q\d{2}\s?\d{6,})\b/gi)) add("reference", "Reference", match[1]);
-  for (const parcel of parcels) {
-    if (text.toLowerCase().includes(parcel.number.toLowerCase())) {
-      add("tracking", "Tracking", parcel.number);
-      if (parcel.carrier) add("carrier", "Carrier", parcel.carrier);
-    }
-  }
-  return entities.slice(0, 5);
-}
 
 function senderIdentity(message: TicketMessage, outbound: boolean, t: Translate): { name: string; email: string | null } {
   const name = message.fromName?.trim() ?? "";

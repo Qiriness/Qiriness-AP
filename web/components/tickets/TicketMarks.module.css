@@ -1,0 +1,65 @@
+.priorityDot {
+  flex: none;
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--priority-low);
+}
+
+.dot_high {
+  background: var(--priority-high);
+  box-shadow: 0 0 0 3px var(--error-050);
+}
+
+.dot_medium {
+  background: var(--priority-medium);
+  box-shadow: 0 0 0 3px var(--warning-050);
+}
+
+.dot_low {
+  background: var(--priority-low);
+  box-shadow: 0 0 0 3px var(--success-050);
+}
+
+.statusIcons {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.statusIcon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  color: var(--text-subtle);
+  background: var(--surface-sunken);
+}
+
+.tone_warning {
+  color: var(--warning-ink);
+  background: var(--warning-050);
+}
+
+.tone_info {
+  color: var(--info);
+  background: var(--info-050);
+}
+
+.tone_neutral {
+  color: var(--text-muted);
+  background: var(--mist-050);
+}
+
+.tone_gold {
+  color: var(--gold-strong);
+  background: transparent;
+}
+
+.tone_teal {
+  color: var(--teal-ink);
+  background: var(--teal-050);
+}

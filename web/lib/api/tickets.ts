@@ -14,6 +14,7 @@ import type {
   TicketDraft,
   TicketManualReply,
   TicketListItem,
+  TicketNote,
   TicketOrderChange,
   TicketOverrideChanges,
   TicketOverrideResult,
@@ -231,4 +232,36 @@ export async function saveTicketOverrides(
     throw new KnowledgeApiError(result?.error || `Request failed (${response.status}).`, response.status);
   }
   return result as TicketOverrideResult;
+}
+
+/** The ticket's internal notes, oldest first. Not cached: a colleague may have just written one. */
+export async function fetchTicketNotes(ticketId: string): Promise<TicketNote[]> {
+  const response = await fetch(`/api/tickets/${ticketId}/notes`, { cache: "no-store" });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return (body.notes ?? []) as TicketNote[];
+}
+
+/** Leaves a note for the team. Never sent to the customer. */
+export async function addTicketNote(ticketId: string, text: string): Promise<TicketNote> {
+  const response = await fetch(`/api/tickets/${ticketId}/notes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ body: text }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
+  return body.note as TicketNote;
+}
+
+export async function deleteTicketNote(ticketId: string, noteId: string): Promise<void> {
+  const response = await fetch(`/api/tickets/${ticketId}/notes/${noteId}`, { method: "DELETE" });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new KnowledgeApiError(body?.error || `Request failed (${response.status}).`, response.status);
+  }
 }

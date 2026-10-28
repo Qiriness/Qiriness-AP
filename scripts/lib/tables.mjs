@@ -70,6 +70,8 @@ export const T = {
   TICKET_CASE_ACTIONS: 'ticket_case_actions',
   TICKET_OVERRIDES: 'ticket_overrides',
   TICKET_SNOOZES: 'ticket_snoozes',
+  // 04_ticket_numbers_and_notes
+  TICKET_NOTES: 'ticket_notes',
   CASE_LINKS: 'case_links',
   CATEGORY_FORWARDING: 'category_forwarding',
   TICKET_FORWARDS: 'ticket_forwards',
@@ -345,7 +347,9 @@ export const COLUMNS = {
     'case_id,is_case_lead,case_thread_count,case_message_count,case_inbound_count,case_waiting_since,' +
     'case_level,case_status,' +
     // When it was closed (75): the Closed section is ordered by it.
-    'resolved_at,closed_at',
+    'resolved_at,closed_at,' +
+    // The per-shop running number, shown as T-<n>, and the reply language (04).
+    'ticket_number,language',
 
   /**
    * What the categoriser needs: the previous reading, to ratchet against, and

@@ -10,6 +10,42 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Ticket workspace redesign; ticket numbers and internal notes (2026-10-28)
+
+- **Layout.** `/tickets` is now two panes and a sheet: the queue and the ticket. The ticket panel opens from the header at every width (X, scrim or Escape closes it). **Focus** hides the queue and the panel. The view tabs and filters are unchanged. Why: `docs/decisions/tickets-dashboard.md` § The ticket workspace is two panes and a sheet.
+- **Queue** (`TicketQueue.tsx`):
+  - Rounded cards, with a category-coloured edge.
+  - A red/amber/green priority dot replaces the score. The score still sorts the list.
+  - `T-<n>` and the order number on each card.
+  - Status icons: needs a human, waiting for the customer, forwarded, snoozed, linked threads, VIP.
+  - Opening a ticket collapses the queue to a rail of initials.
+  - Search also finds ticket numbers.
+- **Header** (`TicketHeader.tsx`):
+  - Ticket number, subject, name · email · last message · waiting since · order.
+  - Chips: category, priority, level, state, team, « Edited ».
+  - A **context strip** (`web/lib/ticket-context-strip.ts`, 7 tests): the next action, how approving leaves, the order/parcel facts per category, and the references gathered across the thread.
+- **Conversation:**
+  - Messages as cards, with our own replies tinted.
+  - Internal notes and key case events, on the same clock as the messages.
+  - Everything before the latest inbound message is folded.
+  - A new **Internal notes** tab.
+- **Composer:**
+  - **Reply to customer | Internal note** switch.
+  - To line showing the reply language, red on a mismatch.
+  - Blocking problems on one red line each; everything else folded into « N things to check ».
+- **Migration `04_ticket_numbers_and_notes.sql`:**
+  - `tickets.ticket_number`, per shop, from `shop_ticket_counters` through an insert trigger, with existing tickets numbered oldest first.
+  - `ticket_notes`.
+  - `ticket_queue` gains `ticket_number` and `language`.
+  - `GET/POST /api/tickets/[id]/notes`, `DELETE …/notes/[noteId]` (`ticket-notes-service.ts`).
+- **Proven so far:**
+  - `tsc` and lint are clean.
+  - The new strip tests and the i18n tests pass.
+  - The migration applies on top of the baseline (PGlite).
+- **Not yet done:**
+  - The migration is **not applied to the database**. Until it is, the queue read asks the view for `ticket_number` and fails, and two schema tests fail (`T.TICKET_NOTES`, the `ticketQueue` projection).
+  - Not yet looked at in a browser.
+
 ## Fix: Settings → Integrations showed the previous shop after a switch (2026-10-27)
 
 Reported live: report and stock-alert settings and social connections looked the same on both shops. The database was right. Barbara Gould has its own Klaviyo key (…6f52, a different Klaviyo account: Placed Order metric `TWGYic` against Qiriness's `RfDXKz`), its own stock-alert sender, and no Meta connection. The cards are client components that copy their first values into state, and the router keeps them when only `?shop=` changes, so they kept showing the first shop's values. A Save would have written those values to the shop then on screen. `Integrations` is now keyed by shop, and so is the Insights Connections dialog. Insights panels were already keyed by shop (`periodKey`).

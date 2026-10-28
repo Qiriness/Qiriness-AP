@@ -357,21 +357,6 @@
   border-color: var(--teal);
 }
 
-.priorityHigh {
-  --priority-edge: var(--priority-high);
-  --priority-text: var(--priority-high-ink);
-}
-
-.priorityMedium {
-  --priority-edge: var(--priority-medium);
-  --priority-text: var(--priority-medium-ink);
-}
-
-.priorityLow {
-  --priority-edge: var(--priority-low);
-  --priority-text: var(--priority-low-ink);
-}
-
 .itemTop,
 .itemMeta,
 .itemRequester {
@@ -389,20 +374,6 @@
   flex: none;
   color: var(--text-subtle);
   font-size: var(--text-caption);
-  font-variant-numeric: tabular-nums;
-}
-
-.priorityGroup {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
-
-.priorityScore {
-  color: var(--priority-text, var(--text-strong));
-  font-size: var(--text-md);
-  font-weight: var(--weight-bold);
   font-variant-numeric: tabular-nums;
 }
 
@@ -433,54 +404,10 @@
   font-size: var(--text-caption);
 }
 
-.vipInline {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  color: var(--gold-strong);
-}
-
 .itemMeta {
   gap: var(--space-2);
   color: var(--text-subtle);
   font-size: var(--text-caption);
-}
-
-.levelBadge {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  min-height: 20px;
-  padding: 1px 7px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  font-size: var(--text-caption);
-  font-weight: var(--weight-semibold);
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.statusNeutral {
-  background: var(--surface-sunken);
-  color: var(--text-muted);
-}
-
-.statusWarning {
-  border-color: var(--warning-100);
-  background: var(--warning-050);
-  color: var(--warning);
-}
-
-.statusInfo {
-  border-color: var(--info-100);
-  background: var(--info-050);
-  color: var(--info);
-}
-
-.statusDone {
-  border-color: var(--success-100);
-  background: var(--success-050);
-  color: var(--success);
 }
 
 .detailPane {
@@ -511,24 +438,6 @@
 
 /* The investigation's next step, on one line under the subject. The draft
    panel repeats it in full; here it is orientation, so it truncates. */
-.nextAction {
-  margin: var(--space-2) var(--space-4) 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-default);
-  font-size: var(--text-caption);
-}
-
-.nextAction span {
-  margin-right: var(--space-2);
-  padding: 1px 6px;
-  border-radius: var(--radius-pill);
-  background: var(--warning-050);
-  color: #81500b;
-  font-size: 11px;
-  font-weight: var(--weight-semibold);
-}
 
 .ticketHeaderText {
   min-width: 0;
@@ -552,27 +461,6 @@
   white-space: nowrap;
   font-size: var(--text-caption);
   color: var(--text-subtle);
-}
-
-.ticketHeaderActions {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.assignment {
-  font-size: var(--text-caption);
-  color: var(--text-subtle);
-  white-space: nowrap;
-}
-
-.contextButton {
-  display: none;
-}
-
-.mobileBack {
-  display: none;
 }
 
 .conversationArea {
@@ -716,7 +604,6 @@
 }
 
 .sectionHead h3,
-.draftHead h3,
 .contextSection h3 {
   margin: 0;
   font-size: var(--text-caption);
@@ -726,8 +613,7 @@
   color: var(--text-subtle);
 }
 
-.sectionHead span,
-.draftHead p {
+.sectionHead span {
   margin: 0;
   color: var(--text-subtle);
   font-size: var(--text-caption);
@@ -926,26 +812,6 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   text-wrap: pretty;
-}
-
-.entityList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: var(--space-3);
-}
-
-.entityChip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 2px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--surface-sunken);
-  color: var(--text-muted);
-  font-size: var(--text-caption);
-  font-weight: var(--weight-medium);
 }
 
 .messageDisclosures {
@@ -1178,19 +1044,11 @@
   min-height: 120px;
 }
 
-.draftPanelSized .draftBody,
-.draftHead {
+.draftPanelSized .draftBody {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3);
-}
-
-.draftHead h3 {
-  color: var(--text-strong);
-  font-size: var(--text-body);
-  letter-spacing: 0;
-  text-transform: none;
 }
 
 .draftLabels {
@@ -1224,32 +1082,6 @@
   border-bottom: 1px solid var(--mist-050);
   background: var(--surface);
   color: var(--text-strong);
-}
-
-.requiredAction {
-  display: grid;
-  gap: 3px;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--warning-100);
-  border-radius: var(--radius);
-  background: var(--warning-050);
-}
-
-.requiredAction > span {
-  color: #81500b;
-  font-size: 11px;
-  font-weight: var(--weight-semibold);
-  text-transform: uppercase;
-  letter-spacing: 0.035em;
-}
-
-.requiredAction p {
-  color: #6f460d;
-  font-size: var(--text-caption);
-}
-
-.requiredAction p span {
-  color: var(--warning);
 }
 
 .draftFoot {
@@ -1557,8 +1389,7 @@
   line-height: 1.5;
 }
 
-.blocked,
-.duplicate {
+.blocked {
   margin: 0;
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--warning-100);
@@ -1577,16 +1408,6 @@
 
 /* A check that found something worth a look and does not block the send:
    amber, so it reads as « read this » and never as « this cannot go ». */
-.caution {
-  margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--warning-100);
-  border-radius: var(--radius);
-  background: var(--warning-050);
-  color: var(--text-strong);
-  font-size: var(--text-caption);
-  line-height: 1.5;
-}
 
 .related {
   margin: 0;
@@ -1744,10 +1565,6 @@
     display: none;
   }
 
-  .contextButton {
-    display: inline-flex;
-  }
-
   .contextSheetOpen {
     display: block;
     position: fixed;
@@ -1755,10 +1572,6 @@
     z-index: var(--z-dropdown);
   }
 
-  .ticketHeaderActions {
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
 }
 
 @media (max-width: 1023px) {
@@ -1798,29 +1611,9 @@
     flex-wrap: wrap;
   }
 
-  .mobileBack {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    color: var(--text-muted);
-    font: inherit;
-    font-size: var(--text-caption);
-    cursor: pointer;
-  }
-
   .ticketHeaderText {
     flex-basis: 100%;
     order: 2;
-  }
-
-  .ticketHeaderActions {
-    order: 3;
-    width: 100%;
-    justify-content: flex-start;
   }
 
   .draftPanel {
@@ -1846,20 +1639,12 @@
     gap: 3px;
   }
 
-  .ticketHeaderActions {
-    align-items: stretch;
-  }
-
   .conversationArea {
     padding-inline: var(--space-3);
   }
 
   .middleTabs {
     padding-inline: var(--space-3);
-  }
-
-  .nextAction {
-    margin-inline: var(--space-3);
   }
 
   .message {
@@ -2284,4 +2069,528 @@
 
 .headerAside ul {
   justify-content: flex-end;
+}
+
+/* ══ The ticket workspace, redesigned (docs/decisions/tickets-dashboard.md) ══
+   Two columns, not three: the queue (full cards, a rail of initials, or gone in
+   focus) and the ticket. The ticket facts open as a sheet at every width. */
+
+.workspace.ticketWorkspace {
+  grid-template-columns: var(--queue-width, 340px) minmax(0, 1fr);
+  transition: grid-template-columns 0.18s ease;
+}
+
+.queueFull {
+  --queue-width: 340px;
+}
+
+.queueCompact {
+  --queue-width: 68px;
+}
+
+.workspace.queueHidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.queueSlot {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.queueSlot > * {
+  flex: 1;
+}
+
+.contextSheet.contextSheetOpen {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dropdown);
+}
+
+.contextSheetOpen .sheetPanel {
+  width: min(400px, 94vw);
+  animation: sheetIn 0.18s ease-out;
+}
+
+.sheetClose {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.sheetClose:hover {
+  color: var(--text-strong);
+  background: var(--surface-sunken);
+}
+
+.sheetClose:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+@keyframes sheetIn {
+  from {
+    transform: translateX(24px);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+.ticketWorkspace .middleTabs {
+  padding: 0 var(--space-5);
+}
+
+.ticketWorkspace .conversationArea {
+  padding: 0 var(--space-5) var(--space-5);
+  background: var(--surface-sunken);
+}
+
+.sectionHeadActions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.eventsToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
+.earlierToggle {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.earlierToggle:hover {
+  border-color: var(--teal-100);
+  color: var(--teal-ink);
+}
+
+/* ── Messages as cards ──────────────────────────────────────────────── */
+
+.ticketWorkspace .message {
+  padding: 0 0 var(--space-3);
+}
+
+.ticketWorkspace .message::before {
+  display: none;
+}
+
+.ticketWorkspace .messageContent {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+}
+
+/* Ours: the same card, tinted, so who said what reads at a glance. */
+.ticketWorkspace .messageOurs .messageContent {
+  border-color: var(--teal-100);
+  background: #f6fbfb;
+}
+
+/* A colleague's mail inside the thread: light purple, so it is never read as
+   the customer's words or as our reply. After .messageOurs, so it wins when a
+   colleague's message is also outbound. */
+.ticketWorkspace .messageInternal .messageContent {
+  border-color: #e3ddf5;
+  background: #f8f6fd;
+}
+
+.ticketWorkspace .messageInternal .timelineAvatar {
+  border-color: #d8d0f0;
+  background: #f1eefb;
+  color: #5b4a9e;
+}
+
+.ticketWorkspace .noteContent {
+  border-color: var(--warning-100);
+  background: #fffaf2;
+  box-shadow: none;
+}
+
+.noteAvatar {
+  border-color: var(--warning-100);
+  background: var(--warning-050);
+  color: var(--warning-ink);
+}
+
+.noteBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 19px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: var(--warning-050);
+  color: var(--warning-ink);
+  font-size: 10px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.noteHeadEnd {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.noteDelete {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-subtle);
+  font: inherit;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
+.noteDelete:hover {
+  color: var(--error);
+  text-decoration: underline;
+}
+
+.noteBody {
+  margin: 0;
+  color: var(--warning-ink);
+  font-size: var(--text-body);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.notesEmpty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-subtle);
+  font-size: var(--text-sm);
+}
+
+.notesEmpty p {
+  margin: 0;
+}
+
+/* ── Case events, between the messages ──────────────────────────────── */
+
+.caseEvent {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 0 var(--space-3);
+  font-size: var(--text-caption);
+  color: var(--text-muted);
+}
+
+.caseEventIcon {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text-subtle);
+}
+
+.caseEvent_investigation .caseEventIcon,
+.caseEvent_draft .caseEventIcon {
+  border-color: var(--teal-100);
+  color: var(--teal-ink);
+}
+
+.caseEvent_override .caseEventIcon,
+.caseEvent_obligation .caseEventIcon {
+  border-color: var(--info-100);
+  color: var(--info);
+}
+
+.caseEventText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.caseEventText strong {
+  color: var(--text-default);
+  font-weight: var(--weight-semibold);
+}
+
+.caseEvent time {
+  color: var(--text-subtle);
+}
+
+/* ── The composer ───────────────────────────────────────────────────── */
+
+.composeTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.modeSwitch {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  background: var(--mist-050);
+}
+
+.modeSwitch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+
+.modeSwitch button:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 1px;
+}
+
+.modeSwitch .modeActive {
+  background: var(--surface);
+  color: var(--teal-ink);
+  box-shadow: var(--shadow-xs);
+}
+
+.modeSwitch .modeNoteActive {
+  background: var(--warning-050);
+  color: var(--warning-ink);
+}
+
+.composeHint {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--warning-ink);
+  font-size: var(--text-caption);
+}
+
+.draftPanelNote {
+  background: #fffcf7;
+}
+
+.addressLine {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+
+.addressLine strong {
+  color: var(--text-muted);
+  font-weight: var(--weight-semibold);
+}
+
+.languageTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--mist-050);
+  color: var(--text-muted);
+  font-weight: var(--weight-semibold);
+}
+
+.languageMismatch {
+  background: var(--error-050);
+  color: var(--error);
+}
+
+/* What stops or changes the send: one red line each, the full text on hover. */
+.alertRow {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px var(--space-3);
+  border: 1px solid var(--error-100);
+  border-radius: var(--radius);
+  background: var(--error-050);
+  color: var(--error);
+  font-size: var(--text-caption);
+}
+
+.alertRow > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.alertRow svg {
+  flex: none;
+}
+
+/* Everything else worth a look, folded into one amber line. */
+.checkSummary {
+  border: 1px solid var(--warning-100);
+  border-radius: var(--radius);
+  background: var(--warning-050);
+  font-size: var(--text-caption);
+}
+
+.checkSummaryInfo {
+  border-color: var(--border);
+  background: var(--surface-sunken);
+}
+
+.checkSummary summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px var(--space-3);
+  color: var(--warning-ink);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  list-style: none;
+}
+
+.checkSummary summary::-webkit-details-marker {
+  display: none;
+}
+
+.checkSummaryInfo summary {
+  color: var(--text-muted);
+}
+
+.checkSummary summary > svg:last-child {
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+
+.checkSummary[open] summary > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.checkSummaryExtra {
+  color: var(--text-subtle);
+  font-weight: var(--weight-regular);
+}
+
+.checkSummaryExtra::before {
+  content: "· ";
+}
+
+.checkSummary ul {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2) calc(var(--space-3) + 19px);
+  display: grid;
+  gap: 4px;
+  line-height: 1.5;
+}
+
+.checkItem {
+  color: var(--text-strong);
+}
+
+.infoItem {
+  color: var(--text-muted);
+}
+
+.noteComposer {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.noteInput {
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: var(--space-3);
+  border: 1px solid var(--warning-100);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text-strong);
+  font: inherit;
+  font-size: var(--text-body);
+  line-height: 1.55;
+}
+
+.noteInput:focus-visible {
+  outline: none;
+  border-color: var(--warning);
+  box-shadow: 0 0 0 3px var(--warning-050);
+}
+
+@media (max-width: 1023px) {
+  .workspace.ticketWorkspace {
+    display: block;
+  }
+
+  .ticketWorkspace .queueSlot {
+    height: 100%;
+  }
+
+  .ticketWorkspace.hasSelection .queueSlot {
+    display: none;
+  }
+
+  .ticketWorkspace .middleTabs,
+  .ticketWorkspace .conversationArea {
+    padding-left: var(--space-3);
+    padding-right: var(--space-3);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace.ticketWorkspace {
+    transition: none;
+  }
+
+  .contextSheetOpen .sheetPanel {
+    animation: none;
+  }
 }

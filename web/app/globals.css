@@ -51,6 +51,40 @@
   --priority-low: #00a651;
   --priority-low-ink: #0b7a39;
 
+  /* Ticket categories — the queue card's left edge, the chip in the ticket
+     header, the compact rail's stripe. One hue per subject of the fixed
+     taxonomy (scripts/lib/support-taxonomy.mjs), plus a wash for the chip.
+     Kept clear of the priority reds/orange/green so a category edge is never
+     read as urgency. A re-skin changes these, never the components. */
+  --cat-order: #7564be;
+  --cat-order-050: #f1effa;
+  --cat-delivery: #4e80ca;
+  --cat-delivery-050: #edf3fe;
+  --cat-return_exchange: #b0763a;
+  --cat-return_exchange-050: #fbf2e7;
+  --cat-product: #9b6bab;
+  --cat-product-050: #f7f0fa;
+  --cat-product_stock: #5b8c5a;
+  --cat-product_stock-050: #eff6ee;
+  --cat-payment: #2f8f9d;
+  --cat-payment-050: #eaf5f7;
+  --cat-account: #3d9a87;
+  --cat-account-050: #edf8f5;
+  --cat-promotions: #bc6581;
+  --cat-promotions-050: #fbf0f4;
+  --cat-cosmetovigilance: #a8456b;
+  --cat-cosmetovigilance-050: #faedf2;
+  --cat-legal_privacy: #5f6b7a;
+  --cat-legal_privacy-050: #f0f2f4;
+  --cat-b2b: #8a6d3b;
+  --cat-b2b-050: #f6f1e8;
+  --cat-partner_collaboration: #c0603e;
+  --cat-partner_collaboration-050: #fbefe9;
+  --cat-careers: #4a5bb0;
+  --cat-careers-050: #eef0fa;
+  --cat-other: #8a98a5;
+  --cat-other-050: #f0f3f5;
+
   /* Gold — VIP, and nothing else in the app.
      Deliberately NOT --warning: that ramp is orange and owns "something is
      wrong". Gold is metallic and cooler, so a VIP row reads as a status the

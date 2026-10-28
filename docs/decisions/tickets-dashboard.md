@@ -302,3 +302,69 @@ A tracking number is the one string in a support thread that has an obvious next
 **The draft is one of the four surfaces, and it is why the model is never given a URL** — see « The reply names the parcel; the number is the link » under Drafting.
 
 **One component, because this codebase has already paid for the alternative.** `TicketDetailPanel` records having had two copies of the parcel rendering, the second of which dropped the link. Four copies would be worse, so every surface goes through `TrackingText`. In the transcript it is reached by context rather than a prop: `Verbatim` is called from eleven places, all of them views of the same French text the order tool produced.
+
+---
+
+### The ticket workspace is two panes and a sheet (2026-10-28)
+
+The owner's brief was that the page showed a great deal that was not helping anyone answer a ticket. An interactive prototype (`HTML_DROPFILE/qiriness-ticket-redesign.html`) set the direction. It was used for its visual language only: its data model is a mock and does not reflect what exists here. The top view tabs and the filter toolbar are unchanged.
+
+**The priority score is no longer shown on /tickets. A dot says the band.** This supersedes « Priority shows as two marks: the score, and a 3px bar » above, for this page only. The score still ranks the queue and still exists on the row. What a reviewer acts on is the band, though, and a 0–299 number beside it was the busiest thing on every card. The dot uses the same `--priority-*` tokens as the bar did. The tooltip names the band, and says « set by a person » when it was pinned in « Edit case ». The context panel shows the band too, without the number.
+
+**The card's left edge now belongs to the category, not to priority.** One edge, one meaning, as before. With the score gone, the dot carries urgency in its own place (top right, by the age), which frees the edge for the subject. The category hues are `--cat-<key>` tokens chosen away from the priority red, orange and green, so that an edge is never read as urgency. The category list is the fixed taxonomy, not per-shop data, so a map from category to token is correct here. A re-skin changes tokens, not components.
+
+**States are icons with their meaning in the tooltip and the accessible name**: needs a human (with the level), waiting for the customer, forwarded, snoozed, linked threads, VIP. The text badge « L3 Needs a human - Awaiting human » was the widest thing on the card. The level is still in the header as a chip.
+
+**The queue collapses to a rail when a ticket opens.** The conversation needs the width more than the list does once a ticket is chosen. The rail keeps every ticket one click away (initials, category edge, priority dot), and the chevron restores the cards until the next ticket is opened. Below 1023 px the single-pane switch is unchanged.
+
+**The right rail became a sheet at every width.** It was a permanent third column above 1440 px and a sheet below that. The rail held the facts a reviewer checks once per ticket, but it cost the conversation a third of the screen all the time. The facts a reviewer needs while reading moved into the header's context strip. The rest opens on demand: the panel button, « ] », or the order link in the header. **Focus** hides both the queue and the sheet.
+
+**The context strip replaces the « Next action » line and the per-message reference chips.** `contextStrip` in `web/lib/ticket-context-strip.ts` is pure and tested. It always shows the next action and how an approval leaves (sends / Outlook draft / records only), so the reviewer knows what « Approve » will do before reading the draft. What else it shows depends on the subject (`STRIP_PROFILES`):
+- delivery: order, state and parcel;
+- order, payment and stock: order and state;
+- returns: order and state;
+- anything else: the order if there is one, otherwise the language and « no order linked ».
+
+A marketplace channel is shown whatever the subject, because it changes what « no parcel » means. The `Q00…`, invoice and shipment references are gathered once across the thread, de-duplicated and capped. Chipping them under every message repeated the same reference on each reply.
+
+**Case events sit between the messages, with their real time.** The dossier was only readable in the Activity tab, so what the agent did read as separate from what was said. Only the moments that change a reviewer's reading are inline:
+- the case analysed;
+- a draft written;
+- a person's correction;
+- a snooze and its wake;
+- a check opened.
+
+Individual tool lookups stay in Activity, because inline they would outnumber the messages. « Case events » hides them, and the choice is per browser.
+
+**Earlier messages fold behind « Show N earlier messages ».** What is read first is the latest message from outside and everything after it.
+
+**Warnings fold, but blocking problems do not.** Failed checks, auto-send holds, a stale draft and a refused send change whether or how the reply goes, so each stays visible as one red line, with the full text on hover. Everything else folds into one amber « N things to check » line: warnings, the before-sending action, duplicate, case and outbound notes. Before this, each was a full-width bordered paragraph, and a draft with three warnings pushed its own text below the fold.
+
+**The reply language is on the To line.** It turns red when the draft's language differs from the ticket's. `tickets.language` and `ticket_drafts.language` already existed; the dashboard had never shown them.
+
+### Ticket numbers are `T-<n>`, per shop (2026-10-28)
+
+Tickets had only a uuid, which nobody can say aloud or type into a search box. `tickets.ticket_number` is a per-shop running number. An insert trigger takes it from `shop_ticket_counters`, and the row lock there serialises concurrent inserts, so two inserts can never share a number. A failed insert rolls its step back. The existing 1,089 rows were numbered oldest first by `first_message_at`.
+
+**The `T-` prefix is the point.** Shopify order numbers are shown as `#NNNN` and the two ranges overlap: we are at about #9,900, and a busy month of tickets is in the hundreds. A bare `#1042` in the header would read as an order. Search accepts `T-1042`, `t1042` and a bare `1042`. A bare number also finds order #1042, which is what someone searching by a number wants.
+
+**Per shop, not one global sequence**, because the code is meant to run for other companies (see the reusable-across-companies rule). One sequence would number shop B's first ticket after shop A's thousandth.
+
+The number is not yet put in outgoing mail. `docs/decisions/cases.md` already lists an internal reference in replies as future work, and the ticket number is the obvious candidate.
+
+### Internal notes are the team's, and the agent does not read them (2026-10-28)
+
+`ticket_notes` holds what the team writes for each other on a ticket. Notes appear amber, with a lock, in the conversation and in their own tab, and are written from the composer's « Internal note » mode.
+
+- **Never sent, and not read by the drafting agent, for now.** A note is often a guess (« I think this is the second parcel ») or a remark about the customer. Feeding it into the case file would turn a colleague's aside into evidence the agent cites. If notes become an input, that is a decision about the investigation, not a UI change.
+- **The writer's name is stored with the note.** Snoozes and overrides store only the user id, because nothing on those screens needs to say who acted. A note is read as « who said this ». Nothing resolves an id to a name, and these are staff names, not customer data.
+- **Soft-deleted, and only by the writer.** A note is someone's word on the case; it should not vanish from the timeline because a colleague clicked the wrong thing.
+
+### Assignment is laid out, not built (2026-10-28)
+
+The prototype assigns tickets and filters « Mine / All ». The card and the header leave room for an assignee, but nothing is rendered. `docs/decisions/human-overrides.md` records why there is no assignee column: no user list exists, and inventing one was refused. That still stands. Building assignment means:
+- a user list from `auth.users`;
+- a column;
+- a decision on whether assignment changes who sees what.
+
+That is a change of its own, not part of a layout refactor.

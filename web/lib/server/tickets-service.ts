@@ -96,7 +96,9 @@ import type {
   TicketOverrides,
   TicketManualReply,
   TicketCaseThreads,
+  TicketLanguage,
 } from "../types";
+import { TICKET_LANGUAGES } from "../types";
 
 function getSupabaseClient() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
@@ -1253,6 +1255,7 @@ function mapDraftRow(row: any, action: any | null = null): TicketDraft {
     // be read must not be the one a send closes a ticket on.
     disposition: row.disposition === "terminal" ? "terminal" : "intermediary",
     status: DRAFT_STATUSES.includes(row.status) ? row.status : "pending",
+    language: asLanguage(row.language),
     staleReason:
       row.stale_reason === "case_changed" || row.stale_reason === "superseded_by_outbound" ? row.stale_reason : null,
     checksPassed: Boolean(row.checks_passed),
@@ -1458,6 +1461,10 @@ function mapCustomer(row: any, vipTickets: Set<string>) {
   };
 }
 
+function asLanguage(value: unknown): TicketLanguage | null {
+  return (TICKET_LANGUAGES as readonly unknown[]).includes(value) ? (value as TicketLanguage) : null;
+}
+
 function mapTicketRow(
   row: any,
   directory: any = emptySenderDirectory,
@@ -1498,6 +1505,8 @@ function mapTicketRow(
 
   return {
     id: row.id,
+    ticketNumber: row.ticket_number === null || row.ticket_number === undefined ? null : Number(row.ticket_number),
+    language: asLanguage(row.language),
     subject: row.subject,
     status: row.status as TicketStatus,
     category: (row.category as KnowledgeCategory) ?? null,

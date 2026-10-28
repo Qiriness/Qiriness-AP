@@ -326,3 +326,145 @@ export const CrownIcon = ({ size = 20, ...props }: IconProps) => (
     <path d="M3.4 7.1a1.4 1.4 0 1 1 1.32 1.86l1.2 5.2a1 1 0 0 0 .98.78h10.2a1 1 0 0 0 .98-.78l1.2-5.2a1.4 1.4 0 1 1 1.32-1.86 1.4 1.4 0 0 1-2.06 1.24l-2.9 2.3a1 1 0 0 1-1.5-.3L12 6.9l-2.14 3.44a1 1 0 0 1-1.5.3l-2.9-2.3A1.4 1.4 0 0 1 3.4 7.1Z" />
   </svg>
 );
+
+/* ── Ticket workspace: categories, status and layout ─────────────────── */
+
+export const TruckIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M3 6.5h11v10H3z" />
+    <path d="M14 10h4l3 3.5v3h-7" />
+    <circle cx="7" cy="17.5" r="1.8" />
+    <circle cx="17.5" cy="17.5" r="1.8" />
+  </Base>
+);
+
+export const BoxIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="m12 3.5 8 4.25v8.5L12 20.5l-8-4.25v-8.5Z" />
+    <path d="m4 7.75 8 4.25 8-4.25M12 12v8.5" />
+  </Base>
+);
+
+export const ReturnIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M9 14 4.5 9.5 9 5" />
+    <path d="M4.5 9.5H15a4.5 4.5 0 0 1 0 9h-3" />
+  </Base>
+);
+
+export const CardIcon = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="3" y="5.5" width="18" height="13" rx="2" />
+    <path d="M3 10h18M7 15h3" />
+  </Base>
+);
+
+export const UserIcon = (p: IconProps) => (
+  <Base {...p}>
+    <circle cx="12" cy="8" r="3.75" />
+    <path d="M4.75 20a7.25 7.25 0 0 1 14.5 0" />
+  </Base>
+);
+
+export const TagIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7l8.3 8.3-8.7 8.7Z" />
+    <circle cx="8" cy="8" r="1.1" />
+  </Base>
+);
+
+export const ShieldIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M12 21s7.5-3.6 7.5-9.5V5.5L12 3 4.5 5.5v6C4.5 17.4 12 21 12 21Z" />
+  </Base>
+);
+
+export const FlaskIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M9.5 3.5h5M10.5 3.5v5.2L5 18.2a1.5 1.5 0 0 0 1.3 2.3h11.4a1.5 1.5 0 0 0 1.3-2.3l-5.5-9.5V3.5" />
+    <path d="M7.5 14.5h9" />
+  </Base>
+);
+
+export const BuildingIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M5 20.5V4.5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16" />
+    <path d="M15 9.5h3a1 1 0 0 1 1 1v10M3.5 20.5h17M8.5 7.5h3M8.5 11.5h3M8.5 15.5h3" />
+  </Base>
+);
+
+export const HandshakeIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="m11 7.5-2.5-2-5 4.5 2 2.5" />
+    <path d="m13 7.5 2.5-2 5 4.5-6.5 6.5a1.4 1.4 0 0 1-2-2" />
+    <path d="M12 14.5a1.4 1.4 0 0 1-2-2l3-3 1.5 1.5M10 16.5a1.4 1.4 0 0 1-2-2l2-2" />
+  </Base>
+);
+
+export const BriefcaseIcon = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="3" y="7" width="18" height="12.5" rx="2" />
+    <path d="M9 7V5.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7M3 12.5h18" />
+  </Base>
+);
+
+export const HourglassIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M6.5 3.5h11M6.5 20.5h11" />
+    <path d="M7.5 3.5c0 4.5 4.5 5.5 4.5 8.5s-4.5 4-4.5 8.5M16.5 3.5c0 4.5-4.5 5.5-4.5 8.5s4.5 4 4.5 8.5" />
+  </Base>
+);
+
+export const ForwardIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="m15 5 5 5-5 5" />
+    <path d="M20 10h-9a6 6 0 0 0-6 6v2.5" />
+  </Base>
+);
+
+export const GlobeIcon = (p: IconProps) => (
+  <Base {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M3.5 12h17M12 3.5c-4.5 4.7-4.5 12.3 0 17M12 3.5c4.5 4.7 4.5 12.3 0 17" />
+  </Base>
+);
+
+export const PanelLeftIcon = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="3.5" y="4" width="17" height="16" rx="2" />
+    <path d="M9.5 4v16" />
+  </Base>
+);
+
+export const PanelRightIcon = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="3.5" y="4" width="17" height="16" rx="2" />
+    <path d="M14.5 4v16" />
+  </Base>
+);
+
+export const MaximizeIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M8.5 4H5.5A1.5 1.5 0 0 0 4 5.5v3M15.5 4h3A1.5 1.5 0 0 1 20 5.5v3M4 15.5v3A1.5 1.5 0 0 0 5.5 20h3M20 15.5v3a1.5 1.5 0 0 1-1.5 1.5h-3" />
+  </Base>
+);
+
+export const MinimizeIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M4 8.5h4.5V4M20 8.5h-4.5V4M4 15.5h4.5V20M20 15.5h-4.5V20" />
+  </Base>
+);
+
+export const CopyIcon = (p: IconProps) => (
+  <Base {...p}>
+    <rect x="8.5" y="8.5" width="11.5" height="11.5" rx="1.75" />
+    <path d="M15.5 8.5V5.5A1.5 1.5 0 0 0 14 4H5.5A1.5 1.5 0 0 0 4 5.5V14a1.5 1.5 0 0 0 1.5 1.5h3" />
+  </Base>
+);
+
+export const NoteIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M5.5 3.5h9l4 4v13h-13Z" />
+    <path d="M14.5 3.5v4h4M8.5 12.5h7M8.5 16h5" />
+  </Base>
+);
