@@ -60,6 +60,7 @@ The changes:
   - « Live · HH:MM » now shows when the cached figures were read, not when the page rendered.
   - The 5-minute auto-refresh re-reads the cache. The ↻ button clears the tag first (`POST /api/insights/refresh`).
   - The Tickets freshness banner still reads live, because « mail synced 2 minutes ago » must not be 15 minutes old.
+  - **Insights' freshness row is never served stale (2026-10-28).** Stale-while-recompute meant the first visit after two quiet days showed the row from two days earlier, and its age is taken against now: « Orders synced 2 days ago », « Email 2 days ago », while the nightly had finished that morning and mail had arrived minutes before. The cached row is used only within the TTL; past it, the row is read live (~250 ms, once per stale visit). « Live · HH:MM » still dates the cached panel figures.
   - Settings → Agents' usage figure goes through `callRpc` and is cached the same way.
 - **The other Insights tabs are prefetched in full once the tab bar is on screen**, so switching tabs shows a page already rendered. This is affordable only because every read behind it is the shared cache.
 - **The cold freshness.** `max(updated_at)` on `customers` was a full scan of about 76 MB of pages, slow whenever they had fallen out of the free plan's small cache. `77_updated_at_indexes.sql` adds `(shop_id, updated_at)` indexes on customers, orders and tickets. The worker's change gate asks the same question.

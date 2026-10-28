@@ -41,6 +41,23 @@ const cachedFreshness = unstable_cache(
   { revalidate: INSIGHTS_TTL_SECONDS, tags: [CACHE_TAGS.insights] }
 );
 
+/**
+ * The freshness row to describe: the cached one while it is within the TTL,
+ * otherwise read live. A STALE ENTRY IS SERVED FIRST AND RECOMPUTED BEHIND IT,
+ * so the first visit after two quiet days read the row from two days ago and
+ * said « Orders synced 2 days ago » while the nightly had run that morning
+ * (2026-10-28). A stale panel figure is labelled by « Live · HH:MM »; a stale
+ * freshness row contradicts itself, since its age is taken against now.
+ */
+async function currentFreshnessRow(shopId: string, cached: { row: Record<string, string | null> | null; readAt: string }, now: Date) {
+  if (now.getTime() - Date.parse(cached.readAt) <= INSIGHTS_TTL_SECONDS * 1000) return cached.row;
+  try {
+    return await freshnessRowLive(shopId);
+  } catch {
+    return cached.row;
+  }
+}
+
 export interface InsightsContext {
   shopId: string;
   /** The shop's store domain: what ShopifyQL is asked on (`.myshopify.com`). */
@@ -110,10 +127,10 @@ export async function resolveInsightsContext(searchParams: SearchParams = {}): P
 
   // Freshness first: "All time" starts at the first synced order, which only
   // this row knows. It needs nothing from the range, so the order costs nothing.
-  const [{ row: freshnessRow, readAt }, marketplaces] = await Promise.all([
-    cachedFreshness(shop.id),
-    getMarketplaces(shop.id),
-  ]);
+  const [cached, marketplaces] = await Promise.all([cachedFreshness(shop.id), getMarketplaces(shop.id)]);
+  // `readAt` stays the cache's: « Live · HH:MM » dates the panel figures, which are cached the same way.
+  const readAt = cached.readAt;
+  const freshnessRow = await currentFreshnessRow(shop.id, cached, now);
 
   const range = resolveRange(
     {
