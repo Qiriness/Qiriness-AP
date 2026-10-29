@@ -360,6 +360,51 @@ test('a product question no FAQ question matches gets that product’s FAQ, most
   assert.equal(english.matches.length, 3);
 });
 
+// Dev store, 2026-10-29: the Regard d'Or patches' Shopify FAQ answers the
+// frequency, but no question matched « combien de fois par semaine ».
+const PATCHES = buildCatalogue([
+  { id: 'patches', handle: 'regard-or', title: 'Regard d’Or – Patchs yeux éclat', usage_instructions: 'Le matin, laissez poser 15 à 30 minutes.', variants: [], available_stock: 1,
+    product_faqs: [
+      { faq_id: 'p:actifs', question: 'Quels sont les principaux actifs des patchs Regard d’Or ?', answer: 'Niacinamide et or colloïdal.', published: true },
+      { faq_id: 'p:frequence', question: 'À quelle fréquence utiliser les patchs yeux ?', answer: '2 à 3 fois par semaine, ou chaque jour en cure.', published: true }
+    ] },
+  { id: 'cream', handle: 'brume', title: 'Crème hydratante - Caresse Brume', variants: [], available_stock: 1 }
+], []);
+
+test('a Shopify FAQ no question matches is read whole, with no approved guidance at all', async () => {
+  const options = { catalogue: PATCHES, resolvedIds: new Set(['patches']), productDataIds: new Set(['patches']), readProductPolicies: async () => [], query: 'je les applique combien de fois par semaine ?' };
+  const result = await runKnowledgeTool('get_product_policy', { product_id: 'patches' }, makeKnowledge(), options);
+  assert.equal(result.status, 'found');
+  assert.equal(result.match_stage, 'product_faq_digest');
+  assert.equal(result.matches[0].id, 'p:frequence');
+  // No approved-guidance reader (or none wired): the Shopify FAQ still answers.
+  const alone = await runKnowledgeTool('get_product_policy', { product_id: 'patches' }, makeKnowledge(), { ...options, readProductPolicies: null });
+  assert.equal(alone.matches[0].id, 'p:frequence');
+});
+
+test('the product in focus has its Shopify FAQ read before the model', async () => {
+  let seen = '';
+  const agent = createLlmAgent({ catalogue: PATCHES, knowledge: makeKnowledge(), readProductPolicies: async () => [], client: { completeWithTools: async (input) => { seen = JSON.stringify(input.messages); return answer; } } });
+  const reply = await agent.respond({ message: 'les patchs Regard d’Or, combien de fois par semaine ?' });
+  assert.match(seen, /2 à 3 fois par semaine/);
+  assert.equal(reply.trace.tools[0].source, 'focus');
+});
+
+test('a product the model resolves itself brings its FAQ in the tool result', async () => {
+  let calls = 0;
+  const agent = createLlmAgent({ catalogue: PATCHES, knowledge: makeKnowledge(), readProductPolicies: async () => [], client: { completeWithTools: async (input) => {
+    calls += 1;
+    if (calls === 1) return toolCall('resolve_products', { mentions: ['Regard d’Or'] });
+    const result = JSON.parse(input.messages.find((m) => m.role === 'tool').content);
+    assert.equal(result.approved_guidance.product_id, 'patches');
+    assert.ok(result.approved_guidance.matches.some((m) => m.id === 'p:frequence'));
+    return answer;
+  } } });
+  const reply = await agent.respond({ message: 'et pour ceux-là, combien de fois par semaine ?' });
+  assert.equal(calls, 2);
+  assert.ok(reply.trace.tools.some((t) => t.source === 'resolve_products' && t.product_id === 'patches'));
+});
+
 test('the FAQ tool tells the model which language the FAQs are written in', () => {
   const search = (k) => knowledgeToolDefinitions(k).find((d) => d.function.name === 'search_faqs').function.description;
   assert.match(search(makeKnowledge()), /written in fr: write query in that language/);

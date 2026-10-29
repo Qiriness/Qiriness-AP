@@ -296,6 +296,24 @@ async function productPolicyReader(
 }
 
 /**
+ * DEV ONLY — a product's Shopify FAQ is a metafield on the dashboard shop's
+ * product, and the dev store's copies carry almost none (3 of 109): « combien
+ * de fois par semaine » on the Regard d'Or patches found no FAQ although one
+ * answers it (2026-10-29). Each dev product takes the FAQ of the dashboard
+ * product with the same handle, in place, as its collections in buildAdvisor.
+ */
+function withDashboardFaqs(
+  catalogue: { products: { handle: string; faqs?: unknown[] }[] },
+  dashboard: { products: { handle: string; faqs?: unknown[] }[] },
+) {
+  const faqsOf = new Map(dashboard.products.map((p) => [p.handle, p.faqs ?? []]));
+  for (const p of catalogue.products) {
+    const faqs = faqsOf.get(p.handle);
+    if (faqs?.length) p.faqs = faqs;
+  }
+}
+
+/**
  * The beauty consultation engine: the brand's playbooks (advisor_* tables,
  * loaded by `npm run advisor:load`) over the advisor's catalogue. No playbook
  * loaded, or a config that does not validate: null, and the advisor advises
@@ -316,15 +334,14 @@ async function buildAdvisor(
   reader: { selectAll: (table: string, filters: object, columns: string) => Promise<unknown> },
   shopId: string,
   catalogue: { products: { handle: string; collections: string[] }[]; collections: unknown[] } | null,
-  devCatalogue: string | null,
+  dashboard: { products: { handle: string; collections: string[] }[]; collections: unknown[] } | null,
 ) {
   if (!catalogue) return null;
   try {
     const raw = await loadAdvisoryConfig(reader as never, shopId);
     if (!raw) return null;
     let advisorCatalogue = catalogue;
-    if (devCatalogue) {
-      const dashboard = (await loadCatalogue(reader as never, shopId)) as typeof catalogue;
+    if (dashboard) {
       const collectionsOf = new Map(dashboard.products.map((p) => [p.handle, p.collections]));
       advisorCatalogue = {
         products: catalogue.products.map((p) => ({ ...p, collections: collectionsOf.get(p.handle) ?? p.collections })),
@@ -365,7 +382,12 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
         toolsOn ? loadKnowledge(reader, shop.id).catch(() => { console.warn("[storefront chat] knowledge load failed"); return null; }) : null,
       ])
     : [{}, null, null];
-  const consultation = toolsOn && shop ? await buildAdvisor(reader, shop.id, catalogue as never, devCatalogue) : null;
+  // DEV ONLY — the dashboard shop's own catalogue, which the dev products borrow from by handle.
+  const dashboard = devCatalogue && catalogue && shop
+    ? ((await loadCatalogue(reader as never, shop.id).catch(() => null)) as { products: { handle: string; collections: string[]; faqs?: unknown[] }[]; collections: unknown[] } | null)
+    : null;
+  if (dashboard) withDashboardFaqs(catalogue as never, dashboard);
+  const consultation = toolsOn && shop ? await buildAdvisor(reader, shop.id, catalogue as never, dashboard) : null;
   const llm = createOpenAIClient({
     apiKey: process.env.OPENAI_API_KEY,
     fetchImpl: storefrontFetch(positiveInt(process.env.STOREFRONT_CHAT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)),

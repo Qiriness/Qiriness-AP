@@ -144,6 +144,9 @@ The LED mask's approved FAQ answers « ne se recharge pas » and « combien de s
 - **And with `get_product`**: its result carries `approved_guidance`, once per turn.
 - **Whole, not matched first**: the customer's spelling defeats the keyword matcher (« reachrge », « se seance » matched none of the 12 entries), so the entries go most relevant first, capped as the tool's digest. The model is told to answer only from an entry that addresses the question and never to quote a 【placeholder】.
 - **Cost:** one small read per product in focus, cached 5 minutes per product.
+- **The product's Shopify FAQ too (2026-10-29).** Until then only the dashboard-approved guidance went whole; Shopify's FAQ got the single-question matcher alone, so « combien de fois par semaine » missed « À quelle fréquence utiliser les patchs yeux ? » and the reply said the frequency was not given. The Shopify entries now join the same digest, ahead of the approved guidance. Cost: up to 6,000 characters on most product turns, since 55 of 123 products have a Shopify FAQ and none needed a read before.
+- **And with `resolve_products`** when the model resolves exactly one product: « et pour caresse jour et nuit » was resolved there, never read with `get_product`, and the reply said no age was given (the FAQ says 25).
+- **Dev store:** its products carry almost no Shopify FAQ (3 of 109), so each takes the dashboard product's FAQ by handle (`withDashboardFaqs` in `storefront-chat-service.ts`).
 
 ### Purchase history: identity from the signature only (2026-10-13)
 

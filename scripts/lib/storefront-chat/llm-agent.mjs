@@ -690,6 +690,8 @@ export function createLlmAgent({
         if (!knowledge || !readProductPolicies || !byId(id)) return null;
         const ids = new Set([id]);
         const read = await withDeadline(runKnowledgeTool('get_product_policy', { product_id: id }, knowledge, { resolvedIds: ids, productDataIds: ids, catalogue, readProductPolicies, query: message, locale, currency }), Math.min(1500, Math.max(1, endsAt - Date.now() - 1500))).catch(() => null);
+        // A Shopify FAQ question that matches outright comes back as product data.
+        if (read?.status === 'use_product_data' && read.evidence?.faq_answers?.length) return { status: 'found', product_id: id, matches: read.evidence.faq_answers };
         return read?.status === 'found' && read.matches?.length ? read : null;
       };
       const guided = new Set();
@@ -800,6 +802,16 @@ export function createLlmAgent({
               for (const p of ran.resolution.products) resolvedIds.add(p.id);
               for (const p of ran.resolution.products) if (byId(p.id)) shopping?.addResolved(byId(p.id));
               if (!resolution?.clarification && ran.resolution.clarification) resolution = { ...(resolution ?? {}), ...ran.resolution };
+              // One product resolved by the model brings its FAQ too: « et pour
+              // caresse jour et nuit » was resolved here, never read with
+              // get_product, and the reply said no age was given (it is 25).
+              const single = !ran.resolution.clarification && ran.ids?.length === 1 ? ran.ids[0] : null;
+              const guidance = single && !guided.has(single) ? await guidanceFor(single) : null;
+              if (guidance) {
+                guided.add(single);
+                output.approved_guidance = guidance;
+                trace.tools.push({ name: 'get_product_policy', source: 'resolve_products', product_id: single, status: guidance.status, ids: guidance.matches.map((m) => m.id) });
+              }
             }
             messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(output) });
             trace.tools.push(isShopping || call.name === ORDER_TOOL

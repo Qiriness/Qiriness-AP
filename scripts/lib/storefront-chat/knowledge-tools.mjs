@@ -221,8 +221,14 @@ export async function runKnowledgeTool(name, args, knowledge, { resolvedIds = ne
     if (!asked.trim() || asked.length > 1000) return { status: 'invalid_arguments' };
     const evidence = explicitProductEvidence(product, asked);
     if (evidence) return { status: 'use_product_data', product_id: id, evidence };
-    if (!readProductPolicies) return { status: 'unavailable', product_id: id };
-    const records = (await readProductPolicies(id)).filter((r) => r.product_ids.includes(id));
+    // THE PRODUCT'S SHOPIFY FAQ JOINS THE DIGEST (dev store, 2026-10-29). It
+    // only had the single-question matcher above, so « combien de fois par
+    // semaine » on the Regard d'Or patches missed « À quelle fréquence utiliser
+    // les patchs yeux ? » and the reply said the frequency was not given.
+    const shopifyFaqs = product.faqs ?? [];
+    if (!readProductPolicies && !shopifyFaqs.length) return { status: 'unavailable', product_id: id };
+    const approved = readProductPolicies ? (await readProductPolicies(id)).filter((r) => r.product_ids.includes(id)) : [];
+    const records = [...shopifyFaqs, ...approved];
     const topic = args.topic ?? productTopic(asked);
     const pool = topic ? records.filter((r) => productTopic(`${r.canonical_question} ${r.aliases.join(' ')}`) === topic) : records;
     const productWords = new Set(keywords(product.name));
