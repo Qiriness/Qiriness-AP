@@ -38,6 +38,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # probe:meta (which Meta metric names still answer)
 |                    # db:apply:migration · test
 |                    # storefront:chat (one proxy-signed message to the advisor)
+|                    # storefront:backfill-turns (the chat log -> storefront_agent_turns)
 |                    # eval:resolution (the advisor's product resolver, live catalogue)
 |                    # dev-store:sync / dev-store:remove (DEV ONLY, scripts/dev-store/:
 |                    # copy the advisor's dev store into Supabase as a development shop)
@@ -80,7 +81,7 @@ All tables live in `public`, RLS on, service-role only. The management chat read
 | Projections | views: `ticket_queue` `case_facts` `customer_ticket_facts` `order_fulfilment_timing` `support_by_month` … and the `insights_*` / `orders_list*` / `vip_*` functions |
 | Agent rehearsals | `agent_test_runs` `llm_usage` |
 | Management chat | `chat_conversations` `chat_turns` `chat_queries`; the `chat` schema (14 views) |
-| Storefront advisor | `storefront_chat_*` `advisor_*` `advisory_events` (dev store only) |
+| Storefront advisor | `storefront_chat_*` `advisor_*` `advisory_events` `storefront_agent_turns` `storefront_agent_opens` (dev store only) |
 | Klaviyo | `klaviyo_connections` `klaviyo_campaigns` `klaviyo_flow_days` |
 | Social and paid media | `social_*` `ad_*` (incl. `social_post_manual_metrics` `social_audience_manual`) |
 | Compliance and audit | `privacy_requests` `data_access_events` `integration_events` |
@@ -88,7 +89,7 @@ All tables live in `public`, RLS on, service-role only. The management chat read
 
 ## Surfaces
 
-`/home` (management chat) · `/agent-setup` (knowledge library, policies, rules, parameters) · `/tickets` (the queue) · `/conversations` (threads we opened) · `/insights` (eight panels) · `/orders` · `/settings` · `/login`. Roles and what each page reads: `docs/schema/surfaces.md`.
+`/home` (management chat) · `/agent-setup` (knowledge library, policies, rules, parameters) · `/tickets` (the queue) · `/conversations` (threads we opened) · `/insights` (eight panels) · `/orders` · `/storefront-agent` (Storefront Agent → Dashboard) · `/settings` · `/login`. Roles and what each page reads: `docs/schema/surfaces.md`.
 
 ## Read Order
 

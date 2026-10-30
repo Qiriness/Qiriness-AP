@@ -103,6 +103,7 @@
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
         viewer: state.viewer,
         sessionId: state.sessionId,
+        conversationId: state.conversationId || null,
         open: state.open,
         wide: state.wide,
         openingAsked: Boolean(state.openingAsked),
@@ -151,6 +152,19 @@
       if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return;
       fetch(url, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: body }).catch(function () {});
     } catch (e) { /* a lost click is a lost data point, nothing more */ }
+  }
+
+  /*
+   * The panel opened: one beacon per opening, its id minted here, so a beacon the browser sends twice is
+   * one row (storefront_agent_opens). The session token only says which conversation it reopened.
+   */
+  function reportOpen(endpoint, sessionId) {
+    try {
+      var url = String(endpoint).replace(/\/chat$/, '/event');
+      var body = JSON.stringify({ type: 'chat_opened', openId: newSessionId(), sessionId: sessionId || null });
+      if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return;
+      fetch(url, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: body }).catch(function () {});
+    } catch (e) { /* a lost data point, nothing more */ }
   }
 
   /* « Ajouter la routine au panier »: the routine's ref to the same /event route. */
@@ -238,6 +252,13 @@
   var onCardAdd = null;
   /* A routine added whole (advisor_routines): its ref only, never who added it. */
   var onRoutineAdd = null;
+  /*
+   * The conversation the advisor's « Ajouter au panier » belongs to (the chat reply's conversationId), written on
+   * the cart as `_advisor_conversation`: the order made from that cart names the conversation, so the dashboard
+   * counts it as assisted, once. Hidden at checkout (a leading underscore). Set by the proxy transport only.
+   */
+  var cartConversation = null;
+  var CART_ATTRIBUTE = '_advisor_conversation';
   /* The routine cards keep the customer's choices on their message: saved through this. */
   var persistState = function () {};
 
@@ -267,7 +288,21 @@
         document.dispatchEvent(new CustomEvent('cart:refresh', { bubbles: true }));
         document.dispatchEvent(new CustomEvent('cart:updated', { bubbles: true }));
       } catch (e) { /* an old browser: the cart still has it */ }
+      return tagCart(root);
     });
+  }
+
+  /* The cart names the advisor's conversation; a failure leaves the products in the cart, untagged. */
+  function tagCart(root) {
+    if (!cartConversation || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cartConversation)) return Promise.resolve();
+    var attributes = {};
+    attributes[CART_ATTRIBUTE] = cartConversation;
+    return fetch(root + 'cart/update.js', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ attributes: attributes })
+    }).then(function () {}, function () {});
   }
 
   /*
@@ -1065,6 +1100,7 @@
     var state = {
       viewer: viewer,
       sessionId: stored ? stored.sessionId : newSessionId(),
+      conversationId: stored && typeof stored.conversationId === 'string' ? stored.conversationId : null,
       open: stored ? Boolean(stored.open) : false,
       messages: stored ? stored.messages : [],
       // Routine mode opens the panel wide (owner, 2026-10-18); the header button switches it back.
@@ -1075,6 +1111,8 @@
       // 0 dots, 1 a line of text, 2 « encore un instant »: see waitText.
       waitStage: 0
     };
+    // The conversation this tab already had: a product added from it before any new reply is tagged too.
+    if (config.transport === 'proxy' && config.endpoint) cartConversation = state.conversationId;
     var waitTimers = [];
 
     function startWaiting(message) {
@@ -1223,6 +1261,7 @@
       root.classList.toggle('sa-root--open', open);
       syncScrollLock();
       saveState(state);
+      if (open && !silent && config.transport === 'proxy' && config.endpoint) reportOpen(config.endpoint, state.sessionId);
       if (open) {
         // Laid out again now it is visible: a reply with cards (the repurchase message, fetched while the
         // panel was closed) scrolls to its text, not to the bottom.
@@ -1297,6 +1336,8 @@
       if (state.pending) return;
       state.messages = [];
       state.sessionId = newSessionId();
+      state.conversationId = null;
+      cartConversation = null;
       state.showRoutine = false;
       setWide(false, true);
       saveState(state);
@@ -1356,6 +1397,10 @@
         }
       }).then(function (body) {
         if (body.sessionId && typeof body.sessionId === 'string') state.sessionId = body.sessionId;
+        if (typeof body.conversationId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.conversationId)) {
+          state.conversationId = body.conversationId;
+          if (config.transport === 'proxy') cartConversation = body.conversationId;
+        }
         state.messages.push({
           role: 'assistant',
           text: String(body.reply.text || ''),

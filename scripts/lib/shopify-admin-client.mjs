@@ -331,6 +331,10 @@ const ORDERS_QUERY = `#graphql
         currencyCode
         presentmentCurrencyCode
         tags
+        customAttributes {
+          key
+          value
+        }
         email
         phone
         processedAt

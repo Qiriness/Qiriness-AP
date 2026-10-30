@@ -12,6 +12,7 @@ import { EDITABLE_AGENTS } from '../../scripts/lib/agent-models.mjs';
 import { CASE_LINK_DECISIONS, CASE_LINK_METHODS, CASE_LINK_STATES } from '../../scripts/lib/case-record.mjs';
 import { ADVISOR_T as ADVISORY_CORE_T, MAP_SECTIONS, SINGLE_SECTIONS } from '../../scripts/lib/advisory/advisory-repository.mjs';
 import { CHANNELS, EVENT_TYPES } from '../../scripts/lib/advisory/events.mjs';
+import { TURN_INTENTS, TURN_ROUTES, TURN_STATUSES } from '../../scripts/lib/storefront-chat/turn-metrics.mjs';
 import { FORWARD_TIMINGS } from '../../scripts/lib/forwarding-destinations.mjs';
 import { MAIL_JOB_KINDS, MAIL_JOB_STATES } from '../../scripts/lib/mail-job-record.mjs';
 import { RETENTION_REASONS } from '../../scripts/lib/order-retention.mjs';
@@ -97,7 +98,10 @@ const MIRRORS = [
   ['social_audience_dimension_check', AUDIENCE_DIMENSIONS],
   ['advisor_mappings_kind_check', [...MAP_SECTIONS, ...SINGLE_SECTIONS]],
   ['advisory_events_channel_check', CHANNELS],
-  ['advisory_events_type_check', EVENT_TYPES]
+  ['advisory_events_type_check', EVENT_TYPES],
+  ['storefront_agent_turns_route_check', TURN_ROUTES],
+  ['storefront_agent_turns_status_check', TURN_STATUSES],
+  ['storefront_agent_turns_intent_check', TURN_INTENTS]
 ];
 
 for (const [name, values] of MIRRORS) {

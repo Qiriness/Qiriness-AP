@@ -16,6 +16,8 @@ export const en = {
   "nav.agentSetup": "Agent Setup",
   "nav.conversations": "Conversations",
   "nav.settings": "Settings",
+  "nav.storefrontAgent": "Storefront Agent",
+  "nav.storefrontDashboard": "Dashboard",
   "nav.primary": "Primary",
   "nav.beta": "Beta",
   "nav.soon": "Soon",

@@ -16,6 +16,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |   |-- agent-setup/parameters/page.tsx  # Server Component: the numbers
 |   |   |-- tickets/page.tsx              # Server Component: the agent's queue --
 |   |   |                                 # EVERY ticket, staff-sent included
+|   |   |-- storefront-agent/page.tsx     # Server Component: Storefront Agent -> Dashboard
+|   |   |                                 # (?range=7d|30d|90d or ?from=&to=); not contact
 |   |   |-- orders/page.tsx               # Server Component: every Shopify order, paged
 |   |   |                                 # in SQL; reads ?status= ?country= ?vip= ?page=
 |   |   |-- orders/[id]/page.tsx          # Server Component: one order on cards
@@ -128,7 +130,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |                                  # docs/storefront-chatbot.md
 |   |       |-- storefront/event/route.ts    # PUBLIC (same guards as chat). POST a
 |   |       |                                  # card click -> advisory_events; a routine
-|   |       |                                  # added whole -> advisor_routines
+|   |       |                                  # added whole -> advisor_routines; a panel
+|   |       |                                  # opening -> storefront_agent_opens
 |   |       |-- storefront/opening/route.ts  # PUBLIC (same guards as chat). POST when a
 |   |       |                                  # signed-in customer opens an empty chat ->
 |   |       |                                  # their repurchase message, or 204
@@ -151,6 +154,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |                                      # Segment Finder. Insights numbers: useFormat()/getFormat()
 |   |                                      # Screens pick keys; services return codes, not sentences
 |   |-- components/
+|   |   |-- storefront-agent/        # AgentFilters (7/30/90 days + custom, URL state) ·
+|   |   |                            # StorefrontAgentView (the seven sections, Insights kit)
 |   |   |-- icons.tsx                # inline SVG icon set
 |   |   |-- app-shell/               # AppShell (top bar + drawer; fetches /api/auth/me
 |   |   |                            # once for both; runs sidebar navigation in a
@@ -289,6 +294,9 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |                    # storefront-chat-service (the storefront
 |   |       |                    # advisor: session, caps, history, log; picks
 |   |       |                    # mock or llm by STOREFRONT_CHAT_AGENT) ·
+|   |       |                    # storefront-agent/dashboard-service (the
+|   |       |                    # advisor's shops, its range, the dashboard RPC
+|   |       |                    # for the window and the one before, priced) ·
 |   |       |                    # dropped-mail-service · knowledge-errors ·
 |   |       |                    # cache-tags (the shared-cache tags `tickets`
 |   |       |                    # and `insights`; ticketsChanged after a

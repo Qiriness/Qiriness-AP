@@ -168,6 +168,21 @@ export const ADVISOR_RPC = {
 };
 
 /**
+ * The storefront agent's analytics: one row per turn and per chat opening, and
+ * the dashboard's one read. Created by the INCREMENTAL migration
+ * `07_storefront_agent_analytics.sql`, so kept out of `T` and `RPC`;
+ * `supabase/migrations/00_baseline.test.mjs` checks them.
+ */
+export const STOREFRONT_AGENT_T = {
+  TURNS: 'storefront_agent_turns',
+  OPENS: 'storefront_agent_opens'
+};
+
+export const STOREFRONT_AGENT_RPC = {
+  DASHBOARD: 'storefront_agent_dashboard'
+};
+
+/**
  * Klaviyo: the connection (the key itself is in Vault) and what each flow and
  * campaign earned. Created by the INCREMENTAL migration `39_klaviyo.sql`, so
  * kept out of `T` and `RPC`; `supabase/migrations/00_baseline.test.mjs` checks them.

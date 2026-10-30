@@ -102,6 +102,16 @@ test('mapOrder stores channel labels and avoids raw contact/address duplication'
   assert.deepEqual(row.raw_shopify_payload, {}, 'the raw payload is no longer kept');
 });
 
+test('an order names the advisor conversation its cart carried, and only a well-formed one', () => {
+  const conversation = '0A1B2C3D-0000-4000-8000-000000000001';
+  const tagged = mapOrder({ ...BASE_ORDER, customAttributes: [{ key: 'gift', value: 'yes' }, { key: '_advisor_conversation', value: conversation }] }, 'shop-id', '2026-10-30T00:00:00Z');
+  assert.equal(tagged.advisor_conversation_id, conversation.toLowerCase());
+  // Absent or malformed: the key is left out, so the row is what it was before migration 07.
+  assert.equal('advisor_conversation_id' in mapOrder(BASE_ORDER, 'shop-id', '2026-10-30T00:00:00Z'), false);
+  const bad = mapOrder({ ...BASE_ORDER, customAttributes: [{ key: '_advisor_conversation', value: 'drop table' }] }, 'shop-id', '2026-10-30T00:00:00Z');
+  assert.equal('advisor_conversation_id' in bad, false);
+});
+
 test('calculateOrderRetention anchors a delivered order to its delivery date', () => {
   // The RULE names the reason only. The period comes from the shop setting, so
   // the same order produces a different date under a different policy and the

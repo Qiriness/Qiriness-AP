@@ -28,6 +28,13 @@ export const RANGE_PRESETS = Object.freeze([
 export const DEFAULT_PRESET = '30d';
 
 /**
+ * Presets a page may offer that the Insights bar does not: the Storefront Agent
+ * dashboard's 90 days. Resolved like the others; never drawn by FilterBar.
+ */
+export const EXTRA_PRESETS = Object.freeze([{ id: '90d', label: 'Last 90 days', short: '90 days' }]);
+const PRESET_META = [...RANGE_PRESETS, ...EXTRA_PRESETS];
+
+/**
  * "All time" has no fixed length: it starts at the shop's first synced order, so
  * it is resolved from that date rather than from PRESET_SHAPE.
  */
@@ -37,6 +44,8 @@ const PRESET_SHAPE = {
   '24h': { grain: 'hour', count: 24 },
   '7d': { grain: 'day', count: 7 },
   '30d': { grain: 'day', count: 30 },
+  // Days, not weeks: « 90 days » means ninety of them, not thirteen weeks from a Monday.
+  '90d': { grain: 'day', count: 90 },
   '6m': { grain: 'week', count: 26 },
   '1y': { grain: 'month', count: 12 }
 };
@@ -240,7 +249,7 @@ export function resolveRange(query = {}, { tz = 'UTC', now = new Date(), earlies
   const from = step(to, grain, -count);
   const previousFrom = step(from, grain, -count);
   const previousTo = step(nowWall, grain, -count);
-  const meta = RANGE_PRESETS.find((p) => p.id === preset);
+  const meta = PRESET_META.find((p) => p.id === preset);
 
   return finalise({
     preset,

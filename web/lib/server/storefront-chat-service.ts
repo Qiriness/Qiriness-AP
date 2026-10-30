@@ -57,7 +57,8 @@ import {
   noRetryWait,
   storefrontFetch,
 } from "../../../scripts/lib/storefront-chat/llm-agent.mjs";
-import { ADVISOR_T, STOREFRONT_CHAT_RPC, STOREFRONT_CHAT_T } from "../../../scripts/lib/tables.mjs";
+import { failureCode, turnRecord } from "../../../scripts/lib/storefront-chat/turn-metrics.mjs";
+import { ADVISOR_T, STOREFRONT_AGENT_T, STOREFRONT_CHAT_RPC, STOREFRONT_CHAT_T } from "../../../scripts/lib/tables.mjs";
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
 import {
   createSupabaseClient,
@@ -66,6 +67,7 @@ import {
   supabaseSelect,
   supabaseSelectAll,
   supabaseUpdate,
+  supabaseUpsert,
 } from "../../../scripts/lib/supabase-rest-client.mjs";
 import { getShop } from "./shop";
 
@@ -167,7 +169,7 @@ export interface StorefrontContact {
 }
 
 export type StorefrontChatResult =
-  | { ok: true; sessionId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[]; followUp?: StorefrontFollowUp; contact?: StorefrontContact; routineCart?: StorefrontCartItems; routineView?: StorefrontRoutineView; cart?: StorefrontCartItems; layout?: "routine" } }
+  | { ok: true; sessionId: string; conversationId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[]; followUp?: StorefrontFollowUp; contact?: StorefrontContact; routineCart?: StorefrontCartItems; routineView?: StorefrontRoutineView; cart?: StorefrontCartItems; layout?: "routine" } }
   | { ok: false; status: 429; code: "session_limit" | "daily_limit" }
   | { ok: false; status: 503; code: "unavailable" };
 
@@ -435,6 +437,8 @@ export async function handleStorefrontChat(
 ): Promise<StorefrontChatResult> {
   const db = client();
   const cap = limits();
+  // The turn's latency, as the customer waits it: from the request to the reply (storefront_agent_turns).
+  const startedAt = Date.now();
 
   // THE CUSTOMER IS WAITING, so nothing waits that need not. The agent (and on
   // a cold start, the catalogue) loads while the session is read; the count and
@@ -505,13 +509,23 @@ export async function handleStorefrontChat(
       purchases: purchasesLoader(db, identity, shopDomain),
     });
   } catch (error) {
-    await logged;
+    const [stored] = await logged;
     if (!(error instanceof StorefrontAgentError)) throw error;
     // The question is logged; the widget offers « Réessayer ».
     console.warn("[storefront chat] agent unavailable", error.message);
+    recordTurn(db, turnRecord({
+      shopDomain,
+      conversationId: session.id,
+      userMessageId: messageIdOf(stored),
+      startedAt,
+      latencyMs: Date.now() - startedAt,
+      action: request.action,
+      opening: Boolean(request.opening),
+      error: { code: failureCode(error) },
+    }));
     return { ok: false, status: 503, code: "unavailable" };
   }
-  await logged;
+  const [stored] = await logged;
 
   const followUp = ("followUp" in reply && reply.followUp ? reply.followUp : null) as StorefrontFollowUp | null;
   await supabaseInsert(db, STOREFRONT_CHAT_T.MESSAGES, [
@@ -548,6 +562,16 @@ export async function handleStorefrontChat(
   ], { returning: 'minimal' });
 
   recordAdvisoryEvents(db, shopDomain, "events" in reply && Array.isArray(reply.events) ? reply.events : []);
+  recordTurn(db, turnRecord({
+    shopDomain,
+    conversationId: session.id,
+    userMessageId: messageIdOf(stored),
+    startedAt,
+    latencyMs: Date.now() - startedAt,
+    action: request.action,
+    opening: Boolean(request.opening),
+    reply: reply as object,
+  }));
   if ("routine" in reply && reply.routine) recordRoutine(db, shopDomain, reply.routine as object);
   if ("routineAdded" in reply && typeof reply.routineAdded === "string") markRoutineAdded(db, shopDomain, reply.routineAdded);
 
@@ -556,7 +580,7 @@ export async function handleStorefrontChat(
   const routineCart = ("routineCart" in reply && reply.routineCart ? reply.routineCart : null) as StorefrontCartItems | null;
   const cart = ("cart" in reply && reply.cart ? reply.cart : null) as StorefrontCartItems | null;
   const routineView = ("routineView" in reply && reply.routineView ? reply.routineView : null) as StorefrontRoutineView | null;
-  return { ok: true, sessionId: session.session_token, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}), ...(routineCart ? { routineCart } : {}), ...(routineView ? { routineView } : {}), ...(cart ? { cart } : {}), ...("layout" in reply && reply.layout === "routine" ? { layout: "routine" as const } : {}) } };
+  return { ok: true, sessionId: session.session_token, conversationId: session.id, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}), ...(routineCart ? { routineCart } : {}), ...(routineView ? { routineView } : {}), ...(cart ? { cart } : {}), ...("layout" in reply && reply.layout === "routine" ? { layout: "routine" as const } : {}) } };
 }
 
 /**
@@ -633,6 +657,35 @@ export function markRoutineAdded(db: ReturnType<typeof client>, shopDomain: stri
 /** The widget's « Ajouter la routine au panier », through the signed event route. */
 export async function recordRoutineAdded(shopDomain: string, ref: string) {
   await markRoutineAdded(client(), shopDomain, ref);
+}
+
+/** The id of the customer message just stored (a representation insert returns its rows). */
+function messageIdOf(rows: unknown): string | null {
+  const id = Array.isArray(rows) ? (rows[0] as { id?: unknown } | undefined)?.id : null;
+  return typeof id === "string" ? id : null;
+}
+
+/**
+ * The turn's analytics row (storefront_agent_turns, turn-metrics.mjs): written
+ * after the reply and never waited for, like the events. No words.
+ */
+export function recordTurn(db: ReturnType<typeof client>, row: object) {
+  supabaseInsert(db, STOREFRONT_AGENT_T.TURNS, [row], { returning: "minimal" }).catch((error: unknown) => {
+    console.warn("[storefront chat] turn not recorded", error instanceof Error ? error.message : error);
+  });
+}
+
+/**
+ * The chat panel opened (storefront_agent_opens), through the signed event
+ * route. The id is the widget's own for that opening, so a beacon sent twice is
+ * one row; the conversation is named only when the token is this shop's.
+ */
+export async function recordChatOpen(shopDomain: string, openId: string, sessionToken: string | null) {
+  const db = client();
+  const rows = sessionToken
+    ? ((await supabaseSelect(db, STOREFRONT_CHAT_T.SESSIONS, { session_token: sessionToken, shop_domain: shopDomain }, "id", { limit: 1 })) as { id: string }[])
+    : [];
+  await supabaseUpsert(db, STOREFRONT_AGENT_T.OPENS, [{ id: openId, shop_domain: shopDomain, conversation_id: rows[0]?.id ?? null }], "id", { returning: "minimal" });
 }
 
 /** A card click from the widget, through the signed event route. */

@@ -2,7 +2,7 @@ import {
   parseAllowedShops,
   verifyAppProxySignature,
 } from "../../../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
-import { recordProductClick, recordRoutineAdded } from "@/lib/server/storefront-chat-service";
+import { recordChatOpen, recordProductClick, recordRoutineAdded } from "@/lib/server/storefront-chat-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,7 +19,9 @@ const MAX_BODY_BYTES = 1024;
  * allow-list, both failing closed. The body is `{ sessionId, productId, type? }`,
  * both uuids; the session must belong to the signed shop. Or `{ routineRef,
  * type: "routine_added_to_cart" }`: « Ajouter la routine au panier » marks that
- * routine (advisor_routines) of the signed shop. Always 204 for a well-formed
+ * routine (advisor_routines) of the signed shop. Or `{ openId, sessionId?,
+ * type: "chat_opened" }`: the panel opened (storefront_agent_opens), `openId`
+ * minted by the widget per opening. Always 204 for a well-formed
  * request: a click beacon has nobody to show an error to.
  */
 export async function POST(request: Request) {
@@ -32,11 +34,21 @@ export async function POST(request: Request) {
 
   const raw = await request.text();
   if (Buffer.byteLength(raw, "utf8") > MAX_BODY_BYTES) return new Response(null, { status: 413 });
-  let body: { sessionId?: unknown; productId?: unknown; routineRef?: unknown; type?: unknown };
+  let body: { sessionId?: unknown; productId?: unknown; routineRef?: unknown; openId?: unknown; type?: unknown };
   try {
     body = JSON.parse(raw);
   } catch {
     return new Response(null, { status: 400 });
+  }
+  if (body.type === "chat_opened") {
+    if (typeof body.openId !== "string" || !UUID.test(body.openId)) return new Response(null, { status: 400 });
+    const token = typeof body.sessionId === "string" && UUID.test(body.sessionId) ? body.sessionId.toLowerCase() : null;
+    try {
+      await recordChatOpen(proof.shop, body.openId.toLowerCase(), token);
+    } catch (error) {
+      console.warn("[storefront event] open not recorded", error instanceof Error ? error.message : error);
+    }
+    return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
   }
   if (body.type === "routine_added_to_cart") {
     if (typeof body.routineRef !== "string" || !UUID.test(body.routineRef)) return new Response(null, { status: 400 });

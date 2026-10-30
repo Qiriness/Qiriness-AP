@@ -2,6 +2,20 @@
 
 ## Storefront advisor
 
+### The dashboard reads turns, not the chat log (2026-10-30)
+
+The Storefront Agent dashboard (`/storefront-agent`) is read from `storefront_agent_turns`, one word-free row per turn, written by `turn-metrics.mjs` after each reply (migration 07).
+
+- **Why a table of its own.** `storefront_chat_messages` is purged after 30 days (`STOREFRONT_CHAT_RETENTION_DAYS`), and a 90-day range with its comparison needs 180. It also held no total latency (only per-model-call ms), no record of a failed turn (a 503 left only the question) and no contact flag. The turn row has codes, counts, durations and product ids only, so it is kept like `advisory_events`, with no purge.
+- **Measured on the dev store's log (707 questions, 2026-10-05 → 10-30), rebuilt by the backfill:** 513 LLM turns, 191 rule-based (`model_skipped`: builder questions 130, routine cards 33, cart answers 24, purchase question 4), 3 mock; 19 questions never answered; P50 3.5 s, P95 9.5 s (LLM 4.5 / 10.6 s, rules 0.2 / 3.0 s); 26 policy/FAQ lookups that found nothing; 132 turns with a fallback.
+- **Rule-based vs LLM is per turn**, by whether a model was called. A conversation mixes both (a routine builder is mostly rules), so conversation-level rates cannot be split by route. Click and add-to-cart rates per route count turns that showed products and whose products were then clicked/added in that conversation.
+- **Intent is a rule over the trace, not a model call** (`intentOfTurn`): routine builder → reordering (repurchase opening, purchase question, past purchases) → customer service (order lookup, contact link) → FAQ (policy/FAQ/shopping lookups, offers or delivery chips) → product discovery (cards, product tools, buying answers) → other. A conversation takes the intent most of its turns had, `other` only when nothing else.
+- **Resolved** = the conversation's last turn was answered, no turn left a policy/FAQ question unanswered, and none sent the customer to customer service. So every customer-service conversation is unresolved **by the agent** by construction; that is the escalation rate's job to show, not a bug.
+- **Assisted, not incremental.** An order is assisted when its cart carries `_advisor_conversation` (set by the widget on every advisor « Ajouter au panier », lifted into `orders.advisor_conversation_id`) and it was placed after that conversation began; cancelled and deleted orders are out, revenue is net of refunds as on Sales. One order, one conversation, counted once. Whether the sale would have happened anyway needs a holdout group; the dashboard says « Not yet tracked » for incremental revenue rather than implying it.
+- **Not tracked, and said so:** storefront visits (no source for the advisor's store; ShopifyQL sessions are read with the support app's token on the production shop only); chat opens until the widget build that sends them is deployed; purchases while the advisor's shop has no synced orders (the dev store never syncs orders); recommendation accuracy (no ground truth).
+- **The order sync writes the column only when the attribute is there**, so a sync deployed before migration 07 is applied writes exactly what it did.
+- **Contact role:** closed, like Sales, because the page leads with revenue. A judgement made with the build; revisit if the contact team should see quality figures.
+
 ### Six languages, built to take more (2026-10-30)
 
 Owner: the Qiriness store publishes « English, Italian, Deutch, German and French » (German and Dutch, confirmed), « also we should add spanish even if its not on the site », and « build it so that this is expandable to more languages if required. If this requires refactoring existing things then please do ». Before this, anything not English fell back to French: the widget's text, the builder's questions and buttons, the cart answers, and the words that read a typed message.

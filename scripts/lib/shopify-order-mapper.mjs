@@ -76,6 +76,10 @@ export function mapOrder(
     // Lifted out of the jsonb above so a parcel-chasing ticket can be matched to
     // its order by the number the customer actually has to hand.
     tracking_numbers: trackingNumbersFromFulfillments(mappedFulfillments),
+    // The storefront advisor's conversation, from the cart attribute its widget
+    // sets on « Ajouter au panier ». Left out (not null) when absent, so a sync
+    // that runs before migration 07 is applied writes exactly what it did.
+    advisor_conversation_id: advisorConversationId(order.customAttributes),
     returns: cleanJsonValue(returns.map(mapReturn)),
     refunds: cleanJsonValue(refunds.map(mapRefund)),
     delivered_at: retention.deliveredAt,
@@ -103,6 +107,16 @@ export function mapOrder(
  * returns null for it when the shop keeps orders indefinitely. See that module
  * for why the two were separated.
  */
+/** The cart attribute the storefront advisor's widget writes (advisor-panel.js `CART_ATTRIBUTE`). */
+export const ADVISOR_CART_ATTRIBUTE = '_advisor_conversation';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The advisor conversation an order's cart named, or undefined: only a well-formed id is kept. */
+export function advisorConversationId(attributes) {
+  const value = (Array.isArray(attributes) ? attributes : []).find((a) => a?.key === ADVISOR_CART_ATTRIBUTE)?.value;
+  return typeof value === 'string' && UUID.test(value.trim()) ? value.trim().toLowerCase() : undefined;
+}
+
 export function calculateOrderRetention(order, retentionPolicy = DEFAULT_RETENTION_POLICY) {
   const fulfillments = order.fulfillments || [];
   const returns = order.returns?.nodes || [];

@@ -2143,3 +2143,15 @@ Check:
 ## Insights time-frame switching speed (2026-10-26) — open
 
 Check: on a production build (`PAGE_TIMING=1`), repeat the 11-step click sequence (Overview 30 d → 7 d → 24 h → 6 m → 1 yr → 30 d → Sales → 7 d → Customers → Marketing → Overview). The switch to 1 yr should change the page in ~1–2 s with Shopify cards filling in after, not 18 s. Tabs should still feel instant once prefetched.
+
+## Storefront Agent dashboard (2026-10-30) — open
+
+Built against the dev store's chat log, checked offline only: the migration, backfill and dashboard function were run on a local PGlite build loaded with the dev store's real 707 questions (read-only copy), and the page was type-checked, not opened in a browser.
+
+1. ~~Apply migration 07~~ **done 2026-10-30**: applied to production, baseline regenerated (`db:check:baseline` identical), file in `archive/`; `npm test` 3955/3955.
+2. ~~Backfill~~ **done 2026-10-30**: 707 turns written (513 llm / 191 rules / 3 mock, 19 `no_reply`); a re-run writes 0. The RPC answers on production for 7/30/90 days (~200 ms warm, 3 s cold).
+3. **Live turns:** send one message (`npm run storefront:chat -- --message "Bonjour"`); a `storefront_agent_turns` row appears with `backfilled = false`, its `latency_ms` and `user_message_id`.
+4. **Widget (dev store, after `shopify app deploy` from `storefront-app/`):** opening the panel writes one `storefront_agent_opens` row; adding a card to the cart sets the cart attribute `_advisor_conversation` (check `/cart.js` → `attributes`).
+5. **Page:** open `/storefront-agent` as management: 7/30/90 days and a custom range change every section; visits, accuracy and incremental revenue read « Not yet tracked »; purchases too while the dev store has no synced orders. As contact the link is absent and the URL redirects.
+6. **Purchases (only once the advisor runs on a shop whose orders are synced):** an order placed from an advisor cart gets `orders.advisor_conversation_id` on the next order sync, and appears once in assisted orders/revenue.
+

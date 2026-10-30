@@ -10,6 +10,16 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Storefront Agent → Dashboard, and the tracking behind it (2026-10-30)
+
+A new sidebar section, « Storefront Agent », with one page, `/storefront-agent`: Overview KPIs, the visit → purchase funnel, sales, quality, technical performance, rule-based vs LLM and performance by intent, over 7/30/90 days or a custom range, each figure against the period before. Rules and reasons: DECISIONS.md § « The dashboard reads turns, not the chat log ».
+
+- **Tracking (migration 07, applied to production 2026-10-30; 707 historical turns backfilled):** `storefront_agent_turns` (one word-free row per turn: route, intent, latency, tokens, tool calls/failures, fallbacks, unanswered, escalated, products shown), `storefront_agent_opens` (one row per panel opening, deduplicated by the widget's id), `orders.advisor_conversation_id` (assisted orders), and the read `storefront_agent_dashboard`.
+- **Written by:** the chat service after every reply and every failed turn (`turn-metrics.mjs`); the event route (`chat_opened`); the widget (open beacon; the `_advisor_conversation` cart attribute on every advisor add to cart; the chat reply now carries `conversationId`); the order sync (`customAttributes`, the column written only when present). History: `npm run storefront:backfill-turns` rebuilds turns from the chat log (`turn-backfill.mjs`, marked `backfilled`).
+- **Range:** a `90d` preset in `insights-range.mjs`, not drawn on the Insights bar.
+- **Roles:** developer and management; closed to contact (revenue).
+- **Checked:** `turn-metrics`, `turn-backfill`, `agent-dashboard` (pricing) and order-mapper tests; a PGlite behaviour test of the dashboard function (dedupe of clicks, one order once, pre-chat and cancelled orders excluded, refunds netted); the function run on a local copy of the dev store's real log (707 questions, P50 3.5 s / P95 9.5 s, 513 llm / 191 rules). `tsc` clean. After applying and regenerating the baseline, `npm test` 3955/3955 and `db:check:baseline` identical; the RPC answers on production for 7/30/90 days. **Not viewed in a browser; web not deployed; the widget changes need `shopify app deploy`.** VALIDATION_LOG → Storefront Agent dashboard.
+
 ## The advisor speaks six languages: French, English, Italian, German, Dutch and Spanish (2026-10-30)
 
 Owner: the store's five languages plus Spanish, « expandable to more languages … if this requires refactoring existing things then please do ». Rule and reasons: DECISIONS.md § « Six languages, built to take more ».

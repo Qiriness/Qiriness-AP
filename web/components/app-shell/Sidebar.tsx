@@ -12,6 +12,7 @@ import {
   InsightsIcon,
   OrdersIcon,
   SettingsIcon,
+  SparkleIcon,
   StoreIcon,
   TicketIcon,
 } from "@/components/icons";
@@ -19,7 +20,7 @@ import type { NavShop } from "@/lib/shop-context";
 import { isShopPage, navHref, switchHref } from "@/lib/shop-switch.mjs";
 import { ShopMenu } from "./ShopMenu";
 import { useShopOnScreen } from "./use-shop-on-screen";
-import { canUseManagementChat } from "../../../scripts/lib/dashboard-auth.mjs";
+import { canAccessPath, canUseManagementChat } from "../../../scripts/lib/dashboard-auth.mjs";
 import { useT } from "@/lib/i18n/client";
 import type { MessageKey } from "@/lib/i18n/en";
 import styles from "./Sidebar.module.css";
@@ -34,6 +35,8 @@ interface NavItem {
   chipKey?: MessageKey;
   /** Drawn only for roles this admits. Absent means every role. */
   visibleTo?: (role: string | null) => boolean;
+  /** A `nav.*` key: the item opens a section, drawn as a small heading above it. */
+  sectionKey?: MessageKey;
 }
 
 const NAV: NavItem[] = [
@@ -56,6 +59,16 @@ const NAV: NavItem[] = [
   { labelKey: "nav.orders", href: "/orders", icon: OrdersIcon, available: true },
   { labelKey: "nav.agentSetup", href: "/agent-setup", icon: AgentIcon, available: true },
   { labelKey: "nav.conversations", href: "/conversations", icon: ChatIcon, available: true },
+  // The storefront advisor's own section: one page today. Closed to the roles
+  // that may not see revenue (dashboard-auth.mjs), since it leads with it.
+  {
+    labelKey: "nav.storefrontDashboard",
+    sectionKey: "nav.storefrontAgent",
+    href: "/storefront-agent",
+    icon: SparkleIcon,
+    available: true,
+    visibleTo: (role) => role !== null && canAccessPath(role, "/storefront-agent"),
+  },
   { labelKey: "nav.settings", href: "/settings", icon: SettingsIcon, available: true },
 ];
 
@@ -156,6 +169,13 @@ export function Sidebar({
 
           return (
             <li key={item.labelKey}>
+              {item.sectionKey ? (
+                collapsed ? (
+                  <span className={styles.sectionRule} aria-hidden="true" />
+                ) : (
+                  <span className={styles.sectionHead}>{t(item.sectionKey)}</span>
+                )
+              ) : null}
               <Link
                 href={navHref(item.href, shop, shops.length)}
                 className={`${styles.navItem} ${styles.navLink} ${

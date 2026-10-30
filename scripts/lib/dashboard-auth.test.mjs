@@ -108,6 +108,11 @@ test('the three roles and their labels are the ones the CLI and the UI use', () 
   assert.deepEqual(Object.keys(ROLE_LABELS).sort(), [...ROLES].sort());
 });
 
+test('the Storefront Agent dashboard leads with revenue: closed to contact, open to the other two', () => {
+  assert.equal(canAccessPath('contact', '/storefront-agent'), false);
+  for (const role of ['developer', 'management']) assert.equal(canAccessPath(role, '/storefront-agent'), true);
+});
+
 test('contact cannot open Sales; the other two roles can', () => {
   assert.equal(canAccessPath('contact', '/insights/sales'), false);
   assert.equal(canAccessPath('contact', '/insights/sales/anything'), false);

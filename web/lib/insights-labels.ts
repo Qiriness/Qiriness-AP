@@ -38,7 +38,7 @@ export function monthLabelL(date: Date, locale: Locale): string {
   return names(date, locale, { month: "long", year: "numeric" });
 }
 
-const PRESETS = ["24h", "7d", "30d", "6m", "1y", "all"];
+const PRESETS = ["24h", "7d", "30d", "90d", "6m", "1y", "all"];
 
 /** The period the panel is showing, as a pill reads it. */
 export function rangeLabel(range: InsightsRange, t: Translate, locale: Locale): string {

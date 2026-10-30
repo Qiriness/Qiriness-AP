@@ -1,0 +1,7 @@
+/* The step rate beside a funnel stage's count: quieter than the count. */
+.step {
+  margin-inline-start: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-subtle);
+  font-weight: var(--weight-regular, 400);
+}

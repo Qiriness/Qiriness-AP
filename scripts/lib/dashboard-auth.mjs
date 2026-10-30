@@ -73,7 +73,9 @@ const DENIED = Object.freeze({
     '/api/settings/integrations/klaviyo',
     // Who each shop's automatic mail comes from and goes to, on the same tab.
     '/api/settings/integrations/mail',
-    '/api/settings/agents'
+    '/api/settings/agents',
+    // The Storefront Agent dashboard leads with assisted revenue (2026-10-30).
+    '/storefront-agent'
   ]
 });
 

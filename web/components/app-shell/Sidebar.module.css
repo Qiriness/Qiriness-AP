@@ -363,3 +363,22 @@
     display: none;
   }
 }
+
+/* A section heading above the items it opens (Storefront Agent). */
+.sectionHead {
+  display: block;
+  padding: var(--space-3) 0.875rem var(--space-1);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+/* The same break on the collapsed rail, where a heading has no room. */
+.sectionRule {
+  display: block;
+  height: 1px;
+  margin: var(--space-2) 0.5rem;
+  background: var(--border);
+}

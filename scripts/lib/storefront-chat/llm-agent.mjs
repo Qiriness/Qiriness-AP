@@ -96,7 +96,7 @@ const REPLY_SCHEMA = {
 
 // A reply that sends them to customer service always carries the contact form,
 // whatever the model set (owner, 2026-10-13). Every language's words (i18n/<code>/words.mjs).
-const CONTACT_WORDS = new RegExp(alternation('contact'), 'iu');
+export const CONTACT_WORDS = new RegExp(alternation('contact'), 'iu');
 // A reply that sends them to a doctor, a dermatologist or a pharmacist is followed by no routine offer
 // (owner's notes v4, 2026-10-19). On `norm` text.
 const PROFESSIONAL_WORDS = new RegExp(`\\b(${alternation('professional')})\\b`);

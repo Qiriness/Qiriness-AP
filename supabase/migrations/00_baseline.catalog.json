@@ -1342,7 +1342,8 @@
     "customer_email_masked text",
     "tracking_numbers text[] not null default '{}'::text[]",
     "discount_applications jsonb not null default '[]'::jsonb",
-    "discount_codes text[] not null default '{}'::text[]"
+    "discount_codes text[] not null default '{}'::text[]",
+    "advisor_conversation_id uuid"
    ],
    "constraints": [
     "orders_customer_id_fkey: FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE SET NULL",
@@ -2060,6 +2061,64 @@
     "stock_alerts_pkey: PRIMARY KEY (id)",
     "stock_alerts_shop_id_fkey: FOREIGN KEY (shop_id) REFERENCES public.shops(id) ON DELETE CASCADE",
     "stock_alerts_status_check: CHECK ((status = ANY (ARRAY['baseline'::text, 'sent'::text, 'failed'::text])))"
+   ]
+  },
+  "public.storefront_agent_opens": {
+   "rls": true,
+   "force_rls": false,
+   "acl": {
+    "service_role": "Dadmrtwx"
+   },
+   "columns": [
+    "id uuid not null",
+    "shop_domain text not null",
+    "conversation_id uuid",
+    "created_at timestamp with time zone not null default now()"
+   ],
+   "constraints": [
+    "storefront_agent_opens_pkey: PRIMARY KEY (id)"
+   ]
+  },
+  "public.storefront_agent_turns": {
+   "rls": true,
+   "force_rls": false,
+   "acl": {
+    "service_role": "Dadmrtwx"
+   },
+   "columns": [
+    "id uuid not null default gen_random_uuid()",
+    "user_message_id uuid",
+    "shop_domain text not null",
+    "conversation_id uuid not null",
+    "status text not null",
+    "error_code text",
+    "route text not null",
+    "rule text",
+    "intent text not null",
+    "action text",
+    "model text",
+    "model_calls smallint not null default 0",
+    "model_ms integer",
+    "input_tokens integer not null default 0",
+    "output_tokens integer not null default 0",
+    "tool_calls smallint not null default 0",
+    "tool_failures smallint not null default 0",
+    "fallbacks text[] not null default '{}'::text[]",
+    "unanswered boolean not null default false",
+    "escalated boolean not null default false",
+    "product_ids text[] not null default '{}'::text[]",
+    "latency_ms integer not null",
+    "backfilled boolean not null default false",
+    "created_at timestamp with time zone not null default now()"
+   ],
+   "constraints": [
+    "storefront_agent_turns_counts_check: CHECK (((model_calls >= 0) AND (input_tokens >= 0) AND (output_tokens >= 0) AND (tool_calls >= 0) AND (tool_failures >= 0) AND (latency_ms >= 0)))",
+    "storefront_agent_turns_fallbacks_check: CHECK ((fallbacks <@ ARRAY['source_unavailable'::text, 'forced_answer'::text, 'lexicon_backup'::text]))",
+    "storefront_agent_turns_intent_check: CHECK ((intent = ANY (ARRAY['routine_building'::text, 'reordering'::text, 'customer_service'::text, 'faq'::text, 'product_discovery'::text, 'other'::text])))",
+    "storefront_agent_turns_message_unique: UNIQUE (user_message_id)",
+    "storefront_agent_turns_pkey: PRIMARY KEY (id)",
+    "storefront_agent_turns_route_check: CHECK ((route = ANY (ARRAY['llm'::text, 'rules'::text, 'mock'::text])))",
+    "storefront_agent_turns_status_check: CHECK ((status = ANY (ARRAY['answered'::text, 'failed'::text])))"
    ]
   },
   "public.storefront_chat_messages": {
@@ -2967,6 +3026,7 @@
   "CREATE INDEX llm_usage_ticket_idx ON public.llm_usage USING btree (ticket_id)",
   "CREATE INDEX mail_jobs_due_idx ON public.mail_jobs USING btree (shop_id, state, next_attempt_at)",
   "CREATE INDEX order_lines_shop_product_idx ON public.order_lines USING btree (shop_id, product_id)",
+  "CREATE INDEX orders_advisor_conversation_idx ON public.orders USING btree (advisor_conversation_id) WHERE (advisor_conversation_id IS NOT NULL)",
   "CREATE INDEX orders_customer_id_idx ON public.orders USING btree (customer_id)",
   "CREATE INDEX orders_deleted_at_idx ON public.orders USING btree (shop_id, deleted_at)",
   "CREATE INDEX orders_delivered_at_idx ON public.orders USING btree (shop_id, delivered_at)",
@@ -3027,6 +3087,9 @@
   "CREATE INDEX spam_audit_shop_decided_at_idx ON public.spam_audit USING btree (shop_id, decided_at DESC)",
   "CREATE INDEX spam_audit_shop_outcome_idx ON public.spam_audit USING btree (shop_id, outcome, decided_at DESC)",
   "CREATE INDEX stock_alerts_shop_created_idx ON public.stock_alerts USING btree (shop_id, created_at DESC)",
+  "CREATE INDEX storefront_agent_opens_shop_time_idx ON public.storefront_agent_opens USING btree (shop_domain, created_at)",
+  "CREATE INDEX storefront_agent_turns_conversation_idx ON public.storefront_agent_turns USING btree (conversation_id, created_at)",
+  "CREATE INDEX storefront_agent_turns_shop_time_idx ON public.storefront_agent_turns USING btree (shop_domain, created_at)",
   "CREATE INDEX storefront_chat_messages_created_idx ON public.storefront_chat_messages USING btree (created_at)",
   "CREATE INDEX storefront_chat_messages_session_idx ON public.storefront_chat_messages USING btree (session_id, created_at)",
   "CREATE INDEX storefront_chat_sessions_activity_idx ON public.storefront_chat_sessions USING btree (last_activity_at)",
@@ -4125,6 +4188,12 @@
     "service_role": "X"
    }
   },
+  "public.storefront_agent_dashboard(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text, p_grain text)": {
+   "def": "CREATE OR REPLACE FUNCTION public.storefront_agent_dashboard(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text, p_grain text)\n RETURNS jsonb\n LANGUAGE sql\n STABLE\n SET search_path TO 'public'\nAS $function$\nwith bounds as (\n  select (p_from at time zone p_tz) as t0, (p_to at time zone p_tz) as t1\n),\nturns as (\n  select t.*\n  from storefront_agent_turns t, bounds b\n  where t.shop_domain = any(p_shops) and t.created_at >= b.t0 and t.created_at < b.t1\n),\nstarted as (\n  select t.conversation_id, min(t.created_at) as started_at\n  from storefront_agent_turns t\n  where t.shop_domain = any(p_shops)\n  group by t.conversation_id\n  having min(t.created_at) >= (select t0 from bounds) and min(t.created_at) < (select t1 from bounds)\n),\nconv_turns as (\n  select t.* from storefront_agent_turns t join started s using (conversation_id)\n),\nintent_counts as (\n  select conversation_id, intent, count(*) as n,\n    array_position(array['routine_building', 'reordering', 'customer_service', 'faq', 'product_discovery', 'other'], intent) as priority\n  from conv_turns group by conversation_id, intent\n),\nconv_intent as (\n  -- The intent most of its turns had; `other` only when nothing else; ties by priority.\n  select distinct on (conversation_id) conversation_id, intent\n  from intent_counts\n  order by conversation_id, (intent = 'other'), n desc, priority\n),\nclicks as (\n  select e.conversation_ref, e.event_type, e.created_at, pid\n  from advisory_events e, unnest(e.product_ids) as pid\n  where e.shop_domain = any(p_shops) and e.channel = 'storefront_chat'\n    and e.event_type in ('product_clicked', 'added_to_cart')\n),\nlinked_orders as (\n  select o.id, o.advisor_conversation_id as conversation_id,\n    coalesce(o.processed_at, o.shopify_created_at) as placed_at,\n    o.total_price - coalesce(o.total_refunded, 0) as revenue\n  from orders o join shops s on s.id = o.shop_id\n  where s.shop_domain = any(p_shops)\n    and o.advisor_conversation_id is not null\n    and o.deleted_at is null and o.cancelled_at is null\n    -- Placed after the conversation began: an attribute older than the chat is not its sale.\n    and exists (\n      select 1 from storefront_agent_turns t\n      where t.conversation_id = o.advisor_conversation_id and t.shop_domain = s.shop_domain\n        and t.created_at <= coalesce(o.processed_at, o.shopify_created_at)\n    )\n),\nwindow_orders as (\n  select lo.* from linked_orders lo, bounds b where lo.placed_at >= b.t0 and lo.placed_at < b.t1\n),\nconv as (\n  select\n    s.conversation_id,\n    s.started_at,\n    ci.intent,\n    count(*) as turns,\n    (array_agg(t.status order by t.created_at desc))[1] = 'answered'\n      and not bool_or(t.escalated) and not bool_or(t.unanswered) as resolved,\n    bool_or(t.escalated) as escalated,\n    bool_or(cardinality(t.product_ids) > 0) as shown,\n    exists (select 1 from clicks c where c.conversation_ref = s.conversation_id::text and c.event_type = 'product_clicked') as clicked,\n    exists (select 1 from clicks c where c.conversation_ref = s.conversation_id::text and c.event_type = 'added_to_cart') as carted,\n    (select count(*) from linked_orders lo where lo.conversation_id = s.conversation_id) as orders,\n    (select coalesce(sum(lo.revenue), 0) from linked_orders lo where lo.conversation_id = s.conversation_id) as revenue\n  from started s\n  join conv_turns t using (conversation_id)\n  join conv_intent ci using (conversation_id)\n  group by s.conversation_id, s.started_at, ci.intent\n),\n-- Each turn that showed products, and whether one of them was clicked / added\n-- afterwards in the same conversation: what a route's click and cart rates read.\nshown_turns as (\n  select t.id, t.route,\n    exists (\n      select 1 from clicks c\n      where c.conversation_ref = t.conversation_id::text and c.event_type = 'product_clicked'\n        and c.created_at >= t.created_at and c.pid = any(t.product_ids)\n    ) as clicked,\n    exists (\n      select 1 from clicks c\n      where c.conversation_ref = t.conversation_id::text and c.event_type = 'added_to_cart'\n        and c.created_at >= t.created_at and c.pid = any(t.product_ids)\n    ) as carted\n  from turns t\n  where cardinality(t.product_ids) > 0\n),\nlatency as (\n  select\n    percentile_cont(0.5) within group (order by latency_ms) as p50,\n    percentile_cont(0.95) within group (order by latency_ms) as p95\n  from turns where status = 'answered'\n)\nselect jsonb_build_object(\n  'coverage', jsonb_build_object(\n    'turns_from', (select min(created_at) from storefront_agent_turns where shop_domain = any(p_shops)),\n    'live_turns_from', (select min(created_at) from storefront_agent_turns where shop_domain = any(p_shops) and not backfilled),\n    'opens_from', (select min(created_at) from storefront_agent_opens where shop_domain = any(p_shops)),\n    -- Purchases are measurable only where this shop's orders are synced.\n    'orders_synced', exists (\n      select 1 from orders o join shops s on s.id = o.shop_id where s.shop_domain = any(p_shops)\n    ),\n    'linked_orders_from', (select min(placed_at) from linked_orders)\n  ),\n  'conversations', jsonb_build_object(\n    'total', (select count(*) from conv),\n    'resolved', (select count(*) from conv where resolved),\n    'escalated', (select count(*) from conv where escalated),\n    'shown', (select count(*) from conv where shown),\n    'clicked', (select count(*) from conv where clicked),\n    'carted', (select count(*) from conv where carted),\n    'purchased', (select count(*) from conv where orders > 0)\n  ),\n  'opens', (select count(*) from storefront_agent_opens o, bounds b where o.shop_domain = any(p_shops) and o.created_at >= b.t0 and o.created_at < b.t1),\n  'orders', jsonb_build_object(\n    'count', (select count(*) from window_orders),\n    'revenue', (select coalesce(sum(revenue), 0) from window_orders)\n  ),\n  'turns', (\n    select jsonb_build_object(\n      'total', count(*),\n      'answered', count(*) filter (where status = 'answered'),\n      'failed', count(*) filter (where status = 'failed'),\n      'conversations', count(distinct conversation_id),\n      'p50', (select p50 from latency),\n      'p95', (select p95 from latency),\n      'model_p50', percentile_cont(0.5) within group (order by model_ms) filter (where model_ms is not null),\n      'model_p95', percentile_cont(0.95) within group (order by model_ms) filter (where model_ms is not null),\n      'tool_calls', coalesce(sum(tool_calls), 0),\n      'tool_failures', coalesce(sum(tool_failures), 0),\n      'with_fallback', count(*) filter (where cardinality(fallbacks) > 0),\n      'unanswered', count(*) filter (where unanswered),\n      'escalated', count(*) filter (where escalated),\n      'input_tokens', coalesce(sum(input_tokens), 0),\n      'output_tokens', coalesce(sum(output_tokens), 0)\n    )\n    from turns\n  ),\n  'errors', coalesce((\n    select jsonb_agg(jsonb_build_object('code', error_code, 'turns', n) order by n desc)\n    from (select error_code, count(*) as n from turns where status = 'failed' group by error_code) x\n  ), '[]'::jsonb),\n  'fallbacks', coalesce((\n    select jsonb_agg(jsonb_build_object('kind', kind, 'turns', n) order by n desc)\n    from (select kind, count(*) as n from turns, unnest(fallbacks) as kind group by kind) x\n  ), '[]'::jsonb),\n  'tokens', coalesce((\n    select jsonb_agg(jsonb_build_object('route', route, 'intent', intent, 'model', model,\n      'input', input, 'output', output))\n    from (\n      select t.route, coalesce(ci.intent, t.intent) as intent, t.model,\n        sum(t.input_tokens) as input, sum(t.output_tokens) as output\n      from turns t left join conv_intent ci using (conversation_id)\n      where t.model is not null\n      group by t.route, coalesce(ci.intent, t.intent), t.model\n    ) x\n  ), '[]'::jsonb),\n  'routes', coalesce((\n    select jsonb_agg(jsonb_build_object(\n      'route', r.route, 'turns', r.turns, 'failed', r.failed, 'resolved', r.resolved,\n      'p50', r.p50, 'p95', r.p95,\n      'shown', coalesce(st.shown, 0), 'clicked', coalesce(st.clicked, 0), 'carted', coalesce(st.carted, 0)\n    ) order by r.route)\n    from (\n      select route, count(*) as turns,\n        count(*) filter (where status = 'failed') as failed,\n        count(*) filter (where status = 'answered' and not unanswered and not escalated) as resolved,\n        percentile_cont(0.5) within group (order by latency_ms) filter (where status = 'answered') as p50,\n        percentile_cont(0.95) within group (order by latency_ms) filter (where status = 'answered') as p95\n      from turns group by route\n    ) r\n    left join (\n      select route, count(*) as shown, count(*) filter (where clicked) as clicked, count(*) filter (where carted) as carted\n      from shown_turns group by route\n    ) st using (route)\n  ), '[]'::jsonb),\n  'intents', coalesce((\n    select jsonb_agg(jsonb_build_object(\n      'intent', intent, 'conversations', n, 'resolved', resolved, 'carted', carted,\n      'purchased', purchased, 'revenue', revenue, 'p50', p50, 'p95', p95\n    ) order by n desc)\n    from (\n      select c.intent, count(*) as n,\n        count(*) filter (where c.resolved) as resolved,\n        count(*) filter (where c.carted) as carted,\n        count(*) filter (where c.orders > 0) as purchased,\n        coalesce(sum(c.revenue), 0) as revenue\n      from conv c\n      group by c.intent\n    ) x\n    left join (\n      select c.intent,\n        percentile_cont(0.5) within group (order by ct.latency_ms) as p50,\n        percentile_cont(0.95) within group (order by ct.latency_ms) as p95\n      from conv c join conv_turns ct using (conversation_id)\n      where ct.status = 'answered'\n      group by c.intent\n    ) l using (intent)\n  ), '[]'::jsonb),\n  'series', coalesce((\n    select jsonb_agg(jsonb_build_object('bucket', bucket, 'conversations', conversations, 'orders', orders, 'revenue', revenue) order by bucket)\n    from (\n      select bucket, sum(conversations) as conversations, sum(orders) as orders, sum(revenue) as revenue\n      from (\n        select date_trunc(p_grain, started_at at time zone p_tz) as bucket, 1 as conversations, 0 as orders, 0::numeric as revenue from conv\n        union all\n        select date_trunc(p_grain, placed_at at time zone p_tz), 0, 1, revenue from window_orders\n      ) u\n      group by bucket\n    ) x\n  ), '[]'::jsonb),\n  'products', coalesce((\n    select jsonb_agg(jsonb_build_object(\n      'product_id', p.product_id, 'title', pr.title, 'handle', pr.handle,\n      'shown', p.shown, 'clicked', p.clicked, 'carted', p.carted,\n      'units', coalesce(s.units, 0), 'sales', coalesce(s.sales, 0)\n    ) order by p.clicked desc, p.carted desc, p.shown desc)\n    from (\n      select pid as product_id,\n        count(distinct conversation_id) filter (where kind = 'shown') as shown,\n        count(distinct conversation_id) filter (where kind = 'product_clicked') as clicked,\n        count(distinct conversation_id) filter (where kind = 'added_to_cart') as carted\n      from (\n        select t.conversation_id::text as conversation_id, pid, 'shown' as kind from turns t, unnest(t.product_ids) as pid\n        union all\n        select c.conversation_ref, c.pid, c.event_type from clicks c, bounds b where c.created_at >= b.t0 and c.created_at < b.t1\n      ) e\n      group by pid\n      order by 3 desc, 4 desc, 2 desc\n      limit 10\n    ) p\n    left join products pr on pr.id::text = p.product_id\n    left join lateral (\n      select sum(nullif(ol.quantity, '')::numeric) as units, sum(nullif(ol.discounted_total, '')::numeric) as sales\n      from window_orders wo join order_lines ol on ol.order_id = wo.id\n      where pr.shopify_product_id is not null and ol.product_id = pr.shopify_product_id\n    ) s on true\n  ), '[]'::jsonb)\n);\n$function$\n",
+   "acl": {
+    "service_role": "X"
+   }
+  },
   "public.storefront_chat_purge(p_before timestamp with time zone)": {
    "def": "CREATE OR REPLACE FUNCTION public.storefront_chat_purge(p_before timestamp with time zone)\n RETURNS integer\n LANGUAGE sql\n SET search_path TO ''\nAS $function$\n  with gone as (\n    delete from public.storefront_chat_sessions s\n    where s.last_activity_at < p_before\n    returning 1\n  )\n  select count(*)::integer from gone;\n$function$\n",
    "acl": {
@@ -4342,6 +4411,7 @@
   "column public.mail_subscriptions.last_error: The last create or renew failure, one line. Paired with an error-level log (mail.subscription_renew_failed): the alert, until the project has an alert channel.",
   "column public.order_lines.line_index: The element's 1-based position in orders.line_items (WITH ORDINALITY).",
   "column public.order_lines.quantity: Text as in the JSON; cast ::int where read. current_quantity, original_total and discounted_total likewise (::int / ::numeric).",
+  "column public.orders.advisor_conversation_id: The storefront advisor conversation (storefront_agent_turns.conversation_id) whose add to cart led to this order, from the cart attribute _advisor_conversation. Null for every order the advisor had no part in.",
   "column public.orders.customer_email_hash: Hash of the order contact email for support lookup without duplicating raw email on the order row.",
   "column public.orders.customer_email_masked: The order contact address reduced to a recognisable form (j***l@orange.fr), derived beside customer_email_hash from the same input so the two can never describe different addresses. NOT a raw address: the local part is destroyed at map time. It answers the question a hash cannot -- which address is this? -- for a human reviewing an ownership mismatch. Never sent to a model: the tool layer withholds it, and only the dashboard renders it.",
   "column public.orders.customer_id: Optional link to the local customer snapshot. Guest orders or unsynced customers may only have shopify_customer_id or hashed contact fields.",
@@ -4621,6 +4691,7 @@
   "function public.social_read_token(p_shop uuid, p_provider text): The shop's decrypted token for one provider, for the sync. Service role only; never returned to a browser.",
   "function public.social_refresh_token(p_shop uuid, p_provider text, p_token text, p_expires_at timestamp with time zone): Rotates a shop OAuth bundle in Vault without changing the connecting user or connection date. Service role only.",
   "function public.social_save_token(p_shop uuid, p_provider text, p_token text, p_expires_at timestamp with time zone, p_scopes text[], p_connected_by uuid): Stores (or replaces) a provider's OAuth token for the shop in Vault and records the connection. Service role only.",
+  "function public.storefront_agent_dashboard(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text, p_grain text): The Storefront Agent dashboard over [p_from, p_to) as wall-clock time in p_tz, for the advisor's shops (shop domains): conversations started in it, turns and chat opens in it, assisted orders placed in it (orders.advisor_conversation_id, net of refunds, cancelled excluded), series by p_grain, top products, tokens by route/intent/model (priced by the dashboard). One jsonb document.",
   "function public.vip_customers(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_customer_ids uuid[]): THE VIP RULE: customers whose net spend AND order count inside the last p_window_months are both strictly greater than the minimums, uncancelled orders only, marketplace channels excluded. With their windowed orders and spend. Pass p_customer_ids to ask about specific customers.",
   "function public.vip_summary(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[]): How many customers vip_customers() admits, and how many ordered at all in the same window.",
   "function public.vip_tickets(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_ticket_ids uuid[]): Live tickets whose linked customer is a VIP under vip_customers(). One call marks a whole queue.",
@@ -4711,6 +4782,8 @@
   "table public.social_posts: One row per published post with its lifetime counts. Posts of the last 90 days are re-read each sync, because their counts still grow. Counts only: no comment text and no commenter is ever fetched.",
   "table public.spam_audit: Audit trail for the agent ingestion spam gate: one row per decision, recording kept/blocked and a one-line reason. Exists because both passes drop mail before any ticket is written, so a blocked email would otherwise leave no trace. Stores sender address, subject AND the cleaned body (see 08) as the evidence a human needs to judge whether a drop was right. The body expires on its own clock (body_expires_at) and is nulled by the worker; the decision row is kept indefinitely. Service-role worker only until dashboard roles and policies exist.",
   "table public.stock_alerts: The stock alert's record: each check that changed the set of out-of-stock / critical products. The latest baseline or sent row is the state \"newly\" is measured against.",
+  "table public.storefront_agent_opens: One row per opening of the storefront advisor panel; the id is minted by the widget, so a repeated beacon is one row. conversation_id when the browser already had a conversation.",
+  "table public.storefront_agent_turns: One row per storefront advisor turn: route (llm / rules / mock), latency, tokens, tool calls and failures, fallbacks, unanswered, escalated, intent, products shown. No words, no customer. Written by the storefront chat service (turn-metrics.mjs); read by storefront_agent_dashboard.",
   "table public.storefront_chat_messages: Each customer message and advisor reply in a storefront_chat_sessions conversation, with the page context the widget sent.",
   "table public.storefront_chat_sessions: An anonymous storefront advisor conversation (Theme App Extension via app proxy). The token is minted server-side; purged after the retention window.",
   "table public.storefront_session_months: Closed months of Shopify Analytics human sessions and funnel counts, on the shop clock. Rewritten nightly; the last two months are always read live.",

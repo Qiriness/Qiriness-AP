@@ -112,8 +112,8 @@ message (+ chip value, + quick action)
 | Profile | `profile_field_collected` (field + source) |
 | Questions | `clarification_asked` (field + why) |
 | Recommendation | `products_considered` (counts per exclusion code), `products_recommended` (ids, step reason codes, merchandised ids, skipped steps) |
-| Clicks | `product_clicked` |
-| In the schema, not written yet | `added_to_cart`, `recommendation_abandoned`, `unresolved_question`, `support_handoff`, `purchase` |
+| Clicks | `product_clicked`, `added_to_cart` (the widget's card and routine buttons, « Oui, ajouter ») |
+| In the schema, not written yet | `recommendation_abandoned`, `unresolved_question`, `support_handoff`, `purchase` (purchases are `orders.advisor_conversation_id` instead, below) |
 
 **Each row:**
 - channel: `storefront_chat` now; `email` is reserved;
@@ -122,7 +122,9 @@ message (+ chip value, + quick action)
 
 Events never hold the customer's words.
 
-**Future dashboard mapping (not built; a separate task):**
+**The dashboard (built 2026-10-30):** Storefront Agent → Dashboard (`/storefront-agent`) reads these clicks and adds beside `storefront_agent_turns` (one row per turn), `storefront_agent_opens` (panel openings) and `orders.advisor_conversation_id` (an order whose cart carried the widget's `_advisor_conversation` attribute). DECISIONS.md § « The dashboard reads turns, not the chat log ». The original mapping, still the plan for what is not on it yet:
+
+**Earlier dashboard mapping:**
 - **Advice funnel:** per channel and per day, conversations → advisory started → question asked → recommended → clicked → added to cart → purchase. These are counts by `event_type`; rates are rebuilt from counts, as in § Storefront analytics.
 - **Playbook mix and question load:** `products_recommended.playbook_key` and `clarification_asked.payload.field`.
 - **Product advice performance:** `products_recommended.product_ids` joined to `products` alongside the existing product-performance table, with `merchandised_ids` kept separate so pushed and earned recommendations can be compared.

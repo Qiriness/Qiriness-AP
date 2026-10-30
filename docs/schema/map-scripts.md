@@ -195,6 +195,10 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # advisor-tools (one consultation turn: profile pre-pass,
 |       |                                # advice in the prompt, the advise tool, chips, cards, events) ·
 |       |                                # advisor-state (context.advisor folded from the log) ·
+|       |                                # turn-metrics (a turn -> its storefront_agent_turns row:
+|       |                                # route, intent, latency, tokens, failures, fallbacks) ·
+|       |                                # turn-backfill (the same rows rebuilt from the chat log) ·
+|       |                                # agent-dashboard (rates, tokens priced; the dashboard's math) ·
 |       |                                # profile-reader (the lexicon's backup: gate on residue,
 |       |                                # one structured model call → profile values)
 |       |-- i18n/                        # the chat's LANGUAGES, one folder each (fr, en, it, de, nl, es):

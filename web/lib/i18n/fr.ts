@@ -18,6 +18,8 @@ export const fr: Record<MessageKey, string> = {
   "nav.agentSetup": "Config Agent",
   "nav.conversations": "Conversations",
   "nav.settings": "Paramètres",
+  "nav.storefrontAgent": "Agent boutique",
+  "nav.storefrontDashboard": "Tableau de bord",
   "nav.primary": "Principale",
   "nav.beta": "Bêta",
   "nav.soon": "Bientôt",
