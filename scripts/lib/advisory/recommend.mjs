@@ -20,6 +20,7 @@ import { compileConfig, inSlot, productSignals } from './config.mjs';
 import { selectPlaybook } from './select-playbook.mjs';
 import { exclusionOf, rankSlot, suitability, wantedTexture } from './ranking.mjs';
 import { EXCLUSION, FIT, NO_MATCH, PINNED, SKIPPED, STATUS } from './reason-codes.mjs';
+import { fallbackChain } from '../i18n/languages.mjs';
 import { createFoundationAdvisor } from './foundations.mjs';
 import { isBundle } from './product-knowledge.mjs';
 
@@ -86,8 +87,12 @@ export function createAdvisor(rawConfig, catalogue, { knowledge = null, routines
 
   function label(field, value, locale) {
     const group = LABEL_GROUP[field] ?? field;
-    const pick = (lang) => raw.labels?.[lang]?.[group]?.[value];
-    return pick(locale) ?? pick('fr') ?? value.replace(/_/g, ' ');
+    // The config's labels per language (`labels.<code>`), along the fallback chain (languages.mjs).
+    for (const lang of fallbackChain(locale)) {
+      const found = raw.labels?.[lang]?.[group]?.[value];
+      if (found) return found;
+    }
+    return value.replace(/_/g, ' ');
   }
   const question = (field, values, locale, reason) => ({
     field,

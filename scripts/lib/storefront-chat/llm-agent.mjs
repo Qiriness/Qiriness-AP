@@ -39,17 +39,20 @@ import { retrieveKnowledge } from './knowledge-router.mjs';
 import { createShoppingTurn, shoppingToolDefinitions, SHOPPING_TOOL_NAMES } from './shopping-tools.mjs';
 import { promotionsForProduct, routineReward } from './shopping-evaluator.mjs';
 import { buildRoutineView, concernName } from './routine-view.mjs';
-import { BODY_AREAS, mentionsCaution, mentionsRoutine } from '../advisory/lexicon.mjs';
+import { asksForAccessory, BODY_AREAS, mentionsCaution, mentionsRoutine } from '../advisory/lexicon.mjs';
+import { isAccessory } from '../advisory/product-knowledge.mjs';
+import { openingPromotion, promotionLabel, repurchaseFavourite, repurchaseText } from './repurchase-opening.mjs';
 import { norm } from '../advisory/text.mjs';
 import { displayLanguage, languageContext, validReplyLanguage } from './conversation-language.mjs';
 import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from './advisor-tools.mjs';
 import { ORDER_TOOL, orderToolDefinition, runOrderTool } from './order-tools.mjs';
 import { USE_SKILL, activeSkill, skillBlock, skillNamed, useSkillDefinition } from './skills.mjs';
 import { GET_PAST_PURCHASES } from './skills/routine-builder.mjs';
-import { CART_CHOICE, FLOW_CHOICE, anchorFor, beforeAdvice, cartDoneText, cartNoText, cartToAdd, emptyFlow, followUpFor, followUpNote, routineReadyText } from './routine-flow.mjs';
+import { CART_CHOICE, FLOW_CHOICE, anchorFor, askToAdd, asksToAdd, beforeAdvice, cartDoneText, cartNoText, cartToAdd, emptyFlow, followUpFor, followUpNote, routineReadyText } from './routine-flow.mjs';
 import { cleanPurchaseState, customerRanges, describePurchases, mayBeRunningLow, emptyPurchaseState, mentionsPastPurchase, parsePurchaseChoice, purchaseChoices, purchaseItems, purchaseToAsk, recordAnswer } from './purchase-turn.mjs';
 import { READER_TIMEOUT_MS, mentionsSkin, readProfile, shouldRead } from './profile-reader.mjs';
 import { isBuiltRoutine, routineRecord } from '../advisory/routine-record.mjs';
+import { alternation, languageOf, messages as languageMessages } from '../i18n/languages.mjs';
 
 export const DEFAULT_STOREFRONT_MODEL = 'gpt-6-luna';
 /** One model request. */
@@ -92,19 +95,18 @@ const REPLY_SCHEMA = {
 };
 
 // A reply that sends them to customer service always carries the contact form,
-// whatever the model set (owner, 2026-10-13). French and English.
-const CONTACT_WORDS = /service (?:client|clientèle|consommateurs?)|nous contacter|contactez[- ]nous|formulaire de contact|notre équipe|customer (?:service|care|support)|contact us|contact form|get in touch|reach (?:out to )?us/iu;
+// whatever the model set (owner, 2026-10-13). Every language's words (i18n/<code>/words.mjs).
+const CONTACT_WORDS = new RegExp(alternation('contact'), 'iu');
 // A reply that sends them to a doctor, a dermatologist or a pharmacist is followed by no routine offer
-// (owner's notes v4, 2026-10-19). French and English, on `norm` text.
-const PROFESSIONAL_WORDS = /\b(medecins?|dermatolog\w*|pharmacien\w*|professionnel de sante|allergolog\w*|doctors?|physicians?|pharmacists?|gp|healthcare professional)\b/;
+// (owner's notes v4, 2026-10-19). On `norm` text.
+const PROFESSIONAL_WORDS = new RegExp(`\\b(${alternation('professional')})\\b`);
 // A message about an order (owner's notes v4: « livré mais pas reçu », « un produit différent »), on `norm` text.
-const ORDER_WORDS = /\b(commandes?|commande|colis|livr\w*|recu|recue|recus|manquants?|rembours\w*|echange\w*|retour\w*|suivi|produit (different|errone|abime|casse)|orders?|parcels?|packages?|deliver\w*|received|missing|refunds?|exchanges?|returns?|tracking|wrong (item|product))\b/;
-const ORDER_NUMBER = /\b(numero de (la )?commande|order number)\b/;
-// …so the contact form gets it (the form never sees this chat).
-const ORDER_REMINDER = { fr: "N'oubliez pas d'indiquer votre numéro de commande dans le formulaire.", en: "Don't forget to include your order number in the form." };
+const ORDER_WORDS = new RegExp(`\\b(${alternation('order')})\\b`);
+const ORDER_NUMBER = new RegExp(`\\b(${alternation('orderNumber')})\\b`);
+// …so the contact form gets it (the form never sees this chat): messages(lang).orderReminder.
 // The model asking the concern itself (« Quelle est votre priorité… ? », « l'une de ces préoccupations ? »).
 // …or what they want to work on (« que souhaitez-vous cibler ? », "what would you like to address?").
-const CONCERN_ASK = /\b(preoccup\w*|priorit\w*|soucis?|concerns?|worr\w*|bother\w*|l une de ces|parmi ces|one of these|which of these|cibler|traiter|ameliorer|attenuer|travailler|address|target|focus on|work on|improve|treat)\b/;
+const CONCERN_ASK = new RegExp(`\\b(${alternation('concernAsk')})\\b`);
 
 const FINAL_ROUND_NOTE =
   'No more tool calls are available. Answer now from the authoritative facts already returned above. Product data may support product cards; policy passages keep their conditions. If an answer is missing, uncertain or unavailable, say so or refer to customer service. Never fill a gap from training.';
@@ -139,14 +141,16 @@ function rangesByHandle(knowledge) {
  *   readOrder?: ((query: { shopDomain: string, orderNumber: number }) => Promise<object | null>) | null,
  *   orderShopDomain?: string | null,
  *   productKnowledge?: Map<string, object> | null,
- *   repurchaseIntervals?: Map<string, object> | null
+ *   repurchaseIntervals?: Map<string, object> | null,
+ *   repurchaseOpening?: object | null
  * }} deps
  *
  * `readOrder`: one order's status by its number (order-status-repository.mjs),
  * on `orderShopDomain`, the shop whose orders are synced (default:
  * catalogueShopDomain). `productKnowledge`: the brand's product knowledge by
  * handle (product-knowledge.mjs). `repurchaseIntervals`: measured repurchase by
- * handle (replenishment.mjs measuredIndex).
+ * handle (replenishment.mjs measuredIndex). `repurchaseOpening`: the routine
+ * settings' `repurchase_opening` (repurchase-opening.mjs).
  *
  * `advisor` is the beauty consultation engine (scripts/lib/advisory/), built
  * from the shop's playbooks over the catalogue. Without it the agent advises
@@ -171,6 +175,7 @@ export function createLlmAgent({
   readerTimeoutMs = READER_TIMEOUT_MS,
   productKnowledge = null,
   repurchaseIntervals = null,
+  repurchaseOpening = null,
   readOrder = null,
   orderShopDomain = null
 }) {
@@ -194,6 +199,40 @@ export function createLlmAgent({
   return {
     name: STOREFRONT_AGENT_NAME,
     model,
+    /**
+     * The chat just opened for a signed-in customer (repurchase-opening.mjs): their favourite product in its
+     * repurchase window, as its sentence, its card and the cart question's buttons, or null. Code only, no
+     * model call. The purchases and the shop's offers are read together; a failed or slow read is null (no
+     * offer: the sentence without it). `advisor` is the state a reply to it continues from: the product
+     * pending in the cart question, so « Oui » or a typed « oui » adds it.
+     *
+     * @param {{ purchases: (() => Promise<object | null>) | null, locale?: string | null, shopDomain?: string | null }} visit
+     */
+    async opening({ purchases, locale = null, shopDomain = null }) {
+      if (!purchases || !catalogue || !productKnowledge) return null;
+      // The same 1.5 s cap as a turn's purchase read.
+      const [summary, offers] = await Promise.all([
+        withDeadline(Promise.resolve().then(purchases), 1500).catch(() => null),
+        readShopping && shopDomain ? withDeadline(readShopping(shopDomain), 1500).catch(() => null) : null,
+      ]);
+      const item = repurchaseFavourite(purchaseItems(summary ?? null, catalogue), { catalogue, knowledge: productKnowledge, measured: repurchaseIntervals, settings: repurchaseOpening });
+      if (!item) return null;
+      const lang = languageOf(locale);
+      const money = priceFormatter(currency, locale ?? lang);
+      const product = catalogue.products.find((p) => p.id === item.product_id);
+      const products = toCards([{ handle: item.handle, rationale: '' }], new Set([item.handle]), catalogue, money, linkBase);
+      if (!product || !products.length) return null;
+      const offer = openingPromotion(offers?.status === 'ok' ? promotionsForProduct(offers, product.shopifyId) : []);
+      const asked = askToAdd(emptyFlow(), [{ product_id: product.id, variant_id: cartVariant(product), name: product.name }], lang);
+      return {
+        text: repurchaseText(item.name, lang, { days: item.days_since, promo: offer ? promotionLabel(offer, money, lang) : null }),
+        products,
+        choices: asked.followUp.choices,
+        product_id: item.product_id,
+        advisor: { flow: asked.flow },
+        trace: { days_since: item.days_since, expected_days: item.expected_days, type: item.type, ...(offer ? { promotion_id: offer.promotion_id } : {}) }
+      };
+    },
     /**
      * @param {{
      *   message: string,
@@ -250,6 +289,11 @@ export function createLlmAgent({
         ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || purchaseAnswer || flowChoice ? null : choice })
         : null;
       const resolvedIds = new Set(resolution?.products.map((p) => p.id) ?? []);
+      // An accessory or a device only when asked for (owner, 2026-10-29: the Gua Sha came for « produits à moins
+      // de 40 »): by its kind (« un accessoire », « un roller »), by name, or on its own page. Else search skips it
+      // and no card shows it.
+      const withheld = new Set(asksForAccessory(message) ? [] : (catalogue?.products ?? [])
+        .filter((p) => isAccessory(productKnowledge?.get(p.handle)) && !resolvedIds.has(p.id) && p.id !== pageProduct?.id).map((p) => p.id));
       // The answer to the « which one? » just asked: the model asking it again in its own words is settled by it.
       const answeredIds = refs?.pending && resolution?.status === 'resolved' ? [...resolvedIds] : [];
       const productDataIds = new Set(resolution?.products.slice(0, 3).map((p) => p.id) ?? []);
@@ -605,6 +649,39 @@ export function createLlmAgent({
         };
       }
 
+      // « AJOUTEZ-LE AU PANIER »: the code asks first (owner, 2026-10-29: « the agent should check do you want
+      // to add this product to the cart and then the customer can confirm yes or no or say it »). The model
+      // used to answer « je ne peux pas ajouter directement ». What it is: the product named; else the last
+      // bubble's card, or the routine it showed; else the page's product. Several cards without a routine
+      // are ambiguous: the model asks which.
+      if (advisorTurn && !flowStart.cart && asksToAdd(message)) {
+        const last = [...history].reverse().find((m) => m.role === 'assistant');
+        const urls = last?.context?.follow_up?.products?.length ? last.context.follow_up.products : last?.context?.products ?? [];
+        const shown = urls.map((url) => catalogue?.products.find((p) => String(url).endsWith(`/products/${encodeURIComponent(p.handle)}`))).filter(Boolean);
+        const routineShown = shown.length > 1 && Boolean(flow.routine_ref);
+        const target = resolvedIds.size === 1 ? [byId([...resolvedIds][0])] : shown.length === 1 || routineShown ? shown : !shown.length && pageProduct ? [pageProduct] : [];
+        const items = target.filter((p) => p?.inStock).map((p) => ({ product_id: p.id, variant_id: routineShown ? variantFor(p) : cartVariant(p), name: p.name }));
+        if (items.length) {
+          const lang = displayLanguage(language, locale);
+          const asked = askToAdd(flow, items, lang, { discount: routineShown && Boolean(routineDiscount) });
+          flow = asked.flow;
+          trace.model_skipped = 'cart_ask';
+          return {
+            text: asked.followUp.text,
+            replyLanguage: lang,
+            products: [],
+            choices: asked.followUp.choices,
+            model,
+            usage: usage.inputTokens || usage.outputTokens ? usage : null,
+            trace,
+            resolution: null,
+            refs: { recommended: [], mentioned: items.map((x) => x.product_id) },
+            advisor: advisorState_(advisorTurn.nextState()),
+            events: []
+          };
+        }
+      }
+
       if (followUp?.kind === 'purchase') {
         trace.follow_up = 'purchase';
         trace.model_skipped = 'purchase_question';
@@ -779,7 +856,8 @@ export function createLlmAgent({
                   currency,
                   locale,
                   query: message,
-                  resolution: { index: resolutionIndex, refs, pageProductId: pageProduct?.id ?? null, known: () => answeredIds }
+                  resolution: { index: resolutionIndex, refs, pageProductId: pageProduct?.id ?? null, known: () => answeredIds },
+                  withheld
                 });
             const { result: output, handles } = ran;
             if (call.name === ORDER_TOOL) {
@@ -895,9 +973,10 @@ export function createLlmAgent({
           message
         });
         if (caution && !ASKS_TO_SEE.test(message)) products = [];
+        products = products.filter((c) => !withheld.has(c.id));
         // An order the chat cannot settle: the form needs its number (owner's notes v4), said once, by the code.
-        const replyLang = String(parsed.replyLanguage ?? displayLanguage(language, locale)).slice(0, 2) === 'en' ? 'en' : 'fr';
-        const orderReminder = contact && ORDER_WORDS.test(norm(message)) && !ORDER_NUMBER.test(norm(parsed.text)) ? ORDER_REMINDER[replyLang] : null;
+        const replyLang = languageOf(parsed.replyLanguage ?? displayLanguage(language, locale));
+        const orderReminder = contact && ORDER_WORDS.test(norm(message)) && !ORDER_NUMBER.test(norm(parsed.text)) ? languageMessages(replyLang).orderReminder : null;
         if (orderReminder) trace.order_reminder = true;
         if (advisorTurn) trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace, ...(describedAdvice?.steps?.[0]?.promotions ? { promotions: describedAdvice.steps[0].promotions.map((p) => p.promotion_id) } : {}) };
         if (followUp) trace.follow_up = followUp.kind;
@@ -1055,7 +1134,7 @@ export function variantPreference(choice, profile) {
 }
 
 // « montrez-le-moi », « le lien », "show me": the customer asks to see a product again.
-const ASKS_TO_SEE = /\b(montre[rz]?|voir|revoir|affiche[rz]?|lien|fiche|show( me)?|see( it)?|link)\b/iu;
+const ASKS_TO_SEE = new RegExp(`\\b(${alternation('asksToSee')})\\b`, 'iu');
 
 /**
  * A card only for a product newly proposed this turn (owner, 2026-10-16): never

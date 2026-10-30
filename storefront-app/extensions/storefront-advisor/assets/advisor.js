@@ -56,6 +56,7 @@
         if (start && advisor) advisor.start(start);
         return;
       }
+      loadFonts(config.fontsUrl);
       if (!loading) loading = loadPanel(config.panelScript);
       launcher.setAttribute('aria-busy', 'true');
       loading.then(function () {
@@ -86,6 +87,7 @@
   function routineBanner(root, config, start) {
     var banner = config.banner || {};
     if (!banner.enabled || !banner.text || !banner.button || bannerClosed(banner.hours)) return;
+    loadFonts(config.fontsUrl);
     var bar = document.createElement('div');
     bar.className = 'sa-banner';
     bar.setAttribute('role', 'region');
@@ -133,6 +135,16 @@
       // Next frame: slide up from the bottom edge.
       window.requestAnimationFrame(function () { bar.classList.add('sa-banner--in'); });
     }, BANNER_DELAY_MS);
+  }
+
+  /* The advisor's web fonts (theme setting), only once something of ours is drawn: never on every page. */
+  function loadFonts(url) {
+    if (typeof url !== 'string' || url.indexOf('https://') !== 0 || document.getElementById('sa-fonts')) return;
+    var link = document.createElement('link');
+    link.id = 'sa-fonts';
+    link.rel = 'stylesheet';
+    link.href = url;
+    document.head.appendChild(link);
   }
 
   function bannerClosed(hours) {

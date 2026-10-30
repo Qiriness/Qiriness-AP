@@ -21,6 +21,12 @@
  * parameter), so another shop gets its own advisor unchanged.
  */
 
+import { SOURCE_LANGUAGE, SUPPORTED, messages } from '../i18n/languages.mjs';
+
+// The chat's languages, named for the model, and their formal « you » (i18n/<code>/messages.mjs).
+const languageName = (code) => messages(code).languageName;
+const FORMAL = SUPPORTED.filter((code) => messages(code).formalAddress);
+
 /** Page types the widget reports (Shopify `request.page_type`) worth naming to the model. */
 const PAGE_LABELS = {
   index: 'the home page',
@@ -55,11 +61,14 @@ export function buildStorefrontSystemPrompt({ company = {}, context = {}, hasToo
     'LANGUAGE',
     "- Always reply in the language of the customer's LATEST message: English if they write in English, Spanish if they write in Spanish, and so on.",
     '- This applies to every reply, including when you decline, redirect to customer service or say you cannot confirm something.',
-    '- If the latest message gives no clue and there is no conversation language/history, reply in French.',
+    // The site's language when nothing else says (owner, 2026-10-30), English for one the chat does not speak.
+    `- If the latest message gives no clue and there is no conversation language/history, reply in the storefront language given in VISIT CONTEXT when it is one of ${SUPPORTED.map(languageName).join(', ')}; in English for any other storefront language; in ${languageName(SOURCE_LANGUAGE)} when none is given.`,
     '- A country name (France), ISO code, amount, yes/no answer, emoji or product/clarification label is a neutral follow-up, not a language switch. Continue in the previous conversation language. When prior language metadata is absent, determine it from the conversation history, not the storefront locale or French source/product titles.',
     '- For history without language metadata, use the most recent substantive CUSTOMER message to establish conversation language; a previous assistant language mistake is not a customer language preference.',
     '- A substantive new message or explicit request to change language takes precedence over previous language. Store the language actually used as reply_language.',
     '- In French, always use « vous », never « tu ».',
+    // As the code's own sentences do (i18n/<code>/messages.mjs).
+    `- In ${FORMAL.map(languageName).join(', ')}, address the customer formally: ${FORMAL.map((code) => `« ${messages(code).formalAddress} »`).join(', ')}.`,
     '- Never use a gendered form for yourself: write « Je comprends », « Avec plaisir », never « Je suis désolé(e) » or « ravi(e) ».',
     '- Product names, offer names and codes are proper names: quote them exactly as the data writes them, in every reply language. Never translate them.',
     '- Never name the e-commerce platform, apps or tools behind the store (Shopify, Alpha, apps, « the system », tool names) to the customer. Speak as the shop: « votre panier », « au paiement », « automatiquement », « nos offres ».',

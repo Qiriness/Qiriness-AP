@@ -66,7 +66,12 @@
     collapse: ['M20 10h-6V4', 'M14 10l7-7', 'M4 14h6v6', 'M10 14l-7 7'],
     newChat: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'],
     send: ['M3.5 12h16', 'M14.5 7l5 5-5 5'],
-    search: ['M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z', 'M20 20l-4.8-4.8']
+    search: ['M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z', 'M20 20l-4.8-4.8'],
+    check: ['M5 12.5l4 4L19 7'],
+    plus: ['M12 5v14', 'M5 12h14'],
+    chevron: ['M7 10l5 5 5-5'],
+    sun: ['M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z', 'M12 2v2', 'M12 20v2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4', 'M2 12h2', 'M20 12h2', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4'],
+    moon: ['M20 15.7A8 8 0 0 1 8.3 4a8.3 8.3 0 1 0 11.7 11.7z']
   };
 
   function newSessionId() {
@@ -100,6 +105,7 @@
         sessionId: state.sessionId,
         open: state.open,
         wide: state.wide,
+        openingAsked: Boolean(state.openingAsked),
         messages: state.messages.filter(function (m) { return !m.failed; }).slice(-MAX_STORED_MESSAGES)
       }));
     } catch (error) { /* not fatal */ }
@@ -360,9 +366,9 @@
   /*
    * THE ROUTINE CARDS (owner, 2026-10-18). Both moments, always: the chosen one included, the
    * other greyed with « Compléter ma routine » (its steps already theirs are marked, the rest
-   * added). Each card: the stage, the product (image from the shop's own /products/<handle>.js,
-   * name, size, price, stars), « Inclus », « Pourquoi pour vous ? » and three foldable sections.
-   * The footer: the total, the routine saving from its minimum on, one button adding what is
+   * added). Each product: the stage, the image (from the shop's own /products/<handle>.js), name,
+   * size, price, stars, « Inclus », « Pourquoi pour vous ? » and three foldable sections (laid out
+   * since 2026-10-30 as in RoutineView below). The footer: the total, the routine saving from its minimum on, one button adding what is
    * included and then the routine discount (never shown). The choices live on the message, so a
    * re-render or the next page keeps them; a toggle updates the cards in place.
    */
@@ -374,44 +380,53 @@
   }
 
   /*
-   * The ticks, per moment and product (« night:<id> »). A new routine starts with only the steps the
-   * brand ticks at first (owner, 2026-10-19: the serum and the cream in the morning, the eye serum and
-   * the cream in the evening); the others show unticked, greyed, theirs to tick (`preselected: false`).
+   * The ticks, per product (owner, 2026-10-30: « when i added compléter ma routine for night, it added
+   * the eye serum to the night but not the day one »). A product is in the routine or not, in every
+   * moment that uses it; the moments only say when it is applied. A new routine starts with the
+   * products the brand ticks at first (2026-10-19: the serum and the cream in the morning, the eye
+   * serum and the cream in the evening), read from the moments they chose; a product only in the
+   * other moment, from that moment. The rest show unticked, greyed, theirs to tick.
    */
-  function routineStepKey(m, s) { return m.part + ':' + s.product_id; }
+  var CLEANSING = { cleanser: true, makeup_remover: true };
+
+  function routineFreshRemoved(view) {
+    var moments = routineMoments(view);
+    var removed = {};
+    var seen = {};
+    moments.forEach(function (m) { m.steps.forEach(function (s) { seen[s.product_id] = true; }); });
+    Object.keys(seen).forEach(function (id) {
+      var uses = [];
+      moments.forEach(function (m) { m.steps.forEach(function (s) { if (s.product_id === id) uses.push({ m: m, s: s }); }); });
+      var chosen = uses.filter(function (u) { return u.m.chosen; });
+      var ticked = (chosen.length ? chosen : uses).some(function (u) { return u.s.preselected !== false; });
+      if (!ticked) removed[id] = true;
+    });
+    return removed;
+  }
 
   function routineChoiceOf(message) {
-    var fresh = !message.routineChoice;
-    var choice = message.routineChoice || (message.routineChoice = { removed: {}, added: {} });
-    if (!choice.removed) choice.removed = {};
+    var choice = message.routineChoice || (message.routineChoice = { added: {} });
     if (!choice.added) choice.added = {};
-    if (fresh) {
-      routineMoments(message.routineView).forEach(function (m) {
-        m.steps.forEach(function (s) { if (s.preselected === false && !s.owned) choice.removed[routineStepKey(m, s)] = true; });
-      });
+    // A choice saved before 2026-10-30 holds per-moment ticks (« night:<id> »): started again.
+    if (!choice.removed || choice.perProduct !== true) {
+      choice.removed = routineFreshRemoved(message.routineView);
+      choice.perProduct = true;
     }
     return choice;
   }
 
   function routineActive(m, choice) { return m.chosen || Boolean(choice.added[m.part]); }
-  /* A choice saved before 2026-10-19 holds product ids alone: removed from every moment. */
-  function routineRemoved(m, s, choice) { return Boolean(choice.removed[routineStepKey(m, s)] || choice.removed[s.product_id]); }
+  function routineRemoved(m, s, choice) { return Boolean(choice.removed[s.product_id]); }
 
-  /*
-   * « Déjà dans votre routine du matin »: only while the morning's card for it is ticked. Unticked
-   * there, the evening's card is an ordinary one (its eye serum, ticked at first).
-   */
+  /* « Déjà le matin »: the same product, ticked, in the other moment of the routine. */
   function routineOwned(view, m, s, choice) {
-    if (!s.owned) return false;
-    var mine = null;
-    routineMoments(view).forEach(function (o) {
-      if (o.part === m.part || !o.chosen) return;
-      o.steps.forEach(function (x) { if (!mine && !x.owned && x.product_id === s.product_id) mine = { m: o, s: x }; });
+    if (!s.owned || routineRemoved(m, s, choice)) return false;
+    return routineMoments(view).some(function (o) {
+      return o.part !== m.part && routineActive(o, choice) && o.steps.some(function (x) { return !x.owned && x.product_id === s.product_id; });
     });
-    return !mine || !routineRemoved(mine.m, mine.s, choice);
   }
 
-  function routineBuyable(view, m, s, choice) { return s.in_stock && typeof s.variant_id === 'string' && !routineOwned(view, m, s, choice); }
+  function routineBuyable(view, m, s) { return s.in_stock && typeof s.variant_id === 'string'; }
 
   /* What the routine includes now: the active moments' products they kept, each once. */
   function routineSelection(view, choice) {
@@ -420,7 +435,7 @@
     routineMoments(view).forEach(function (m) {
       if (!routineActive(m, choice)) return;
       m.steps.forEach(function (s) {
-        if (!routineBuyable(view, m, s, choice) || routineRemoved(m, s, choice) || seen[s.product_id]) return;
+        if (!routineBuyable(view, m, s) || routineRemoved(m, s, choice) || seen[s.product_id]) return;
         seen[s.product_id] = true;
         items.push(s);
       });
@@ -481,19 +496,64 @@
     return parts.filter(Boolean).join(' ');
   }
 
+  /* The shop's own /products/<handle>.js, once per handle: the cards' images, the page's product. */
+  var productJsons = {};
+  function productJson(handle) {
+    if (productJsons[handle]) return productJsons[handle];
+    var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
+    productJsons[handle] = fetch(root + 'products/' + encodeURIComponent(handle) + '.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .catch(function () { return null; });
+    return productJsons[handle];
+  }
+
   function productImage(handle) {
     if (productImages[handle]) return productImages[handle];
-    var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
-    productImages[handle] = fetch(root + 'products/' + encodeURIComponent(handle) + '.js', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-      .then(function (res) { return res.ok ? res.json() : null; })
-      .then(function (p) {
-        var src = p && (p.featured_image || (Array.isArray(p.images) && p.images[0]));
-        if (typeof src !== 'string' || !src) return null;
-        src = src.indexOf('//') === 0 ? 'https:' + src : src;
-        return safeImage(src) ? src + (src.indexOf('?') === -1 ? '?' : '&') + 'width=240' : null;
-      })
-      .catch(function () { return null; });
+    productImages[handle] = productJson(handle).then(function (p) {
+      var src = p && (p.featured_image || (Array.isArray(p.images) && p.images[0]));
+      if (typeof src !== 'string' || !src) return null;
+      src = src.indexOf('//') === 0 ? 'https:' + src : src;
+      return safeImage(src) ? src + (src.indexOf('?') === -1 ? '?' : '&') + 'width=240' : null;
+    });
     return productImages[handle];
+  }
+
+  /*
+   * THE PRODUCT THEY ARE VIEWING (owner, 2026-10-30, from a screenshot): on a product page the header
+   * opens a little for one short card, its picture, name and price (the variant chosen on the page).
+   * Not a link: they are on its page. Nothing on another page, or when the shop does not answer.
+   */
+  function ViewingCard(handle, context, strings, variantOf) {
+    var media = el('span', { className: 'sa-viewing__media', 'aria-hidden': 'true' });
+    var name = el('p', { className: 'sa-viewing__name' });
+    var price = el('p', { className: 'sa-viewing__price' });
+    var card = el('div', { className: 'sa-viewing', role: 'group', 'aria-label': strings.viewing || 'Vous consultez', hidden: true }, [
+      media,
+      el('div', { className: 'sa-viewing__text' }, [name, price])
+    ]);
+    var product = null;
+    var format;
+    var currency = (window.Shopify && window.Shopify.currency && window.Shopify.currency.active) || context.currency || 'EUR';
+    try { format = new Intl.NumberFormat(context.locale || document.documentElement.lang || 'fr', { style: 'currency', currency: currency }); } catch (e) { format = null; }
+    // Prices in the shop's .js are in cents.
+    function update() {
+      if (!product) return;
+      var id = String(variantOf() || '').replace(/^gid:\/\/shopify\/ProductVariant\//, '');
+      var variant = (product.variants || []).filter(function (v) { return String(v.id) === id; })[0];
+      var cents = variant ? variant.price : product.price;
+      price.textContent = typeof cents === 'number' && format ? format.format(cents / 100).replace(/ | /g, ' ') : '';
+    }
+    productJson(handle).then(function (p) {
+      if (!p || typeof p.title !== 'string') return;
+      product = p;
+      name.textContent = p.title;
+      update();
+      productImage(handle).then(function (src) {
+        if (src && media.parentNode) media.parentNode.replaceChild(el('img', { className: 'sa-viewing__media', src: src, alt: '', width: '96', height: '96' }), media);
+      });
+      card.hidden = false;
+    });
+    return { node: card, update: update };
   }
 
   function fill(template, values) {
@@ -519,27 +579,64 @@
     ]);
   }
 
+  /*
+   * THE ROUTINE, LAID OUT (owner, 2026-10-30, from the prototype « Votre rituel, à votre rythme »).
+   * Two columns. On the left, at a glance, both moments as numbered steps: each step is that moment's
+   * tick (per moment and product, 2026-10-19), « Compléter ma routine » under the moment not chosen.
+   * On the right each product once, however many moments use it: the ones ticked at first as full
+   * cards, the others under « Compléter mon rituel »; their « Inclus » / « Ajouter » ticks or unticks
+   * the product in every moment. Narrow (the 400 px panel, a phone) the columns stack and the steps
+   * fold under one button, so the products come first.
+   */
   function RoutineView(view, message, strings, persist) {
     var rs = strings.routine || {};
     var moments = routineMoments(view);
     if (!moments.length) return null;
-    var lang = view.locale === 'en' ? 'en' : 'fr';
+    // The routine's language (any the chat speaks); numbers written its way (« 4,8 », "4.8").
+    var lang = typeof view.locale === 'string' && /^[a-z]{2}$/.test(view.locale) ? view.locale : 'fr';
+    var decimal = ',';
+    try { decimal = (new Intl.NumberFormat(lang).formatToParts(1.5).filter(function (p) { return p.type === 'decimal'; })[0] || {}).value || ','; } catch (e) { /* the comma */ }
     var format;
     try { format = new Intl.NumberFormat(lang, { style: 'currency', currency: view.currency || 'EUR' }); } catch (e) { format = new Intl.NumberFormat('fr', { style: 'currency', currency: 'EUR' }); }
-    var money = function (n) { return format.format(n).replace(/ | /g, ' '); };
+    var money = function (n) { return format.format(n).replace(/ | /g, ' '); };
     var discount = view.discount && typeof view.discount.code === 'string' ? view.discount : null;
-    // The customer's choices, kept on the message: removed products, moments added. They stay
+    // The customer's choices, kept on the message: removed steps, moments added. They stay
     // theirs to change after an add (owner, 2026-10-18), and the button adds again.
     var choice = routineChoiceOf(message);
-    var cards = [];
-    var momentNodes = [];
+    var refreshers = [];
 
     var active = function (m) { return routineActive(m, choice); };
-    var buyable = function (m, s) { return routineBuyable(view, m, s, choice); };
+    var buyable = function (m, s) { return routineBuyable(view, m, s); };
     var owned = function (m, s) { return routineOwned(view, m, s, choice); };
     var removed = function (m, s) { return routineRemoved(m, s, choice); };
     function selection() { return routineSelection(view, choice); }
+    // A cleanser or a make-up remover cleanses, whatever its sheet stage (owner, 2026-10-30: the evening's first step is « Nettoyer »).
+    function stageLabel(s) { return CLEANSING[s.type] ? rs.stage_cleanse || null : s.stage && rs['stage_' + s.stage] ? rs['stage_' + s.stage] : null; }
+    function partName(part, short) { return part === 'night' ? (short ? rs.evening_short : rs.evening) : (short ? rs.morning_short : rs.morning); }
 
+    // Each product once, in the moments' order, with every step it fills.
+    var products = [];
+    var byProduct = {};
+    moments.forEach(function (m) {
+      m.steps.forEach(function (s) {
+        var p = byProduct[s.product_id];
+        if (!p) { p = byProduct[s.product_id] = { step: s, uses: [] }; products.push(p); }
+        p.uses.push({ m: m, s: s });
+      });
+    });
+    // Ticked at first in the moment they chose: the essentials; the rest is theirs to add.
+    var essential = function (p) { return p.uses.some(function (u) { return u.m.chosen && u.s.preselected !== false; }); };
+    var included = function (p, items) { return items.some(function (s) { return s.product_id === p.step.product_id; }); };
+    var reachable = function (p) { return p.uses.some(function (u) { return active(u.m) && buyable(u.m, u.s); }); };
+
+    function setProduct(id, on) {
+      if (on) delete choice.removed[id]; else choice.removed[id] = true;
+      persist();
+      refresh();
+    }
+
+    var count = el('span', { className: 'sa-ritual__count' });
+    var pill = el('span', { className: 'sa-picks__pill' });
     var totalLabel = el('p', { className: 'sa-routine__count' });
     var was = el('s', { className: 'sa-routine__was' });
     var now = el('strong', { className: 'sa-routine__now' });
@@ -554,6 +651,8 @@
       var qualifies = discount && items.length >= (discount.min_products || 1);
       var pct = qualifies && typeof discount.percentage === 'number' ? discount.percentage : 0;
       var after = Math.round(total * (100 - pct)) / 100;
+      count.textContent = String(items.length);
+      pill.textContent = fill(rs.selected_count || '{count}', { count: items.length });
       totalLabel.textContent = fill(rs.total || 'Routine — {count}', { count: items.length });
       was.textContent = pct ? money(total) : '';
       was.hidden = !pct;
@@ -574,110 +673,157 @@
       }
       if (!added) addStatus.textContent = '';
       addStatus.hidden = !addStatus.textContent;
-      cards.forEach(function (c) { c(); });
-      momentNodes.forEach(function (n) { n(); });
+      refreshers.forEach(function (r) { r(items); });
     }
 
-    function StepCard(step, m) {
-      var check = el('input', { type: 'checkbox', className: 'sa-rcard__check' });
-      var include = el('label', { className: 'sa-rcard__include' }, [check, el('span', { text: rs.included || 'Inclus' })]);
-      var ownedNote = step.owned ? el('span', { className: 'sa-rcard__owned', text: m.part === 'night' ? rs.owned_morning : rs.owned_evening }) : null;
-      var status = !step.in_stock ? el('span', { className: 'sa-rcard__owned', text: rs.unavailable })
-        : typeof step.variant_id !== 'string' ? el('span', { className: 'sa-rcard__owned', text: rs.choose_size })
-          : el('span', {}, [ownedNote, include]);
-      check.addEventListener('change', function () {
-        var key = routineStepKey(m, step);
-        delete choice.removed[step.product_id];
-        if (check.checked) delete choice.removed[key]; else choice.removed[key] = true;
-        persist();
-        refresh();
-      });
-      var media = el('span', { className: 'sa-rcard__placeholder', 'aria-hidden': 'true' });
-      var link = safeLink(step.url);
-      if (link && !link.external && typeof step.handle === 'string') {
-        productImage(step.handle).then(function (src) {
-          if (src && media.parentNode) media.parentNode.replaceChild(el('img', { src: src, alt: '', loading: 'lazy', width: '96', height: '96' }), media);
-        });
-      }
-      var whyText = step.why && typeof step.why.text === 'string' ? step.why.text : '';
-      var tags = step.why && Array.isArray(step.why.tags) ? step.why.tags.filter(function (t) { return typeof t === 'string'; }) : [];
-      var whyBody = el('p', { className: 'sa-rcard__why-text' }, [
-        el('strong', { text: (rs.why || 'Pourquoi pour vous ?') + ' ' }),
-        tags.length ? el('span', { className: 'sa-rcard__tags', text: tags.join(' · ') + ' — ' }) : null,
-        document.createTextNode(whyText)
-      ]);
-      var more = whyText.length > 180 ? el('button', { type: 'button', className: 'sa-rcard__more', text: rs.read_more || 'Lire la suite' }) : null;
-      if (more) more.addEventListener('click', function () {
-        var open = whyBody.classList.toggle('sa-rcard__why-text--open');
-        more.textContent = open ? (rs.read_less || 'Réduire') : (rs.read_more || 'Lire la suite');
-      });
-      var title = typeof step.title === 'string' ? step.title : '';
-      var node = el('article', { className: 'sa-rcard' }, [
-        el('div', { className: 'sa-rcard__head' }, [
-          el('div', { className: 'sa-rcard__media' }, [media]),
-          el('div', { className: 'sa-rcard__main' }, [
-            step.stage && rs['stage_' + step.stage] ? el('p', { className: 'sa-rcard__stage', text: rs['stage_' + step.stage] }) : null,
-            link ? el('a', {
-              className: 'sa-rcard__title', href: link.href, target: link.external ? '_blank' : null, rel: link.external ? 'noopener noreferrer' : null, text: title,
-              onClick: function () { if (onCardClick && typeof step.product_id === 'string') onCardClick(step.product_id); }
-            }) : el('p', { className: 'sa-rcard__title', text: title }),
-            Stars(step.rating, step.rating_count, { reviews: rs.reviews, decimal: lang === 'en' ? '.' : ',' })
-          ]),
-          el('div', { className: 'sa-rcard__aside' }, [
-            step.price ? el('p', { className: 'sa-rcard__price', text: String(step.price) }) : null,
-            // The size chosen for them (« Normale 50 ml »), else the product's size.
-            step.variant_title || step.volume ? el('p', { className: 'sa-rcard__volume', text: String(step.variant_title || step.volume) }) : null,
-            status
-          ])
+    /* A step of a moment: its number (a tick once in), the stage, the product, its state. */
+    function Step(m, s, index) {
+      var mark = el('span', { className: 'sa-step__mark', 'aria-hidden': 'true' });
+      var state = el('span', { className: 'sa-step__state' });
+      var stage = stageLabel(s);
+      var title = typeof s.title === 'string' ? s.title : '';
+      var row = el('button', { type: 'button', className: 'sa-step' }, [
+        mark,
+        el('span', { className: 'sa-step__text' }, [
+          el('strong', { text: stage || title }),
+          stage ? el('small', { text: title }) : null
         ]),
-        whyText || tags.length ? el('div', { className: 'sa-rcard__why' }, [whyBody, more]) : null,
-        Fold(rs.ingredients || 'Ingrédients clés', step.ingredients),
-        Fold(rs.benefits || 'Bienfaits', step.benefits),
-        Fold(rs.usage || 'Application', step.usage)
+        state
       ]);
-      cards.push(function () {
-        var isOwned = owned(m, step);
-        var kept = !removed(m, step);
-        if (ownedNote) ownedNote.hidden = !isOwned;
-        include.hidden = isOwned;
-        check.checked = kept;
-        check.disabled = !active(m);
-        // Unticked: greyed like the moment not chosen (owner, 2026-10-19), back when ticked again.
-        var off = active(m) && buyable(m, step) && !kept;
-        node.className = 'sa-rcard' + (active(m) && buyable(m, step) && kept ? ' sa-rcard--included' : '') + (off ? ' sa-rcard--off' : '') + (active(m) ? '' : ' sa-rcard--muted');
+      row.addEventListener('click', function () {
+        if (row.disabled) return;
+        setProduct(s.product_id, removed(m, s));
       });
-      return node;
+      refreshers.push(function () {
+        var isOwned = owned(m, s);
+        var on = buyable(m, s) && !removed(m, s);
+        var tickable = active(m) && buyable(m, s);
+        mark.textContent = '';
+        if (on) mark.appendChild(icon(ICONS.check)); else mark.textContent = String(index + 1);
+        state.textContent = !s.in_stock ? rs.unavailable
+          : typeof s.variant_id !== 'string' ? rs.choose_size
+            : isOwned ? (m.part === 'night' ? rs.owned_short_morning : rs.owned_short_evening)
+              : on ? rs.included : rs.optional;
+        row.disabled = !tickable;
+        if (tickable) row.setAttribute('aria-pressed', String(on)); else row.removeAttribute('aria-pressed');
+        row.className = 'sa-step' + (on ? ' sa-step--on' : '');
+      });
+      return row;
     }
 
     function Moment(m) {
       var night = m.part === 'night';
-      var toggle = m.chosen ? null : el('button', { type: 'button', className: 'sa-moment__complete' });
-      var note = m.chosen ? null : el('p', { className: 'sa-moment__note' });
+      var toggle = m.chosen ? null : el('button', { type: 'button', className: 'sa-time__complete' });
+      var note = m.chosen ? null : el('p', { className: 'sa-time__note' });
       if (toggle) toggle.addEventListener('click', function () {
         if (choice.added[m.part]) delete choice.added[m.part]; else choice.added[m.part] = true;
         persist();
         refresh();
       });
-      var node = el('section', { className: 'sa-moment' }, [
-        el('header', { className: 'sa-moment__head' }, [
-          el('p', { className: 'sa-moment__eyebrow', text: night ? rs.evening_eyebrow : rs.morning_eyebrow }),
-          el('h3', { className: 'sa-moment__title', text: night ? rs.evening : rs.morning }),
-          el('p', { className: 'sa-moment__text', text: night ? rs.evening_text : rs.morning_text }),
-          note,
-          toggle
+      var node = el('section', { className: 'sa-time' }, [
+        el('header', { className: 'sa-time__head' }, [
+          el('span', { className: 'sa-time__name' }, [icon(night ? ICONS.moon : ICONS.sun), el('strong', { text: partName(m.part) })]),
+          el('small', { text: night ? rs.evening_eyebrow : rs.morning_eyebrow })
         ]),
-        el('div', { className: 'sa-moment__steps' }, m.steps.map(function (s) { return StepCard(s, m); }))
+        el('div', { className: 'sa-time__steps' }, m.steps.map(function (s, i) { return Step(m, s, i); })),
+        note,
+        toggle
       ]);
-      momentNodes.push(function () {
-        node.className = 'sa-moment' + (active(m) ? '' : ' sa-moment--muted');
+      refreshers.push(function () {
+        node.className = 'sa-time' + (active(m) ? '' : ' sa-time--muted');
         // What « Compléter ma routine » would add, as ticked now.
         if (note) {
-          var missing = m.steps.filter(function (s) { return buyable(m, s) && !removed(m, s); }).length;
+          var elsewhere = routineSelection(view, { removed: choice.removed, added: {} }).map(function (x) { return x.product_id; });
+          var missing = m.steps.filter(function (s) { return buyable(m, s) && !removed(m, s) && elsewhere.indexOf(s.product_id) === -1; }).length;
           note.textContent = missing ? fill(rs.complete_note, { count: missing }) : rs.complete_none;
         }
-        if (toggle) {
-          toggle.textContent = choice.added[m.part] ? (rs.remove || 'Retirer') : (rs.complete || 'Compléter ma routine');
-        }
+        if (toggle) toggle.textContent = choice.added[m.part] ? (rs.remove || 'Retirer') : (rs.complete || 'Compléter ma routine');
+      });
+      return node;
+    }
+
+    /* A product once: full card for an essential, compact in « Compléter mon rituel ». */
+    function Pick(p, compact) {
+      var s = p.step;
+      var media = el('span', { className: 'sa-pick__placeholder', 'aria-hidden': 'true' });
+      var link = safeLink(s.url);
+      if (link && !link.external && typeof s.handle === 'string') {
+        productImage(s.handle).then(function (src) {
+          if (src && media.parentNode) media.parentNode.replaceChild(el('img', { src: src, alt: '', loading: 'lazy', width: '120', height: '120' }), media);
+        });
+      }
+      var title = typeof s.title === 'string' ? s.title : '';
+      var stage = stageLabel(s);
+      var parts = [];
+      p.uses.forEach(function (u) { if (parts.indexOf(u.m.part) === -1) parts.push(u.m.part); });
+      var when = parts.map(function (part) { return partName(part, true); }).filter(Boolean).join(' & ');
+      var openPage = function () { if (onCardClick && typeof s.product_id === 'string') onCardClick(s.product_id); };
+
+      var whyText = s.why && typeof s.why.text === 'string' ? s.why.text : '';
+      var tags = s.why && Array.isArray(s.why.tags) ? s.why.tags.filter(function (t) { return typeof t === 'string'; }) : [];
+      var folds = [Fold(rs.ingredients || 'Ingrédients clés', s.ingredients), Fold(rs.benefits || 'Bienfaits', s.benefits), Fold(rs.usage || 'Application', s.usage)].filter(Boolean);
+      var detail = whyText || tags.length || folds.length
+        ? el('div', { className: 'sa-pick__detail', hidden: true }, [
+          whyText || tags.length ? el('p', { className: 'sa-pick__why' }, [
+            tags.length ? el('strong', { text: tags.join(' · ') + ' — ' }) : null,
+            document.createTextNode(whyText)
+          ]) : null
+        ].concat(folds))
+        : null;
+      var more = detail ? el('button', { type: 'button', className: 'sa-pick__more', 'aria-expanded': 'false' }, [el('span', { text: rs.why || 'Pourquoi pour vous ?' }), icon(ICONS.chevron)]) : null;
+      var node;
+      if (more) more.addEventListener('click', function () {
+        var open = detail.hidden;
+        detail.hidden = !open;
+        more.setAttribute('aria-expanded', String(open));
+        more.firstChild.textContent = open ? (rs.details_hide || 'Masquer les détails') : (rs.why || 'Pourquoi pour vous ?');
+        node.classList.toggle('sa-pick--open', open);
+      });
+
+      var toggleLabel = el('span', { className: 'sa-pick__toggle-label' });
+      var toggle = el('button', { type: 'button', className: 'sa-pick__toggle' });
+      var status = el('span', { className: 'sa-pick__status' });
+      toggle.addEventListener('click', function () { setProduct(s.product_id, !included(p, selection())); });
+
+      node = el('article', { className: 'sa-pick' + (compact ? ' sa-pick--compact' : '') }, [
+        el('div', { className: 'sa-pick__media' }, [media]),
+        el('div', { className: 'sa-pick__main' }, [
+          stage || when ? el('p', { className: 'sa-pick__eyebrow', text: (compact ? [stage || when] : [stage, when]).filter(Boolean).join(' · ') }) : null,
+          link ? el('a', {
+            className: 'sa-pick__title', href: link.href, target: link.external ? '_blank' : null, rel: link.external ? 'noopener noreferrer' : null, text: title, onClick: openPage
+          }) : el('p', { className: 'sa-pick__title', text: title }),
+          compact ? null : Stars(s.rating, s.rating_count, { reviews: rs.reviews, decimal: decimal }),
+          more
+        ]),
+        el('div', { className: 'sa-pick__aside' }, [
+          el('div', { className: 'sa-pick__price' }, [
+            s.price ? el('p', { className: 'sa-pick__amount', text: String(s.price) }) : null,
+            // The size chosen for them (« Normale 50 ml »), else the product's size.
+            s.variant_title || s.volume ? el('p', { className: 'sa-pick__size', text: String(s.variant_title || s.volume) }) : null
+          ]),
+          toggle,
+          status
+        ]),
+        detail
+      ]);
+
+      refreshers.push(function (items) {
+        var on = included(p, items);
+        var open = reachable(p);
+        toggle.hidden = !open;
+        toggle.setAttribute('aria-pressed', String(on));
+        toggle.setAttribute('aria-label', (on ? rs.included : rs.add_one) + ' — ' + title);
+        toggleLabel.textContent = on ? rs.included : rs.add_one;
+        toggle.textContent = '';
+        toggle.appendChild(icon(on ? ICONS.check : ICONS.plus));
+        toggle.appendChild(toggleLabel);
+        toggle.className = 'sa-pick__toggle' + (on ? ' sa-pick__toggle--on' : '');
+        // Not to add from here: why (sold out, a size to choose, its moment not in the routine yet).
+        var u = p.uses[0];
+        status.textContent = open ? '' : !s.in_stock ? rs.unavailable : typeof s.variant_id !== 'string' ? rs.choose_size
+          : (u.m.part === 'night' ? rs.with_evening : rs.with_morning);
+        status.hidden = open;
+        node.className = 'sa-pick' + (compact ? ' sa-pick--compact' : '') + (on ? ' sa-pick--on' : '') + (open ? '' : ' sa-pick--muted') + (detail && !detail.hidden ? ' sa-pick--open' : '');
       });
       return node;
     }
@@ -706,23 +852,65 @@
       ? el('div', { className: 'sa-routine__banner' }, [
         el('div', {}, [
           el('p', { className: 'sa-routine__banner-eyebrow', text: rs.banner_eyebrow }),
-          el('p', { className: 'sa-routine__banner-title', text: fill(rs.banner_title, { percent: String(discount.percentage).replace('.', lang === 'en' ? '.' : ',') }) }),
+          el('p', { className: 'sa-routine__banner-title', text: fill(rs.banner_title, { percent: String(discount.percentage).replace('.', decimal) }) }),
           el('p', { className: 'sa-routine__banner-text', text: fill(rs.banner_text, { min: discount.min_products }) })
         ]),
         bannerButton
       ])
       : null;
 
+    var expand = el('button', { type: 'button', className: 'sa-ritual__expand', 'aria-expanded': 'false' }, [el('span', { text: rs.show_steps }), icon(ICONS.chevron)]);
+    var ritual = el('aside', { className: 'sa-ritual' }, [
+      el('div', { className: 'sa-ritual__top' }, [
+        el('div', {}, [
+          el('p', { className: 'sa-routine__label', text: rs.glance }),
+          el('h3', { className: 'sa-ritual__title', text: rs.ritual_title }),
+          el('p', { className: 'sa-ritual__sub', text: rs.ritual_sub })
+        ]),
+        count
+      ]),
+      expand
+    ].concat(moments.map(Moment)));
+    expand.addEventListener('click', function () {
+      var open = ritual.classList.toggle('sa-ritual--open');
+      expand.setAttribute('aria-expanded', String(open));
+      expand.firstChild.textContent = open ? rs.hide_steps : rs.show_steps;
+    });
+
+    var essentials = products.filter(essential);
+    var extras = products.filter(function (p) { return !essential(p); });
+    var picks = el('section', { className: 'sa-picks' }, [
+      el('div', { className: 'sa-picks__intro' }, [
+        el('div', {}, [
+          el('p', { className: 'sa-routine__label', text: rs.selection }),
+          el('h3', { className: 'sa-picks__title', text: rs.essentials })
+        ]),
+        pill
+      ]),
+      el('div', { className: 'sa-picks__list' }, essentials.map(function (p) { return Pick(p, false); })),
+      extras.length ? el('div', { className: 'sa-picks__more' }, [
+        el('div', {}, [
+          el('p', { className: 'sa-routine__label', text: rs.more_eyebrow }),
+          el('h4', { className: 'sa-picks__subtitle', text: rs.more_title })
+        ]),
+        el('span', { className: 'sa-picks__optional', text: rs.optional })
+      ]) : null,
+      extras.length ? el('div', { className: 'sa-picks__grid' }, extras.map(function (p) { return Pick(p, true); })) : null
+    ]);
+
     var node = el('div', { className: 'sa-routine' }, [
       el('header', { className: 'sa-routine__head' }, [
         el('p', { className: 'sa-routine__eyebrow', text: rs.title || 'Votre routine' }),
+        rs.headline ? el('h3', { className: 'sa-routine__headline', text: rs.headline }) : null,
         el('p', { className: 'sa-routine__hint', text: rs.hint })
       ]),
       banner,
-      el('div', { className: 'sa-routine__moments' }, moments.map(Moment)),
+      el('div', { className: 'sa-routine__layout' }, [ritual, picks]),
       el('footer', { className: 'sa-routine__footer' }, [
-        el('div', { className: 'sa-routine__sum' }, [totalLabel, el('p', { className: 'sa-routine__prices' }, [was, now, saving])]),
-        minNote,
+        el('div', { className: 'sa-routine__sum' }, [
+          el('div', { className: 'sa-routine__copy' }, [totalLabel, minNote]),
+          el('p', { className: 'sa-routine__prices' }, [was, now, saving])
+        ]),
         addButton,
         addStatus
       ])
@@ -768,11 +956,18 @@
     }));
   }
 
+  /* An advisor's text with its `**bold**` parts in bold (the repurchase message's days, owner 2026-10-29). Text nodes only. */
+  function richText(text) {
+    return String(text || '').split(/\*\*([^*]+)\*\*/).map(function (part, i) {
+      return i % 2 ? el('strong', { text: part }) : document.createTextNode(part);
+    });
+  }
+
   function Bubble(message, strings, onRetry, onChoice) {
     var isUser = message.role === 'user';
     var node = el('div', { className: 'sa-message sa-message--' + (isUser ? 'user' : 'assistant') }, [
       el('span', { className: 'sa-visually-hidden', text: (isUser ? strings.you : strings.advisor) + ' : ' }),
-      el('p', { className: 'sa-bubble', text: message.text })
+      isUser ? el('p', { className: 'sa-bubble', text: message.text }) : el('p', { className: 'sa-bubble' }, richText(message.text))
     ]);
     // A finished routine: its cards replace the product cards and the routine button.
     var routine = !isUser && message.routineView ? RoutineView(message.routineView, message, strings, persistState) : null;
@@ -816,8 +1011,12 @@
   // does (the widget only hears back once the whole answer is ready).
   var WAIT_TEXT_AFTER_MS = 1500;
   var WAIT_LONGER_AFTER_MS = 6000;
-  // An order question (FR, EN): « ma commande », "my order", a parcel, an order number.
-  var ORDER_WORDS = /\b(commandes?|colis|orders?|parcels?|packages?)\b|#\s?\d{3,}/i;
+  // An order question, in every language the chat speaks: « ma commande », "my order", a parcel, an order number.
+  // Generated: run `npm run widget:words` after changing a language pack.
+  /* words:begin (generated by `npm run widget:words` from scripts/lib/i18n/<code>/words.mjs: do not edit) */
+  var WORDS = {"order":"commandes?|colis|orders?|parcels?|packages?|ordin[ei]|pacc[oh]i?|bestellung\\w*|paket\\w*|bestelling\\w*|pakket\\w*|pedidos?|paquetes?"};
+  /* words:end */
+  var ORDER_WORDS = new RegExp('\\b(' + WORDS.order + ')\\b|#\\s?\\d{3,}', 'i');
 
   function waitText(stage, message, strings) {
     if (stage >= 2) return strings.waitLonger || 'Encore un instant…';
@@ -859,6 +1058,9 @@
     var mobile = window.matchMedia ? window.matchMedia(MOBILE_QUERY) : { matches: false };
 
     var viewer = typeof config.viewer === 'string' ? config.viewer : '';
+    // The repurchase message, once seen, is not asked for again on this device for 30 days (askOpening).
+    var OPENING_SEEN_KEY = STORAGE_KEY + ':opening-seen:' + viewer;
+    var OPENING_QUIET_MS = 30 * 24 * 3600 * 1000;
     var stored = loadState(viewer);
     var state = {
       viewer: viewer,
@@ -867,6 +1069,8 @@
       messages: stored ? stored.messages : [],
       // Routine mode opens the panel wide (owner, 2026-10-18); the header button switches it back.
       wide: stored ? Boolean(stored.wide) : false,
+      // The repurchase message is asked for once per tab (owner, 2026-10-29), « Nouvelle conversation » included.
+      openingAsked: stored ? Boolean(stored.openingAsked) : false,
       pending: false,
       // 0 dots, 1 a line of text, 2 « encore un instant »: see waitText.
       waitStage: 0
@@ -920,6 +1124,7 @@
       onClick: function () { startOver(); }
     }, [icon(ICONS.newChat)]);
 
+    var header;
     var panel = el('section', {
       id: panelId,
       className: 'sa-panel',
@@ -928,7 +1133,7 @@
       'aria-labelledby': titleId,
       hidden: true
     }, [
-      el('header', { className: 'sa-header' }, [
+      header = el('header', { className: 'sa-header' }, [
         el('div', { className: 'sa-header__text' }, [
           el('p', { className: 'sa-eyebrow', text: strings.eyebrow }),
           el('h2', { id: titleId, className: 'sa-title', text: strings.title })
@@ -946,6 +1151,10 @@
     ]);
 
     root.appendChild(panel);
+    var viewing = config.context && config.context.pageType === 'product' && config.context.productHandle
+      ? ViewingCard(config.context.productHandle, config.context, strings, currentVariantId)
+      : null;
+    if (viewing) header.appendChild(viewing.node);
     launcher.addEventListener('click', function () { setOpen(true); });
 
     input.addEventListener('keydown', function (event) {
@@ -968,6 +1177,7 @@
     else if (state.open && !mobile.matches) setOpen(true, true);
     else state.open = false;
     if (startAction) start(startAction);
+    askOpening();
 
     /*
      * A quick action from outside the panel (the routine banner): the panel opens and the action
@@ -980,8 +1190,33 @@
       if (!state.pending) ask(action.label, action.id);
     }
 
+    /*
+     * The panel reaches up to just under the shop's header (owner, 2026-10-30): its bottom edge, read
+     * from the theme's usual header elements, as --sa-top. No header in view (scrolled away, or none
+     * found): the panel's own gap. Read again on resize and scroll while open (a sticky header hides).
+     */
+    var HEADER_SELECTOR = 'sticky-header, .shopify-section-header-sticky, #shopify-section-header, .section-header, header[role="banner"], .site-header, header';
+    var fitQueued = false;
+    function fitUnderHeader() {
+      fitQueued = false;
+      var header = document.querySelector(HEADER_SELECTOR);
+      var bottom = header ? header.getBoundingClientRect().bottom : 0;
+      var top = bottom > 0 && bottom < window.innerHeight / 2 ? Math.round(bottom) + 12 : null;
+      if (top === null) root.style.removeProperty('--sa-top'); else root.style.setProperty('--sa-top', top + 'px');
+    }
+    function queueFit() {
+      if (!state.open || fitQueued) return;
+      fitQueued = true;
+      (window.requestAnimationFrame || setTimeout)(fitUnderHeader);
+    }
+    window.addEventListener('resize', queueFit);
+    window.addEventListener('scroll', queueFit, { passive: true });
+
     function setOpen(open, silent) {
       state.open = open;
+      if (open) fitUnderHeader();
+      // The variant chosen on the page may have changed since: its price.
+      if (open && viewing) viewing.update();
       panel.hidden = !open;
       launcher.hidden = open;
       launcher.setAttribute('aria-expanded', String(open));
@@ -989,11 +1224,62 @@
       syncScrollLock();
       saveState(state);
       if (open) {
-        scrollToEnd();
+        // Laid out again now it is visible: a reply with cards (the repurchase message, fetched while the
+        // panel was closed) scrolls to its text, not to the bottom.
+        render();
         if (!silent) input.focus();
+        markOpeningSeen();
       } else if (!silent) {
         launcher.focus();
       }
+    }
+
+    /*
+     * A signed-in customer with an empty chat: the proxy's /opening route may answer with their favourite
+     * product to buy again (owner, 2026-10-29), shown under the greeting. Asked on page load, once per tab,
+     * so it is there when the chat opens (« needs to come in much faster »). Not again on this device for
+     * 30 days once seen (« deterministic and instant check »: no request at all). Nothing comes for an
+     * anonymous visitor, and nothing is waited for: a customer who types first keeps their own turn.
+     */
+    function openingSeenRecently() {
+      try {
+        var at = Number(window.localStorage.getItem(OPENING_SEEN_KEY));
+        return at > 0 && Date.now() - at < OPENING_QUIET_MS;
+      } catch (error) { return false; }
+    }
+    /* Seen means shown in an open panel: one fetched while it stayed closed does not count. */
+    function markOpeningSeen() {
+      if (!state.open || !state.messages.some(function (m) { return m.opening; })) return;
+      try { window.localStorage.setItem(OPENING_SEEN_KEY, String(Date.now())); } catch (error) { /* not fatal */ }
+    }
+    function askOpening() {
+      if (config.transport !== 'proxy' || !config.endpoint || !viewer || state.openingAsked || state.messages.length || state.pending || openingSeenRecently()) return;
+      state.openingAsked = true;
+      saveState(state);
+      var url = String(config.endpoint).replace(/\/chat$/, '/opening');
+      fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({
+          sessionId: state.sessionId,
+          context: { locale: config.context && config.context.locale || document.documentElement.lang || null, loggedIn: true }
+        })
+      }).then(function (response) {
+        return response.status === 200 ? response.json() : null;
+      }).then(function (body) {
+        if (!body || !body.reply || typeof body.reply.text !== 'string' || !body.reply.text || state.messages.length || state.pending) return;
+        state.messages.push({
+          role: 'assistant',
+          opening: true,
+          text: body.reply.text,
+          products: Array.isArray(body.reply.products) ? body.reply.products : [],
+          choices: Array.isArray(body.reply.choices) ? body.reply.choices : []
+        });
+        markOpeningSeen();
+        saveState(state);
+        render();
+      }).catch(function () { /* the greeting stands alone */ });
     }
 
     function setWide(wide, silent) {
@@ -1054,6 +1340,8 @@
         message: userMessage.text,
         action: userMessage.action || null,
         choice: userMessage.choice || null,
+        // The first answer under the repurchase message: the server stores that message before it.
+        opening: state.messages[0] && state.messages[0].opening === true && state.messages.filter(function (m) { return m.role === 'user'; }).length === 1,
         context: {
           pageType: config.context && config.context.pageType || null,
           productHandle: config.context && config.context.productHandle || null,
@@ -1139,17 +1427,24 @@
       log.textContent = '';
       log.appendChild(Bubble({ role: 'assistant', text: strings.greeting }, strings));
       var last = state.messages[state.messages.length - 1];
-      state.messages.forEach(function (message) {
+      // The first reply since the customer last wrote that shows product cards: the scroll stops at its text.
+      var lastUser = -1;
+      state.messages.forEach(function (m, i) { if (m.role === 'user') lastUser = i; });
+      var withCards = null;
+      state.messages.forEach(function (message, i) {
         // Only the latest reply's chips are live: an old question is not re-asked.
         var onChoice = message === last && !state.pending
           ? function (choice) { ask(choice.label, null, choice.value); }
           : null;
-        log.appendChild(Bubble(message, strings, function () { deliver(message); }, onChoice));
+        var node = Bubble(message, strings, function () { deliver(message); }, onChoice);
+        if (!withCards && i > lastUser && message.role !== 'user' && node.querySelector('.sa-card')) withCards = node;
+        log.appendChild(node);
       });
       if (state.pending) log.appendChild(TypingIndicator(strings, state.waitStage, state.waitingFor));
 
       actionsSlot.textContent = '';
-      var started = state.messages.some(function (m) { return m.role === 'user'; });
+      // The repurchase message counts as started: its own buttons replace the quick actions.
+      var started = state.messages.some(function (m) { return m.role === 'user' || m.opening; });
       if (!started) {
         var chips = QuickActions(actions, strings, function (action) {
           if (!state.pending) ask(action.label, action.id);
@@ -1164,7 +1459,22 @@
       if (routines.length) {
         state.showRoutine = false;
         log.scrollTop = Math.max(0, routines[routines.length - 1].offsetTop - log.offsetTop - 12);
-      } else scrollToEnd();
+      } else if (withCards && !state.pending) scrollToText(withCards);
+      else scrollToEnd();
+    }
+
+    /*
+     * A reply with product cards (owner, 2026-10-29: « it would be best if it didn't include the product card
+     * in the scroll »): scrolled until its text is in view, the cards below it, not to the bottom of the cards.
+     * A text taller than the panel shows from its top.
+     */
+    function scrollToText(message) {
+      var text = message.querySelector('.sa-bubble');
+      if (!text) return scrollToEnd();
+      var box = log.getBoundingClientRect();
+      var at = text.getBoundingClientRect();
+      var shift = at.height + 24 > box.height ? at.top - box.top - 12 : at.bottom - box.bottom + 12;
+      log.scrollTop = Math.max(0, Math.min(log.scrollHeight, log.scrollTop + shift));
     }
 
     function scrollToEnd() {

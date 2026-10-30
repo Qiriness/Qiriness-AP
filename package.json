@@ -46,6 +46,7 @@
     "eval:matching": "node scripts/eval-product-matching.mjs",
     "eval:resolution": "node scripts/eval-product-resolution.mjs",
     "eval:advisory": "node scripts/eval-advisory.mjs",
+    "widget:words": "node scripts/build-widget-words.mjs",
     "advisor:load": "node scripts/advisor/load-advisor-config.mjs",
     "advisor:import": "node scripts/advisor/import-knowledge.mjs",
     "advisor:repurchase": "node scripts/advisor/measure-repurchase.mjs",

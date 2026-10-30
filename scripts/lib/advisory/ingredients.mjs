@@ -9,24 +9,13 @@
  */
 
 import { norm } from './text.mjs';
+import { LEXICONS } from '../i18n/languages.mjs';
 
-const GROUPS = {
-  fragrance: ['parfum', 'parfums', 'fragrance', 'fragrances', 'perfume'],
-  alcohol: ['alcool', 'alcohol'],
-  retinol: ['retinol'],
-  essential_oils: ['huiles essentielles', 'huile essentielle', 'essential oils', 'essential oil'],
-  oil: ['huile', 'huiles', 'oil', 'oils'],
-  silicones: ['silicone', 'silicones'],
-  sulfates: ['sulfate', 'sulfates', 'sulphate', 'sulphates'],
-  parabens: ['paraben', 'parabens', 'parabene', 'parabenes'],
-  niacinamide: ['niacinamide'],
-  vitamin_c: ['vitamine c', 'vitamin c'],
-  salicylic_acid: ['acide salicylique', 'salicylic acid'],
-  glycolic_acid: ['acide glycolique', 'glycolic acid'],
-  hyaluronic_acid: ['acide hyaluronique', 'hyaluronic acid'],
-  lactic_acid: ['acide lactique', 'lactic acid'],
-  azelaic_acid: ['acide azelaique', 'azelaic acid']
-};
+// Each key's words in every language the chat speaks (i18n/<code>/lexicon.mjs, `ingredients`).
+const GROUPS = {};
+for (const lexicon of LEXICONS) {
+  for (const [key, words] of Object.entries(lexicon.ingredients ?? {})) GROUPS[key] = [...new Set([...(GROUPS[key] ?? []), ...words])];
+}
 
 const KEY_OF = new Map(Object.entries(GROUPS).flatMap(([key, words]) => [[key, key], ...words.map((w) => [w, key])]));
 

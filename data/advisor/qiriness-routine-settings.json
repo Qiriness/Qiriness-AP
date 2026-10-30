@@ -50,26 +50,30 @@
     "ask_all": true,
     "concern_buttons": {
       "_about": "Question 1, one button per main concern in the Rules tab's order. `value`: the concern(s) the button records (« a+b »: the first is the main concern, the next ones secondary); without one, the main concern's first concern.",
-      "A": { "fr": "Déshydratation", "en": "Dehydration" },
-      "B": { "fr": "Imperfections", "en": "Blemishes" },
-      "D": { "fr": "Taches et teint terne", "en": "Dark spots and dull complexion", "value": "dark_spots+dullness" },
-      "E": { "fr": "Rides", "en": "Wrinkles" },
-      "F": { "fr": "Premières rides", "en": "First wrinkles" },
-      "Y": { "fr": "Cernes et poches", "en": "Dark circles and puffiness" }
+      "A": { "fr": "Déshydratation", "en": "Dehydration", "it": "Disidratazione", "de": "Feuchtigkeitsmangel", "nl": "Uitdroging", "es": "Deshidratación" },
+      "B": { "fr": "Imperfections", "en": "Blemishes", "it": "Imperfezioni", "de": "Unreinheiten", "nl": "Onzuiverheden", "es": "Imperfecciones" },
+      "D": { "fr": "Taches et teint terne", "en": "Dark spots and dull complexion", "it": "Macchie e colorito spento", "de": "Pigmentflecken und fahler Teint", "nl": "Pigmentvlekken en doffe teint", "es": "Manchas y tez apagada", "value": "dark_spots+dullness" },
+      "E": { "fr": "Rides", "en": "Wrinkles", "it": "Rughe", "de": "Falten", "nl": "Rimpels", "es": "Arrugas" },
+      "F": { "fr": "Premières rides", "en": "First wrinkles", "it": "Prime rughe", "de": "Erste Falten", "nl": "Eerste rimpels", "es": "Primeras arrugas" },
+      "Y": { "fr": "Cernes et poches", "en": "Dark circles and puffiness", "it": "Occhiaie e borse", "de": "Augenringe und Tränensäcke", "nl": "Donkere kringen en wallen", "es": "Ojeras y bolsas" }
     },
     "eye_concern_buttons": [
       { "_about": "Question 1 when the eyes are asked about (owner's notes v4, 2026-10-19: « contour des yeux », then the face's « Rides » gave a face serum). Outside the routine builder; eye concerns, so the eye products answer." },
-      { "value": "dark_circles", "fr": "Cernes", "en": "Dark circles" },
-      { "value": "puffiness", "fr": "Poches", "en": "Puffiness" },
-      { "value": "eye_wrinkles", "fr": "Rides du contour des yeux", "en": "Wrinkles around the eyes" },
-      { "value": "dehydration", "fr": "Déshydratation", "en": "Dehydration" }
+      { "value": "dark_circles", "fr": "Cernes", "en": "Dark circles", "it": "Occhiaie", "de": "Augenringe", "nl": "Donkere kringen", "es": "Ojeras" },
+      { "value": "puffiness", "fr": "Poches", "en": "Puffiness", "it": "Borse", "de": "Tränensäcke", "nl": "Wallen", "es": "Bolsas" },
+      { "value": "eye_wrinkles", "fr": "Rides du contour des yeux", "en": "Wrinkles around the eyes", "it": "Rughe del contorno occhi", "de": "Fältchen um die Augen", "nl": "Rimpels rond de ogen", "es": "Arrugas del contorno de ojos" },
+      { "value": "dehydration", "fr": "Déshydratation", "en": "Dehydration", "it": "Disidratazione", "de": "Feuchtigkeitsmangel", "nl": "Uitdroging", "es": "Deshidratación" }
     ],
     "eye_concern": {
       "_about": "The eye routine's question 2: another concern around the eyes (owner, 2026-10-17: one of the three, no « none » button).",
       "options": ["eye_wrinkles", "dehydration", "dark_spots"],
       "labels": {
         "fr": { "eye_wrinkles": "Rides ou ridules", "dehydration": "Déshydratation", "dark_spots": "Taches" },
-        "en": { "eye_wrinkles": "Wrinkles or fine lines", "dehydration": "Dehydration", "dark_spots": "Dark spots" }
+        "en": { "eye_wrinkles": "Wrinkles or fine lines", "dehydration": "Dehydration", "dark_spots": "Dark spots" },
+        "it": { "eye_wrinkles": "Rughe o linee sottili", "dehydration": "Disidratazione", "dark_spots": "Macchie" },
+        "de": { "eye_wrinkles": "Falten oder feine Linien", "dehydration": "Feuchtigkeitsmangel", "dark_spots": "Pigmentflecken" },
+        "nl": { "eye_wrinkles": "Rimpels of fijne lijntjes", "dehydration": "Uitdroging", "dark_spots": "Pigmentvlekken" },
+        "es": { "eye_wrinkles": "Arrugas o líneas finas", "dehydration": "Deshidratación", "dark_spots": "Manchas" }
       }
     },
     "text": {
@@ -86,6 +90,34 @@
         "eye_concern": "Do you have any other concern around your eyes?",
         "age_band": "What is your age range?",
         "routine_time": "Would you like a day routine, a night routine, or both?"
+      },
+      "it": {
+        "primary_concern": "Qual è la Sua esigenza principale?",
+        "skin_type": "Qual è il Suo tipo di pelle?",
+        "eye_concern": "Ha un’altra esigenza intorno agli occhi?",
+        "age_band": "Qual è la Sua fascia d’età?",
+        "routine_time": "Desidera una routine per il giorno, per la notte o entrambe?"
+      },
+      "de": {
+        "primary_concern": "Was ist Ihr wichtigstes Hautanliegen?",
+        "skin_type": "Welchen Hauttyp haben Sie?",
+        "eye_concern": "Haben Sie noch ein weiteres Anliegen rund um die Augen?",
+        "age_band": "In welcher Altersgruppe sind Sie?",
+        "routine_time": "Möchten Sie eine Routine für den Tag, für die Nacht oder für beides?"
+      },
+      "nl": {
+        "primary_concern": "Wat is uw belangrijkste huidprobleem?",
+        "skin_type": "Wat is uw huidtype?",
+        "eye_concern": "Heeft u nog een ander aandachtspunt rond de ogen?",
+        "age_band": "In welke leeftijdsgroep valt u?",
+        "routine_time": "Wilt u een routine voor de dag, voor de nacht, of allebei?"
+      },
+      "es": {
+        "primary_concern": "¿Cuál es su principal preocupación?",
+        "skin_type": "¿Cuál es su tipo de piel?",
+        "eye_concern": "¿Tiene alguna otra preocupación en el contorno de los ojos?",
+        "age_band": "¿En qué franja de edad se encuentra?",
+        "routine_time": "¿Desea una rutina de día, de noche o ambas?"
       }
     }
   },
@@ -117,5 +149,13 @@
     "treat_routines": [
       { "key": "soiree_spa", "name_fr": "Soirée spa", "name_en": "Spa evening", "types": ["exfoliant", "mask", "mask:eyes"], "kit": "spa-maison-kit-rituel-hydratant" }
     ]
+  },
+  "repurchase_opening": {
+    "_about": "A signed-in customer opening the chat (owner, 2026-10-29): their favourite product in its repurchase window, under the greeting. The window opens at the product's interval (measured, else « Durée d'utilisation ») less the larger of window_share of it and window_days (« something like 20 %, or 2 weeks ») and closes window_after_share of the interval after it (« not forever … like 50 % »).",
+    "window_share": 0.2,
+    "window_days": 14,
+    "window_after_share": 0.5,
+    "type_order": ["cream", "serum", "lotion", "eye", "cleanser", "makeup_remover", "spf", "exfoliant", "patch", "out_of_routine", "mask", "sheet_mask"],
+    "_type_order": "The favourite: this type order first (« prioritise creams, serums, lotions etc. (tissue masks last) »), then bought most often, then most recent, then most expensive."
   }
 }

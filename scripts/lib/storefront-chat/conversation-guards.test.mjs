@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { emptyFlow, followUpFor } from './routine-flow.mjs';
+import { asksToAdd, cartAnswer, emptyFlow, followUpFor } from './routine-flow.mjs';
 import { asksConcern, createLlmAgent, endsWithQuestion } from './llm-agent.mjs';
 import { advisorStateFromHistory } from './advisor-state.mjs';
 import { buildStorefrontSystemPrompt } from './system-prompt.mjs';
@@ -137,4 +137,36 @@ test('a profile chip is our own label, never a product name: no « which one? »
   const r = await agentWith(scripted(answer('Souhaitez-vous une routine pour le jour, pour la nuit, ou les deux ?'))).respond({ message: page.name, choice: 'profile:age_band:under_25', context: { locale: 'fr' } });
   assert.equal(r.resolution, null);
   assert.ok(!r.choices.some((c) => c.value === page.id || c.label === page.name));
+});
+
+// OWNER, 2026-10-29: « When a customer asks to add something to cart, the agent should check do you want to add
+// this product to the cart and then the customer can confirm yes or no or say it »; and under the routine's
+// cart question, « ajouter svp » got « je ne peux pas ajouter directement ».
+test('« ajoutez-la au panier »: the code asks first, no model call; « Oui » or typed words add it, FR and EN', async () => {
+  for (const [ask, yes, lang, words] of [['Ajoutez-la à mon panier svp', 'oui', 'fr', /Souhaitez-vous que j'ajoute .* à votre panier \?/], ['Can you add it to my cart?', 'yes please', 'en', /Would you like me to add .* to your cart\?/]]) {
+    const client = scripted();
+    const agent = agentWith(client);
+    const context = { ...onPage, locale: lang };
+    const r1 = await agent.respond({ message: ask, context });
+    assert.match(r1.text, words, ask);
+    assert.deepEqual(r1.choices.map((c) => c.value), ['flow:cart:yes', 'flow:cart:no'], ask);
+    assert.equal(client.calls.filter((c) => c.pass !== 'storefront_profile_read').length, 0, 'no reply-model call');
+    const history = next([], ask, r1);
+    // The button, then the same in words.
+    for (const [message, choice] of [[r1.choices[0].label, 'flow:cart:yes'], [yes, null]]) {
+      const r2 = await agent.respond({ message, choice, context, history, advisorState: advisorStateFromHistory(history) });
+      assert.deepEqual(r2.cart?.add.map((x) => x.product_id), [page.id], `${ask} → ${message}`);
+    }
+    const no = await agent.respond({ message: r1.choices[1].label, choice: 'flow:cart:no', context, history, advisorState: advisorStateFromHistory(history) });
+    assert.equal(no.cart, undefined);
+  }
+});
+
+test('under the cart question, « ajouter svp » and "add them" are a yes; « ne l\'ajoutez pas » is not a request', () => {
+  const pending = { ...emptyFlow(), offer: 'declined', cart: { pending: [{ id: page.id, variant_id: null }], asked: [page.id] }, routine_ref: null };
+  for (const m of ['ajouter svp', 'Ajoutez', 'mettez-les', 'vas-y', 'add them', 'go ahead']) assert.equal(cartAnswer(pending, { message: m }), 'yes', m);
+  for (const m of ['non merci', "ne l'ajoutez pas", 'je cherche encore']) assert.equal(cartAnswer(pending, { message: m }), 'no', m);
+  assert.equal(cartAnswer({ ...pending, cart: { pending: [], asked: [] } }, { message: 'ajouter svp' }), null, 'nothing pending');
+  for (const m of ['Ajoutez la crème au panier', 'je la prends', 'put it in my basket', "I'll take it"]) assert.ok(asksToAdd(m), m);
+  for (const m of ["Ne l'ajoutez pas au panier", 'remove it from my cart', 'Que contient mon panier ?', 'Cette crème est-elle adaptée ?']) assert.ok(!asksToAdd(m), m);
 });

@@ -20,6 +20,7 @@
  */
 
 import { resolveProducts } from './product-resolver.mjs';
+import { wordsOf } from '../i18n/languages.mjs';
 import { matchFaqs } from './faq-matcher.mjs';
 
 export const RESOLVE_PRODUCTS = 'resolve_products';
@@ -31,11 +32,8 @@ const MAX_LIMIT = 8;
 const MAX_QUERY_CHARS = 120;
 const HANDLE = /^[\p{Ll}\p{Lo}\p{N}_-]{1,255}$/u;
 
-/** Words that carry no product meaning in a French or English skincare query. */
-const STOPWORDS = new Set([
-  'les', 'des', 'une', 'pour', 'avec', 'sans', 'dans', 'sur', 'par', 'est', 'que', 'qui', 'mon', 'mes', 'votre', 'vos',
-  'peau', 'soin', 'soins', 'produit', 'produits', 'the', 'and', 'for', 'with', 'skin', 'product', 'products', 'care'
-]);
+/** Words that carry no product meaning in a skincare query, in every language (i18n/<code>/words.mjs). */
+const STOPWORDS = new Set(wordsOf('searchStopwords'));
 
 /** OpenAI function tools, built per catalogue so the collection enum is the live list. */
 export function toolDefinitions(catalogue) {
@@ -102,11 +100,12 @@ export function toolDefinitions(catalogue) {
 
 /**
  * Run one tool call. Never throws for a bad call: the model gets `{ error }` and
- * can correct itself in the next round.
+ * can correct itself in the next round. `withheld`: product ids search never
+ * returns this turn (an accessory nobody asked for, owner 2026-10-29).
  *
  * @returns {{ result: object, handles: string[] }} handles = products the model may now name
  */
-export function runTool(name, args, catalogue, { currency = 'EUR', locale = 'fr', resolution = null, query = '' } = {}) {
+export function runTool(name, args, catalogue, { currency = 'EUR', locale = 'fr', resolution = null, query = '', withheld = new Set() } = {}) {
   const money = priceFormatter(currency, locale);
   if (name === RESOLVE_PRODUCTS) {
     if (!resolution?.index) return { result: { error: 'resolution is not available' }, handles: [] };
@@ -129,7 +128,7 @@ export function runTool(name, args, catalogue, { currency = 'EUR', locale = 'fr'
       return { result: { error: `unknown collection ${collection}` }, handles: [] };
     }
     const limit = clampLimit(args?.limit);
-    const found = searchProducts(catalogue, { query, collection }).slice(0, limit);
+    const found = searchProducts(catalogue, { query, collection }).filter((p) => !withheld.has(p.id)).slice(0, limit);
     return {
       result: {
         products: found.map((p) => ({

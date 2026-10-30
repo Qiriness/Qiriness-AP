@@ -3946,7 +3946,11 @@
    "label_en": "Dehydration",
    "effect": "A Hydratation",
    "secondary_effect": "Crème : hydratante (texture selon le type de peau)",
-   "note": null
+   "note": null,
+   "label_it": "Disidratazione",
+   "label_de": "Feuchtigkeitsmangel",
+   "label_nl": "Uitdroging",
+   "label_es": "Deshidratación"
   },
   {
    "_row": 7,
@@ -3956,7 +3960,11 @@
    "label_en": "Dryness",
    "effect": "A Hydratation",
    "secondary_effect": "Crème : hydratante (texture selon le type de peau)",
-   "note": null
+   "note": null,
+   "label_it": "Secchezza",
+   "label_de": "Trockenheit",
+   "label_nl": "Droogte",
+   "label_es": "Sequedad"
   },
   {
    "_row": 8,
@@ -3966,7 +3974,11 @@
    "label_en": "Fine lines",
    "effect": "F Fermeté et lift",
    "secondary_effect": "Sérum : anti-âge (variante premium Exception si rides marquées ou peau très mature)",
-   "note": null
+   "note": null,
+   "label_it": "Linee sottili",
+   "label_de": "Feine Linien",
+   "label_nl": "Fijne lijntjes",
+   "label_es": "Líneas finas"
   },
   {
    "_row": 9,
@@ -3976,7 +3988,11 @@
    "label_en": "Wrinkles",
    "effect": "E Anti-âge",
    "secondary_effect": "Sérum : anti-âge (variante premium Exception si rides marquées ou peau très mature)",
-   "note": null
+   "note": null,
+   "label_it": "Rughe",
+   "label_de": "Falten",
+   "label_nl": "Rimpels",
+   "label_es": "Arrugas"
   },
   {
    "_row": 10,
@@ -3986,7 +4002,11 @@
    "label_en": "Loss of firmness",
    "effect": "E Anti-âge",
    "secondary_effect": "Sérum : anti-âge (variante premium Exception si rides marquées ou peau très mature)",
-   "note": null
+   "note": null,
+   "label_it": "Perdita di compattezza",
+   "label_de": "Festigkeitsverlust",
+   "label_nl": "Verlies van stevigheid",
+   "label_es": "Pérdida de firmeza"
   },
   {
    "_row": 11,
@@ -3996,7 +4016,11 @@
    "label_en": "Loss of elasticity",
    "effect": "E Anti-âge",
    "secondary_effect": "Sérum : anti-âge (variante premium Exception si rides marquées ou peau très mature)",
-   "note": null
+   "note": null,
+   "label_it": "Perdita di elasticità",
+   "label_de": "Elastizitätsverlust",
+   "label_nl": "Verlies van elasticiteit",
+   "label_es": "Pérdida de elasticidad"
   },
   {
    "_row": 12,
@@ -4006,7 +4030,11 @@
    "label_en": "Dull complexion",
    "effect": "D Éclat",
    "secondary_effect": "Sérum ou option sublimateur : éclat",
-   "note": null
+   "note": null,
+   "label_it": "Colorito spento",
+   "label_de": "Fahler Teint",
+   "label_nl": "Doffe teint",
+   "label_es": "Tez apagada"
   },
   {
    "_row": 13,
@@ -4016,7 +4044,11 @@
    "label_en": "Signs of fatigue",
    "effect": "D Éclat",
    "secondary_effect": "Sérum ou option sublimateur : éclat",
-   "note": null
+   "note": null,
+   "label_it": "Segni di stanchezza",
+   "label_de": "Müdigkeitszeichen",
+   "label_nl": "Tekenen van vermoeidheid",
+   "label_es": "Signos de cansancio"
   },
   {
    "_row": 14,
@@ -4026,7 +4058,11 @@
    "label_en": "Blemishes",
    "effect": "B Imperfections",
    "secondary_effect": "Crème : texture légère ; nettoyant purifiant si l'étape est libre",
-   "note": null
+   "note": null,
+   "label_it": "Imperfezioni",
+   "label_de": "Unreinheiten",
+   "label_nl": "Onzuiverheden",
+   "label_es": "Imperfecciones"
   },
   {
    "_row": 15,
@@ -4036,7 +4072,11 @@
    "label_en": "Enlarged pores",
    "effect": "B Imperfections",
    "secondary_effect": "Crème : texture légère ; nettoyant purifiant si l'étape est libre",
-   "note": null
+   "note": null,
+   "label_it": "Pori dilatati",
+   "label_de": "Vergrößerte Poren",
+   "label_nl": "Verwijde poriën",
+   "label_es": "Poros dilatados"
   },
   {
    "_row": 16,
@@ -4046,7 +4086,11 @@
    "label_en": "Excess sebum",
    "effect": "B Imperfections",
    "secondary_effect": "Crème : texture légère ; nettoyant purifiant si l'étape est libre",
-   "note": null
+   "note": null,
+   "label_it": "Eccesso di sebo",
+   "label_de": "Überschüssiger Talg",
+   "label_nl": "Overmatige talg",
+   "label_es": "Exceso de sebo"
   },
   {
    "_row": 17,
@@ -4056,7 +4100,11 @@
    "label_en": "Uneven texture",
    "effect": "B Imperfections",
    "secondary_effect": "Crème : texture légère ; nettoyant purifiant si l'étape est libre",
-   "note": null
+   "note": null,
+   "label_it": "Grana irregolare",
+   "label_de": "Unebenes Hautbild",
+   "label_nl": "Oneffen huidstructuur",
+   "label_es": "Textura irregular"
   },
   {
    "_row": 18,
@@ -4066,7 +4114,11 @@
    "label_en": "Redness",
    "effect": "Type de peau sensible",
    "secondary_effect": "Ce n'est plus une préoccupation principale (2026-10-16) : la peau sensible est un type de peau ; jamais un produit « Déconseillé » peau sensible",
-   "note": null
+   "note": null,
+   "label_it": "Rossori",
+   "label_de": "Rötungen",
+   "label_nl": "Roodheid",
+   "label_es": "Rojeces"
   },
   {
    "_row": 19,
@@ -4076,7 +4128,11 @@
    "label_en": "Discomfort",
    "effect": "Type de peau sensible",
    "secondary_effect": "Ce n'est plus une préoccupation principale (2026-10-16) : la peau sensible est un type de peau ; jamais un produit « Déconseillé » peau sensible",
-   "note": null
+   "note": null,
+   "label_it": "Disagio cutaneo",
+   "label_de": "Hautunbehagen",
+   "label_nl": "Ongemak",
+   "label_es": "Incomodidad"
   },
   {
    "_row": 20,
@@ -4086,7 +4142,11 @@
    "label_en": "Reactivity",
    "effect": "Type de peau sensible",
    "secondary_effect": "Ce n'est plus une préoccupation principale (2026-10-16) : la peau sensible est un type de peau ; jamais un produit « Déconseillé » peau sensible",
-   "note": null
+   "note": null,
+   "label_it": "Reattività",
+   "label_de": "Reaktivität",
+   "label_nl": "Reactiviteit",
+   "label_es": "Reactividad"
   },
   {
    "_row": 21,
@@ -4096,7 +4156,11 @@
    "label_en": "Dark spots",
    "effect": "D Éclat",
    "secondary_effect": "Sérum : anti-taches ; module SPF proposé",
-   "note": null
+   "note": null,
+   "label_it": "Macchie",
+   "label_de": "Pigmentflecken",
+   "label_nl": "Pigmentvlekken",
+   "label_es": "Manchas"
   },
   {
    "_row": 22,
@@ -4106,7 +4170,11 @@
    "label_en": "Uneven tone",
    "effect": "B Imperfections",
    "secondary_effect": "Sérum : anti-taches ; module SPF proposé",
-   "note": null
+   "note": null,
+   "label_it": "Incarnato irregolare",
+   "label_de": "Ungleichmäßiger Teint",
+   "label_nl": "Ongelijkmatige teint",
+   "label_es": "Tono irregular"
   },
   {
    "_row": 23,
@@ -4116,7 +4184,11 @@
    "label_en": "Dark circles",
    "effect": "Y Cernes et poches",
    "secondary_effect": "Routine Yeux (Y) ; en préoccupation secondaire : le contour des yeux de chaque routine",
-   "note": "Changé le 2026-10-17 : la routine Yeux (Y) remplace le module Yeux pour ces préoccupations"
+   "note": "Changé le 2026-10-17 : la routine Yeux (Y) remplace le module Yeux pour ces préoccupations",
+   "label_it": "Occhiaie",
+   "label_de": "Augenringe",
+   "label_nl": "Donkere kringen",
+   "label_es": "Ojeras"
   },
   {
    "_row": 24,
@@ -4126,7 +4198,11 @@
    "label_en": "Puffiness",
    "effect": "Y Cernes et poches",
    "secondary_effect": "Routine Yeux (Y) ; en préoccupation secondaire : le contour des yeux de chaque routine",
-   "note": null
+   "note": null,
+   "label_it": "Borse",
+   "label_de": "Tränensäcke",
+   "label_nl": "Wallen",
+   "label_es": "Bolsas"
   },
   {
    "_row": 25,
@@ -4136,7 +4212,11 @@
    "label_en": "Eye wrinkles",
    "effect": "Y Cernes et poches",
    "secondary_effect": "Routine Yeux (Y) ; en préoccupation secondaire : le contour des yeux de chaque routine",
-   "note": null
+   "note": null,
+   "label_it": "Rughe del contorno occhi",
+   "label_de": "Fältchen um die Augen",
+   "label_nl": "Rimpels rond de ogen",
+   "label_es": "Arrugas del contorno de ojos"
   },
   {
    "_row": 26,
@@ -4146,7 +4226,11 @@
    "label_en": "Protection",
    "effect": "F Fermeté et lift",
    "secondary_effect": "Crème ou sérum : protecteur (environnement, stress quotidien)",
-   "note": "Ajoutée le 2026-10-15 : aucun produit ne la cible encore, à indiquer dans l'onglet Products"
+   "note": "Ajoutée le 2026-10-15 : aucun produit ne la cible encore, à indiquer dans l'onglet Products",
+   "label_it": "Protezione",
+   "label_de": "Schutz",
+   "label_nl": "Bescherming",
+   "label_es": "Protección"
   },
   {
    "_row": 28,
@@ -4156,7 +4240,11 @@
    "label_en": "Hydration",
    "effect": "Source d'Eau",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Idratazione",
+   "label_de": "Feuchtigkeit",
+   "label_nl": "Hydratatie",
+   "label_es": "Hidratación"
   },
   {
    "_row": 29,
@@ -4166,7 +4254,11 @@
    "label_en": "Blemishes",
    "effect": "Éclat Parfait",
    "secondary_effect": null,
-   "note": "Aucune gamme : chaque étape choisie par préoccupation et type de peau. Aucun sérum ne cible les imperfections aujourd'hui"
+   "note": "Aucune gamme : chaque étape choisie par préoccupation et type de peau. Aucun sérum ne cible les imperfections aujourd'hui",
+   "label_it": "Imperfezioni",
+   "label_de": "Unreinheiten",
+   "label_nl": "Onzuiverheden",
+   "label_es": "Imperfecciones"
   },
   {
    "_row": 30,
@@ -4176,7 +4268,11 @@
    "label_en": "Radiance",
    "effect": "Éclat Parfait",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Luminosità",
+   "label_de": "Ausstrahlung",
+   "label_nl": "Uitstraling",
+   "label_es": "Luminosidad"
   },
   {
    "_row": 31,
@@ -4186,7 +4282,11 @@
    "label_en": "Anti-ageing",
    "effect": "Selon l'âge",
    "secondary_effect": null,
-   "note": "La gamme selon l'âge (ci-dessous)"
+   "note": "La gamme selon l'âge (ci-dessous)",
+   "label_it": "Anti-età",
+   "label_de": "Anti-Aging",
+   "label_nl": "Anti-aging",
+   "label_es": "Antiedad"
   },
   {
    "_row": 32,
@@ -4196,7 +4296,11 @@
    "label_en": "Firmness and lift",
    "effect": "Selon l'âge",
    "secondary_effect": null,
-   "note": "La gamme selon l'âge (ci-dessous)"
+   "note": "La gamme selon l'âge (ci-dessous)",
+   "label_it": "Compattezza e lifting",
+   "label_de": "Festigkeit und Lifting",
+   "label_nl": "Stevigheid en lift",
+   "label_es": "Firmeza y lifting"
   },
   {
    "_row": 33,
@@ -4206,7 +4310,11 @@
    "label_en": "Dark circles and puffiness",
    "effect": "Selon l'âge",
    "secondary_effect": null,
-   "note": "Ajoutée le 2026-10-17 : la routine Yeux, avec ses propres étapes (onglet Routines, colonne « Préoccupation principale » = Y). Zone sensible ; la crème yeux de la gamme de l'âge"
+   "note": "Ajoutée le 2026-10-17 : la routine Yeux, avec ses propres étapes (onglet Routines, colonne « Préoccupation principale » = Y). Zone sensible ; la crème yeux de la gamme de l'âge",
+   "label_it": "Occhiaie e borse",
+   "label_de": "Augenringe und Tränensäcke",
+   "label_nl": "Donkere kringen en wallen",
+   "label_es": "Ojeras y bolsas"
   },
   {
    "_row": 35,
@@ -4216,7 +4324,11 @@
    "label_en": "Dry",
    "effect": "Riche",
    "secondary_effect": null,
-   "note": "Ne change pas la fondation : seulement la crème"
+   "note": "Ne change pas la fondation : seulement la crème",
+   "label_it": "Secca / molto secca",
+   "label_de": "Trocken / sehr trocken",
+   "label_nl": "Droog / zeer droog",
+   "label_es": "Seca / muy seca"
   },
   {
    "_row": 36,
@@ -4226,7 +4338,11 @@
    "label_en": "Normal",
    "effect": "Standard",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Normale",
+   "label_de": "Normal",
+   "label_nl": "Normaal",
+   "label_es": "Normal"
   },
   {
    "_row": 37,
@@ -4236,7 +4352,11 @@
    "label_en": "Combination",
    "effect": "Légère",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Mista",
+   "label_de": "Mischhaut",
+   "label_nl": "Gemengd",
+   "label_es": "Mixta"
   },
   {
    "_row": 38,
@@ -4246,7 +4366,11 @@
    "label_en": "Oily",
    "effect": "Légère",
    "secondary_effect": null,
-   "note": "Peau grasse : un type de peau, plus une préoccupation (2026-10-16)"
+   "note": "Peau grasse : un type de peau, plus une préoccupation (2026-10-16)",
+   "label_it": "Grassa",
+   "label_de": "Fettig",
+   "label_nl": "Vet",
+   "label_es": "Grasa"
   },
   {
    "_row": 39,
@@ -4256,7 +4380,11 @@
    "label_en": "Sensitive",
    "effect": null,
    "secondary_effect": null,
-   "note": "Pas de texture : jamais un produit « Déconseillé » peau sensible ; la colonne « Peau sensible » de l'onglet Products départage"
+   "note": "Pas de texture : jamais un produit « Déconseillé » peau sensible ; la colonne « Peau sensible » de l'onglet Products départage",
+   "label_it": "Sensibile",
+   "label_de": "Empfindlich",
+   "label_nl": "Gevoelig",
+   "label_es": "Sensible"
   },
   {
    "_row": 42,
@@ -4266,7 +4394,11 @@
    "label_en": "Under 25",
    "effect": "Active Énergie",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Meno di 25 anni",
+   "label_de": "Unter 25 Jahren",
+   "label_nl": "Jonger dan 25",
+   "label_es": "Menos de 25 años"
   },
   {
    "_row": 43,
@@ -4276,7 +4408,11 @@
    "label_en": "25 to 34",
    "effect": "Temps Sublime",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Da 25 a 34 anni",
+   "label_de": "25 bis 34 Jahre",
+   "label_nl": "25 tot 34 jaar",
+   "label_es": "De 25 a 34 años"
   },
   {
    "_row": 44,
@@ -4286,7 +4422,11 @@
    "label_en": "35 to 44",
    "effect": "Temps Sublime",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Da 35 a 44 anni",
+   "label_de": "35 bis 44 Jahre",
+   "label_nl": "35 tot 44 jaar",
+   "label_es": "De 35 a 44 años"
   },
   {
    "_row": 45,
@@ -4296,7 +4436,11 @@
    "label_en": "45 and over",
    "effect": "Exception",
    "secondary_effect": null,
-   "note": "Longévité : Exception à partir de 45 ans"
+   "note": "Longévité : Exception à partir de 45 ans",
+   "label_it": "45 anni e oltre",
+   "label_de": "45 Jahre und älter",
+   "label_nl": "45 jaar en ouder",
+   "label_es": "45 años o más"
   },
   {
    "_row": 48,
@@ -4306,7 +4450,11 @@
    "label_en": "Day routine",
    "effect": "Les étapes « Jour » (onglet Routines)",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Routine del giorno",
+   "label_de": "Tagesroutine",
+   "label_nl": "Dagroutine",
+   "label_es": "Rutina de día"
   },
   {
    "_row": 49,
@@ -4316,7 +4464,11 @@
    "label_en": "Night routine",
    "effect": "Les étapes « Nuit »",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Routine della notte",
+   "label_de": "Nachtroutine",
+   "label_nl": "Nachtroutine",
+   "label_es": "Rutina de noche"
   },
   {
    "_row": 50,
@@ -4326,7 +4478,11 @@
    "label_en": "Day and night",
    "effect": "Le jour, puis la nuit sans ce qui est déjà dans la routine du jour",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": "Giorno e notte",
+   "label_de": "Tag und Nacht",
+   "label_nl": "Dag en nacht",
+   "label_es": "Día y noche"
   },
   {
    "_row": 52,
@@ -4336,7 +4492,11 @@
    "label_en": "Men's range",
    "effect": "Produits homme classés en premier ; les autres restent possibles si la cliente est ouverte",
    "secondary_effect": null,
-   "note": "Uniquement sur demande explicite ; jamais déduit"
+   "note": "Uniquement sur demande explicite ; jamais déduit",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 53,
@@ -4346,7 +4506,11 @@
    "label_en": "Small budget",
    "effect": "Un petit plaisir plutôt qu'une routine",
    "secondary_effect": null,
-   "note": "Déclencheurs : « petit budget », « pas cher »…"
+   "note": "Déclencheurs : « petit budget », « pas cher »…",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 54,
@@ -4356,7 +4520,11 @@
    "label_en": "Exclusions",
    "effect": "Produits dont « Contient » mentionne l'exclusion retirés",
    "secondary_effect": null,
-   "note": "Ex. sans parfum"
+   "note": "Ex. sans parfum",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 57,
@@ -4366,7 +4534,11 @@
    "label_en": "Asks about masks or spa",
    "effect": "Recommander directement",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 58,
@@ -4376,7 +4548,11 @@
    "label_en": "Gift",
    "effect": "Coffrets et expériences spa en priorité",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 59,
@@ -4386,7 +4562,11 @@
    "label_en": "Full routine built",
    "effect": "Un seul petit plaisir pertinent, si approprié",
    "secondary_effect": null,
-   "note": "Au plus une fois par conversation"
+   "note": "Au plus une fois par conversation",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 60,
@@ -4396,7 +4576,11 @@
    "label_en": "Likes Wraps",
    "effect": "Proposer un soin quotidien complémentaire",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 61,
@@ -4406,7 +4590,11 @@
    "label_en": "Small budget",
    "effect": "Pas de vente additionnelle",
    "secondary_effect": null,
-   "note": null
+   "note": null,
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 62,
@@ -4416,7 +4604,11 @@
    "label_en": "End of consultation",
    "effect": "Optionnel, jamais automatique",
    "secondary_effect": null,
-   "note": "Associé aux promotions actives sur kits et masques"
+   "note": "Associé aux promotions actives sur kits et masques",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 65,
@@ -4426,7 +4618,11 @@
    "label_en": "Glow / tinted care",
    "effect": "Type fonctionnel ? (Crème teintée ou type à part)",
    "secondary_effect": null,
-   "note": "Votre étape 4 « sublimateur glow immédiat »"
+   "note": "Votre étape 4 « sublimateur glow immédiat »",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 66,
@@ -4436,7 +4632,11 @@
    "label_en": "Voile Source d'Eau",
    "effect": "Retiré des collections crèmes : volontaire ?",
    "secondary_effect": null,
-   "note": "Il n'est plus proposé aux peaux mixtes"
+   "note": "Il n'est plus proposé aux peaux mixtes",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 67,
@@ -4446,7 +4646,11 @@
    "label_en": "Fine lines",
    "effect": "Anti-âge (E) ou Éclat (D) ? - Anti-age ; puis F Fermeté et lift, les premiers signes (2026-10-15)",
    "secondary_effect": null,
-   "note": "Les playbooks du 7 octobre plaçaient les premières rides en Éclat ; la liste standard les met en Âge"
+   "note": "Les playbooks du 7 octobre plaçaient les premières rides en Éclat ; la liste standard les met en Âge",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 68,
@@ -4456,7 +4660,11 @@
    "label_en": "Tightness, mature skin, deep wrinkles",
    "effect": "Couverts par Déshydratation, Rides et la variante premium : suffisant ? - Oui",
    "secondary_effect": null,
-   "note": "Ces mots restent compris par le conseiller, ramenés à la liste standard"
+   "note": "Ces mots restent compris par le conseiller, ramenés à la liste standard",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 69,
@@ -4466,7 +4674,11 @@
    "label_en": "Lips, hands, feet",
    "effect": "Conseil seul (module) ou petits plaisirs uniquement ? - regarder petit plaisir colonne.",
    "secondary_effect": null,
-   "note": "Aucune routine ne les couvre aujourd'hui"
+   "note": "Aucune routine ne les couvre aujourd'hui",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   },
   {
    "_row": 70,
@@ -4476,7 +4688,11 @@
    "label_en": "Oily skin (foundation G)",
    "effect": "Retirée le 2026-10-16 : la peau grasse est un type de peau ; « Excès de sébum » et « Pores dilatés » vont en B Imperfections",
    "secondary_effect": null,
-   "note": "Aucune préoccupation ne mène à G aujourd'hui (colonne « Préoccupations principales » vide dans Routines)"
+   "note": "Aucune préoccupation ne mène à G aujourd'hui (colonne « Préoccupations principales » vide dans Routines)",
+   "label_it": null,
+   "label_de": null,
+   "label_nl": null,
+   "label_es": null
   }
  ]
 }

@@ -17,6 +17,7 @@
 
 import { FIT } from '../advisory/reason-codes.mjs';
 import { valueOf } from '../advisory/profile.mjs';
+import { languageOf, localized } from '../i18n/languages.mjs';
 
 const MAX_TEXT = 1500;
 const STAGES = new Set(['prepare', 'activate', 'optimise', 'regenerate']);
@@ -25,13 +26,13 @@ const clip = (text) => (typeof text === 'string' && text.trim() ? (text.length >
 
 /** Their main concern's name in their language (« Rides »), else their routine's (the treat's sentence). */
 export function concernName(profile, labels = {}, mainKey = null, lang = 'fr') {
-  const name = (row) => (row ? row[lang] ?? row.fr ?? null : null);
+  const name = (row) => localized(row, lang);
   return name(labels.concerns?.[valueOf(profile, 'primary_concern')]) ?? name(labels.main?.[mainKey]) ?? null;
 }
 
 /** « Peau sèche · Rides »: what of theirs this product was chosen for (its skin and concern codes), in their language. */
 export function whyTags(step, profile, labels = {}, mainKey = null, lang = 'fr') {
-  const name = (row) => (row ? row[lang] ?? row.fr ?? null : null);
+  const name = (row) => localized(row, lang);
   const codes = new Set(step.reason_codes ?? []);
   const tags = [];
   const skin = valueOf(profile, 'skin_type');
@@ -55,7 +56,7 @@ export function whyTags(step, profile, labels = {}, mainKey = null, lang = 'fr')
 export function buildRoutineView({ advice, profile, byId, money, cartVariant, labels = {}, locale = 'fr', currency = 'EUR', linkBase = '', ref = null, discount = null, reward = null }) {
   const m = advice?.moments;
   if (advice?.status !== 'recommended' || !m || !Array.isArray(m.day) || !Array.isArray(m.night)) return null;
-  const lang = String(locale).startsWith('en') ? 'en' : 'fr';
+  const lang = languageOf(locale);
   const card = (s, owned) => {
     const p = byId(s.product_id);
     if (!p) return null;

@@ -22,45 +22,34 @@
  *   (settled: the products found beside it; labels: its options as offered, id → label)
  */
 
+import { alternation, packs, wordsAt } from '../i18n/languages.mjs';
+
+// Every word list below is every supported language's (i18n/<code>/words.mjs, `refs`).
+const words = (key) => wordsAt(`refs.${key}`);
+const alt = (key) => alternation(`refs.${key}`);
+
 /** Grammar that must never be typo-corrected into a product word (« trois » is not « trio »). */
-export const GRAMMAR_WORDS = new Set([
-  'deux', 'troi', 'trois', 'quatre', 'premier', 'premiere', 'second', 'seconde', 'deuxieme', 'troisieme', 'dernier', 'derniere',
-  'autre', 'autres', 'celui', 'celle', 'ceux', 'celle', 'cela', 'matin', 'soir', 'both', 'other', 'first', 'last', 'third',
-  'two', 'three', 'four', 'second', 'morning', 'evening', 'one', 'ones'
-]);
+export const GRAMMAR_WORDS = new Set(words('grammar'));
 
 /** Words that make the next word a named thing: articles, possessives, demonstratives. */
-export const ANCHOR_WORDS = new Set([
-  'le', 'la', 'l', 'les', 'du', 'au', 'aux', 'mon', 'ma', 'me', 'votre', 'vos', 'notre', 'ce', 'cet', 'cette',
-  'the', 'my', 'your', 'our', 'this', 'that', 'these', 'those'
-]);
+export const ANCHOR_WORDS = new Set(words('anchors'));
 
 /** Definite articles only: « la crème licorne » names a product; « cette crème » points at one. */
-export const DEFINITE_WORDS = new Set(['le', 'la', 'l', 'les', 'the']);
+export const DEFINITE_WORDS = new Set(words('definite'));
 
 /** Short function words that are never part of a product name. */
-export const STOPWORD_LIKE = new Set([
-  'de', 'des', 'du', 'et', 'ou', 'a', 'au', 'aux', 'en', 'pour', 'par', 'avec', 'sans', 'sur', 'dans', 'qui', 'que', 'est', 'il', 'elle',
-  'ne', 'pas', 'plus', 'tres', 'bien', 'of', 'for', 'and', 'with', 'is', 'it', 'to', 'in', 'on', 'from', 'are', 'does', 'do', 'very', 'not'
-]);
+export const STOPWORD_LIKE = new Set(words('stopwords'));
 
 /**
  * Everyday words that are never a misspelt product word, so never typo-corrected:
- * « your » is not « jour », « vous » is not « doux ».
+ * « your » is not « jour », « vous » is not « doux »; « moins » (stemmed « moin ») is one letter from « mains ».
  */
-export const COMMON_WORDS = new Set([
-  ...STOPWORD_LIKE, ...ANCHOR_WORDS,
-  // Never typos of a catalogue word: « moins » (stemmed « moin ») is one letter from « mains ».
-  'moins', 'moin', 'plus', 'less',
-  'vous', 'avez', 'nous', 'leur', 'leurs', 'elles', 'mais', 'donc', 'alors', 'aussi', 'comme', 'quand', 'faire', 'peux', 'peut', 'veux', 'sont', 'etre', 'avoir', 'cette',
-  'your', 'yours', 'what', 'have', 'will', 'would', 'could', 'should', 'about', 'there', 'their', 'them', 'they', 'when', 'where', 'which', 'with', 'this', 'that',
-  'than', 'then', 'into', 'just', 'some', 'many', 'much', 'more', 'most', 'also', 'only', 'other', 'good', 'need', 'want', 'like', 'make', 'used', 'using'
-]);
+export const COMMON_WORDS = new Set([...STOPWORD_LIKE, ...ANCHOR_WORDS, ...words('common')]);
 
 /** Indefinite articles: « des masques », « une crème » is discovery, not a reference. */
-export const INDEFINITE_WORDS = new Set(['un', 'une', 'de', 'des', 'quelque', 'a', 'an', 'some', 'any']);
+export const INDEFINITE_WORDS = new Set(words('indefinite'));
 
-const SEPARATORS = /[,;/+]|\s(?:et|ou|avec|versus|vs|contre|puis|ainsi que|and|or|with)\s/i;
+const SEPARATORS = new RegExp(`[,;/+]|\\s(?:${alt('separators')})\\s`, 'i');
 
 /** Raw text → normalised chunks, one per product mention. */
 export function splitMentions(text, normaliseImpl = defaultNormalise) {
@@ -70,29 +59,33 @@ export function splitMentions(text, normaliseImpl = defaultNormalise) {
     .filter(Boolean);
 }
 
+const DISCOVERY = new RegExp(`\\b(${alt('discovery')})\\b`);
+
 /** « quels sérums avez-vous », « une crème pour peau sèche », « que me conseillez-vous ». */
 export function isDiscoveryQuestion(normalised) {
-  return /\b(quel|quels|quelle|quelles|avez vous|auriez vous|vous avez|conseillez|recommandez|proposez|cherche (un|une|des)|un produit|une creme|un serum|un soin|une routine|pour (une|les|ma|mon) peau|pour peau|vos produits|which|what|do you have|have you got|recommend|suggest|something for|looking for (a|an|some)|a product|a cream|a serum|an? (routine|treatment)|for (dry|oily|combination|sensitive|my) skin|your products)\b/.test(
-    ` ${normalised} `
-  );
+  return DISCOVERY.test(` ${normalised} `);
 }
 
-const PLURAL = /\b(?:tous les |toutes les |les |the |the first |all )(deux|2|trois|3|quatre|4|two|three|four)\b|\b(both)\b|\ball (three)\b/;
-const COUNTS = { deux: 2, 2: 2, two: 2, both: 2, trois: 3, 3: 3, three: 3, quatre: 4, 4: 4, four: 4 };
-const RECOMMENDED_CUE = /\b(conseill\w*|recommand\w*|propos\w*|suggere\w*|suggest\w*)\b/;
-const OTHER = /\b(l autre|the other( one)?)\b/;
-const ORDINALS = [
-  [/\b(le |la )?(premier|premiere|first)\b/, 0],
-  [/\b(le |la )?(second|seconde|deuxieme)\b/, 1],
-  [/\b(le |la )?(troisieme|third)\b/, 2],
-  [/\b(le |la )?(dernier|derniere|last)\b/, -1]
-];
+// « les deux », « tous les trois », "both": how many of the products in play.
+const COUNTS = Object.assign({}, ...words('counts'), ...words('pluralAlone'));
+const PLURAL_ALONE = Object.keys(Object.assign({}, ...words('pluralAlone')));
+const PLURAL = new RegExp(
+  `\\b(?:${alt('pluralPrefixes')})(${Object.keys(Object.assign({}, ...words('counts'))).join('|')})\\b`
+  + (PLURAL_ALONE.length ? `|\\b(${PLURAL_ALONE.join('|')})\\b` : '')
+);
+const RECOMMENDED_CUE = new RegExp(`\\b(${alt('recommendedCue')})\\b`);
+const OTHER = new RegExp(`\\b(${alt('other')})\\b`);
+const ORDINALS = [['first', 0], ['second', 1], ['third', 2], ['last', -1]]
+  .map(([key, position]) => [words(`ordinals.${key}`), position])
+  .filter(([fragments]) => fragments.length)
+  .map(([fragments, position]) => [new RegExp(`\\b(?:${fragments.join('|')})\\b`), position]);
 // « est-elle recommandée ? », « convient-il aux peaux sèches ? »: the subject
 // pronoun after its verb is the product just discussed. Only after a verb: a
 // plain « il » (« il fait chaud ») points at nothing. Missed, the question about
 // the hand cream got the anti-age cream's card (dev store, 2026-10-16).
-const INVERTED = /\b(est|sont|convient|conviennent|conviendrait|contient|marche|fonctionne|dure|coute|sent|existe|reste|peut|va|irait|serait|a t|existe t|convient t|faut) (elle|il|elles|ils)\b/;
-const THIS = /\b(celui ci|celle ci|celui la|celle la|ce produit|ce soin|cet article|ca|cela|this one|that one|this product|this item|it)\b/;
+const INVERTED = words('inverted').length ? new RegExp(`\\b(?:${alt('inverted')})\\b`) : null;
+const THIS = new RegExp(`\\b(${alt('this')})\\b`);
+const DEMONSTRATIVE_BEFORE = new RegExp(`\\b(${alt('demonstratives')}) (\\w+)\\b`, 'g');
 
 /**
  * @param {string} normalised the customer message, normalised
@@ -105,7 +98,7 @@ export function detectReference(normalised, { refs = null, pageProductId = null,
 
   const plural = text.match(PLURAL);
   if (plural) {
-    const n = COUNTS[plural[1] ?? plural[2] ?? plural[3]];
+    const n = COUNTS[plural[1] ?? plural[2]];
     const source = RECOMMENDED_CUE.test(text) && refs?.lastRecommended?.length ? refs.lastRecommended : lastSet.length ? lastSet : refs?.lastRecommended ?? [];
     if (source.length >= n) return { ids: source.slice(0, n), reason: `conversation: ${plural[0].trim()}`, cue: plural[0].trim() };
     // « les deux » when only one product was ever in play: say what there is and
@@ -131,7 +124,7 @@ export function detectReference(normalised, { refs = null, pageProductId = null,
     }
   }
 
-  const demonstrative = text.match(THIS) ?? text.match(INVERTED) ?? matchDemonstrativeCare(text, careWords);
+  const demonstrative = text.match(THIS) ?? (INVERTED && text.match(INVERTED)) ?? matchDemonstrativeCare(text, careWords);
   if (demonstrative) {
     const cue = demonstrative[0].trim();
     if (refs?.lastSingle) return { ids: [refs.lastSingle], reason: 'conversation: the product just discussed', cue };
@@ -143,7 +136,7 @@ export function detectReference(normalised, { refs = null, pageProductId = null,
 
 /** « cette crème », « this serum »: a demonstrative before one of the catalogue's own care words. */
 function matchDemonstrativeCare(text, careWords) {
-  for (const match of text.matchAll(/\b(ce|cet|cette|ces|this|that|these|those) (\w+)\b/g)) {
+  for (const match of text.matchAll(DEMONSTRATIVE_BEFORE)) {
     const word = match[2].length > 3 && /[sx]$/.test(match[2]) ? match[2].slice(0, -1) : match[2];
     if (careWords.has(word)) return match;
   }
@@ -151,37 +144,16 @@ function matchDemonstrativeCare(text, careWords) {
 }
 
 /**
- * Everyday words for the same thing, in French and English. A customer's word
- * becomes the one the CATALOGUE uses when the catalogue lacks it: « the
- * Hyal-Aqua mask » reads « masque » on a French catalogue, and « le masque »
- * would read « mask » on an English one. Language, not brand: no product is named.
+ * Everyday words for the same thing, in every language the chat speaks (i18n/<code>/words.mjs,
+ * `equivalents`: the same key is the same thing). A customer's word becomes the one the CATALOGUE
+ * uses when the catalogue lacks it: « the Hyal-Aqua mask » reads « masque » on a French catalogue,
+ * and « le masque » would read « mask » on an English one. Language, not brand: no product is named.
  */
-const EQUIVALENTS = [
-  ['creme', 'cream', 'creams', 'moisturiser', 'moisturizer'],
-  ['masque', 'masques', 'mask', 'masks'],
-  ['lotion', 'toner'],
-  ['coffret', 'gift set', 'gift box', 'box set'],
-  ['huile', 'oil'],
-  ['lait', 'milk'],
-  ['baume', 'balm'],
-  ['gommage', 'scrub', 'exfoliator'],
-  ['nettoyant', 'cleanser'],
-  ['demaquillant', 'make up remover', 'makeup remover'],
-  ['brume', 'mist'],
-  ['eau', 'water'],
-  ['mousse', 'foam'],
-  ['patchs', 'patches'],
-  ['nuit', 'night'],
-  ['jour', 'day'],
-  ['yeux', 'eye', 'eyes'],
-  ['levres', 'lips'],
-  ['mains', 'hand', 'hands'],
-  ['corps', 'body'],
-  ['visage', 'face'],
-  ['gamme', 'range'],
-  ['fleur d oranger', 'orange blossom'],
-  ['quartz rose', 'rose quartz']
-];
+const EQUIVALENTS = (() => {
+  const groups = new Map();
+  for (const pack of packs()) for (const [key, phrases] of Object.entries(pack.words.equivalents ?? {})) groups.set(key, [...(groups.get(key) ?? []), ...phrases]);
+  return [...groups.values()];
+})();
 const EQUIVALENT_PHRASES = EQUIVALENTS.flatMap((group) => group.map((phrase) => [phrase, group])).sort((a, b) => b[0].length - a[0].length);
 
 /**
@@ -252,6 +224,7 @@ function defaultNormalise(text) {
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
+    .replace(/ß/g, 'ss')
     .replace(/[’‘`´']/g, ' ')
     .replace(/[^a-z0-9\-\s]/g, ' ')
     .replace(/-/g, ' ')

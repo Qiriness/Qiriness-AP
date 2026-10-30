@@ -10,6 +10,8 @@ export function norm(value) {
     .normalize('NFD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
+    // German « ß » is « ss » (« weiß » → « weiss »): never a space in the middle of a word.
+    .replace(/ß/g, 'ss')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }

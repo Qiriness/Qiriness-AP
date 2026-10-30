@@ -35,9 +35,9 @@ test('the mock reports no model and no spend', async () => {
   assert.equal(reply.usage, null);
 });
 
-test('French unless the storefront says English', () => {
+test('the storefront\'s language; English for one the chat does not speak (owner, 2026-10-30); French without one', () => {
   assert.equal(replyLanguage('en-GB'), 'en');
   assert.equal(replyLanguage('fr'), 'fr');
-  assert.equal(replyLanguage('de'), 'fr');
+  assert.equal(replyLanguage('pt-BR'), 'en');
   assert.equal(replyLanguage(null), 'fr');
 });

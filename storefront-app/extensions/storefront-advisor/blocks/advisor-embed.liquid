@@ -12,6 +12,10 @@
   if banner_text == blank
     assign banner_text = 'banner.text' | t
   endif
+  assign greeting = block.settings.greeting | strip
+  if greeting == blank
+    assign greeting = 'advisor.greeting' | t: shop: shop.name
+  endif
   assign banner_button = block.settings.banner_button | strip
   if banner_button == blank
     assign banner_button = 'banner.button' | t
@@ -20,7 +24,7 @@
 <div
   id="storefront-advisor"
   class="sa-root sa-root--{{ block.settings.position }}"
-  style="--sa-accent: {{ block.settings.accent_color }};"
+  style="--sa-accent: {{ block.settings.accent_color }};{% if block.settings.font_heading != blank %} --sa-heading: '{{ block.settings.font_heading | strip | escape }}', Georgia, serif;{% endif %}{% if block.settings.font_body != blank %} --sa-body: '{{ block.settings.font_body | strip | escape }}', 'Helvetica Neue', Arial, sans-serif;{% endif %}"
 ></div>
 <script type="application/json" id="storefront-advisor-config">
   {
@@ -28,6 +32,7 @@
     "endpoint": {{ endpoint | json }},
     "panelScript": {{ 'advisor-panel.js' | asset_url | json }},
     "cartScript": {{ 'advisor-cart.js' | asset_url | json }},
+    "fontsUrl": {{ block.settings.fonts_url | strip | json }},
     "context": {
       "pageType": {{ request.page_type | json }},
       "productHandle": {{ product_handle | json }},
@@ -63,7 +68,7 @@
       "open": {{ 'advisor.open' | t | json }},
       "close": {{ 'advisor.close' | t | json }},
       "newChat": {{ 'advisor.new_chat' | t | json }},
-      "greeting": {{ 'advisor.greeting' | t | json }},
+      "greeting": {{ greeting | json }},
       "placeholder": {{ 'advisor.placeholder' | t | json }},
       "inputLabel": {{ 'advisor.input_label' | t | json }},
       "send": {{ 'advisor.send' | t | json }},
@@ -88,6 +93,7 @@
       "productsLabel": {{ 'advisor.products_label' | t | json }},
       "you": {{ 'advisor.you' | t | json }},
       "advisor": {{ 'advisor.advisor' | t | json }},
+      "viewing": {{ 'advisor.viewing' | t | json }},
       "routine": {
         "expand": {{ 'routine.expand' | t | json }},
         "collapse": {{ 'routine.collapse' | t | json }},
@@ -95,17 +101,14 @@
         "hint": {{ 'routine.hint' | t | json }},
         "morning_eyebrow": {{ 'routine.morning_eyebrow' | t | json }},
         "morning": {{ 'routine.morning' | t | json }},
-        "morning_text": {{ 'routine.morning_text' | t | json }},
         "evening_eyebrow": {{ 'routine.evening_eyebrow' | t | json }},
         "evening": {{ 'routine.evening' | t | json }},
-        "evening_text": {{ 'routine.evening_text' | t | json }},
+        "stage_cleanse": {{ 'routine.stage_cleanse' | t | json }},
         "stage_prepare": {{ 'routine.stage_prepare' | t | json }},
         "stage_activate": {{ 'routine.stage_activate' | t | json }},
         "stage_optimise": {{ 'routine.stage_optimise' | t | json }},
         "stage_regenerate": {{ 'routine.stage_regenerate' | t | json }},
         "why": {{ 'routine.why' | t | json }},
-        "read_more": {{ 'routine.read_more' | t | json }},
-        "read_less": {{ 'routine.read_less' | t | json }},
         "ingredients": {{ 'routine.ingredients' | t | json }},
         "benefits": {{ 'routine.benefits' | t | json }},
         "usage": {{ 'routine.usage' | t | json }},
@@ -131,6 +134,26 @@
         "added": {{ 'routine.added' | t | json }},
         "add_again": {{ 'routine.add_again' | t | json }},
         "already_in_cart": {{ 'routine.already_in_cart' | t | json }},
+        "headline": {{ 'routine.headline' | t | json }},
+        "glance": {{ 'routine.glance' | t | json }},
+        "ritual_title": {{ 'routine.ritual_title' | t | json }},
+        "ritual_sub": {{ 'routine.ritual_sub' | t | json }},
+        "show_steps": {{ 'routine.show_steps' | t | json }},
+        "hide_steps": {{ 'routine.hide_steps' | t | json }},
+        "morning_short": {{ 'routine.morning_short' | t | json }},
+        "evening_short": {{ 'routine.evening_short' | t | json }},
+        "optional": {{ 'routine.optional' | t | json }},
+        "owned_short_morning": {{ 'routine.owned_short_morning' | t | json }},
+        "owned_short_evening": {{ 'routine.owned_short_evening' | t | json }},
+        "selection": {{ 'routine.selection' | t | json }},
+        "essentials": {{ 'routine.essentials' | t | json }},
+        "selected_count": {{ 'routine.selected_count' | t | json }},
+        "more_eyebrow": {{ 'routine.more_eyebrow' | t | json }},
+        "more_title": {{ 'routine.more_title' | t | json }},
+        "add_one": {{ 'routine.add_one' | t | json }},
+        "details_hide": {{ 'routine.details_hide' | t | json }},
+        "with_morning": {{ 'routine.with_morning' | t | json }},
+        "with_evening": {{ 'routine.with_evening' | t | json }},
         "discount_applied": {{ 'routine.discount_applied' | t | json }}
       }
     },
@@ -188,6 +211,9 @@
       "label": "Accent colour",
       "default": "#23201c"
     },
+    { "type": "text", "id": "font_heading", "label": "Heading font", "info": "Titles and product names. Must be in the fonts stylesheet below.", "default": "Cormorant Garamond" },
+    { "type": "text", "id": "font_body", "label": "Body font", "info": "Messages, buttons and labels.", "default": "DM Sans" },
+    { "type": "text", "id": "fonts_url", "label": "Fonts stylesheet", "info": "Loaded only once the advisor shows. Empty: the fonts must already be on the page.", "default": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:wght@400;500;600&display=swap" },
     { "type": "header", "content": "Quick actions" },
     { "type": "checkbox", "id": "action_find_product", "label": "Find my skincare", "default": true },
     { "type": "checkbox", "id": "action_build_routine", "label": "Build my routine", "default": true },
@@ -196,6 +222,7 @@
     { "type": "checkbox", "id": "action_offers", "label": "Current offers", "default": true },
     { "type": "header", "content": "Routine banner" },
     { "type": "checkbox", "id": "banner_enabled", "label": "Show the routine banner", "info": "A bar across the bottom of the screen; its button opens the advisor and starts the routine builder.", "default": true },
+    { "type": "textarea", "id": "greeting", "label": "Greeting", "info": "The advisor's first message. Leave empty for the default, in the visitor's language." },
     { "type": "text", "id": "banner_text", "label": "Banner text", "info": "Leave empty for the default text, in the visitor's language." },
     { "type": "text", "id": "banner_button", "label": "Banner button", "info": "Leave empty for the default label, in the visitor's language." },
     { "type": "range", "id": "banner_hours", "label": "Hidden after closing for", "min": 1, "max": 72, "step": 1, "unit": "h", "default": 4 }

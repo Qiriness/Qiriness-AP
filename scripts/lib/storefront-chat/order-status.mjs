@@ -20,6 +20,8 @@
  * tracking, never anything about the person.
  */
 
+import { alternation } from '../i18n/languages.mjs';
+
 const DAY_MS = 24 * 3600 * 1000;
 export const STATUSES = ['preparing', 'dispatch_delayed', 'on_the_way', 'delivery_late', 'delivered', 'cancelled', 'timing_unknown'];
 
@@ -76,8 +78,12 @@ export function orderStatus(order, timings, now = new Date()) {
   return { ...base, status: since <= usual ? 'on_the_way' : 'delivery_late', shipped_on: iso(shipped), working_days_since: since, usual_working_days: usual };
 }
 
+// « commande 1234 », "order 1234": the word before the number, in every language (i18n/<code>/words.mjs).
+// The number by name: a language's prefix may carry its own groups.
+const ORDER_NUMBER = new RegExp(`^(?:#|${alternation('orderPrefix')})?\\s*(?<number>\\d{1,9})$`, 'iu');
+
 /** « #1234 », « n°1234 », « 1234 » → 1234; anything else → null. */
 export function parseOrderNumber(value) {
-  const m = String(value ?? '').trim().match(/^(?:#|n[°o]\s*|no\.?\s*|commande\s*|order\s*)?\s*(\d{1,9})$/iu);
-  return m ? Number(m[1]) : null;
+  const m = String(value ?? '').trim().match(ORDER_NUMBER);
+  return m ? Number(m.groups.number) : null;
 }

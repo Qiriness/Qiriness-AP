@@ -1,8 +1,9 @@
 /*
  * Storefront advisor. Everything is scoped under .sa-root and prefixed `sa-` so
- * the theme's styles and ours cannot reach each other. Fonts follow the theme's
- * own variables where it publishes them (Dawn and its descendants do), with an
- * editorial serif fallback — no web font is loaded.
+ * the theme's styles and ours cannot reach each other. Fonts (owner, 2026-10-30):
+ * Cormorant Garamond for titles and product names, DM Sans for the rest; another
+ * shop names its own in the theme editor (--sa-heading, --sa-body on the root),
+ * and the loader fetches the fonts stylesheet only once the advisor shows.
  */
 .sa-root {
   --sa-accent: #23201c;
@@ -12,8 +13,8 @@
   --sa-ivory: #f8f5f0;
   --sa-line: rgba(35, 32, 28, 0.12);
   --sa-error: #8a2c1f;
-  --sa-heading: var(--font-heading-family, "Cormorant Garamond", "Didot", "Bodoni 72", Georgia, serif);
-  --sa-body: var(--font-body-family, "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif);
+  --sa-heading: "Cormorant Garamond", "Didot", Georgia, serif;
+  --sa-body: "DM Sans", "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
   --sa-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --sa-gap: 24px;
   position: fixed;
@@ -81,7 +82,7 @@
 }
 .sa-launcher__label {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
 }
@@ -115,6 +116,7 @@
   font-family: var(--sa-heading);
   font-size: 19px;
   line-height: 1.3;
+  font-weight: 500;
 }
 .sa-banner__button {
   flex: 0 0 auto;
@@ -125,7 +127,7 @@
   background: #ffffff;
   color: var(--sa-accent) !important;
   font-size: 12px !important;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.14em !important;
   text-transform: uppercase !important;
   transition: background 0.2s var(--sa-ease), color 0.2s var(--sa-ease);
@@ -153,12 +155,13 @@
 .sa-panel {
   display: flex;
   flex-direction: column;
-  width: 400px;
-  height: min(640px, calc(100vh - 2 * var(--sa-gap)));
+  width: 440px;
+  /* Up to just under the shop's header (--sa-top, set by the panel), else the gap. */
+  height: max(420px, calc(100vh - var(--sa-top, var(--sa-gap)) - var(--sa-gap)));
   border: 1px solid var(--sa-line);
-  border-radius: 4px;
+  border-radius: 20px;
   background: var(--sa-paper);
-  box-shadow: 0 24px 60px rgba(35, 32, 28, 0.16);
+  box-shadow: 0 24px 64px rgba(35, 32, 28, 0.16), 0 2px 10px rgba(35, 32, 28, 0.06);
   overflow: hidden;
   animation: sa-rise 0.3s var(--sa-ease);
 }
@@ -169,14 +172,55 @@
   to { opacity: 1; transform: none; }
 }
 
+/* A grid, so the buttons keep the top right whatever the title's length (owner, 2026-10-30). */
 .sa-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px 16px;
   padding: 22px 24px 18px;
   border-bottom: 1px solid var(--sa-line);
   background: var(--sa-ivory);
+}
+/* The product they are viewing (owner, 2026-10-30): the header opens a little for one short card. */
+.sa-viewing {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: -2px;
+  padding: 8px 14px 8px 8px;
+  border: 1px solid var(--sa-line);
+  border-radius: 14px;
+  background: var(--sa-paper);
+  animation: sa-open 0.3s var(--sa-ease);
+}
+.sa-viewing[hidden] { display: none; }
+.sa-viewing__media {
+  flex: none;
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  background: var(--sa-ivory);
+  object-fit: cover;
+}
+.sa-viewing__text { min-width: 0; }
+.sa-viewing__name {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--sa-heading);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.2;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.sa-viewing__price { margin: 2px 0 0; font-size: 13px; font-weight: 500; color: var(--sa-muted); }
+@keyframes sa-open {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
 }
 .sa-eyebrow {
   margin: 0 0 4px;
@@ -184,15 +228,17 @@
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--sa-muted);
+  font-weight: 600;
 }
 .sa-title {
   margin: 0;
   font-family: var(--sa-heading);
-  font-size: 22px;
-  font-weight: 400;
+  font-size: 25px;
+  /* Lighter than the table's 600, in a softer ink (owner, 2026-10-30: « slightly less black »). */
+  font-weight: 500;
   line-height: 1.2;
-  letter-spacing: 0.01em;
-  color: var(--sa-ink);
+  letter-spacing: 0;
+  color: #4a443d;
 }
 .sa-close {
   flex: none;
@@ -241,6 +287,8 @@
   padding: 12px 16px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  font-size: 15px;
+  font-weight: 400;
 }
 .sa-message--assistant .sa-bubble {
   border-radius: 2px 14px 14px 14px;
@@ -292,10 +340,11 @@
   padding: 0;
   border: 0;
   background: none;
-  font-size: 13px;
+  font-size: 12px;
   text-decoration: underline;
   text-underline-offset: 3px;
   color: var(--sa-ink);
+  font-weight: 600;
 }
 
 /* ---------- product cards ---------- */
@@ -314,7 +363,7 @@
   display: flex;
   flex-direction: column;
   border: 1px solid var(--sa-line);
-  border-radius: 4px;
+  border-radius: 14px;
   background: var(--sa-paper);
   scroll-snap-align: start;
   overflow: hidden;
@@ -345,8 +394,8 @@
 .sa-card__title {
   margin: 0;
   font-family: var(--sa-heading);
-  font-size: 17px;
-  font-weight: 400;
+  font-size: 21px;
+  font-weight: 500;
   line-height: 1.25;
 }
 .sa-card__media a { display: block; width: 100%; height: 100%; }
@@ -372,7 +421,7 @@
 .sa-card__view svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .sa-card__rationale {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--sa-muted);
 }
 .sa-card__price {
@@ -396,7 +445,7 @@
   display: inline-block;
   margin-top: 8px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--sa-ink);
@@ -409,8 +458,8 @@
   margin-top: 8px;
   padding: 6px 10px;
   font: inherit;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 12px;
+  font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--sa-ink);
@@ -442,8 +491,9 @@
   border: 1px solid var(--sa-line);
   border-radius: 999px;
   background: var(--sa-paper);
-  font-size: 13px;
+  font-size: 12px;
   transition: border-color 0.2s, background 0.2s;
+  font-weight: 600;
 }
 .sa-chip:hover {
   border-color: var(--sa-ink);
@@ -462,20 +512,24 @@
 }
 
 /* ---------- composer ---------- */
+/* A softly rounded field (owner, 2026-10-30: « less round »), the send button inside it. */
 .sa-composer {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  margin: 0 24px;
-  padding: 10px 0;
-  border-top: 1px solid var(--sa-line);
+  margin: 4px 20px 10px;
+  padding: 6px 6px 6px 18px;
+  border: 1px solid var(--sa-line);
+  border-radius: 14px;
+  background: var(--sa-ivory);
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
 .sa-input {
   flex: 1;
-  min-height: 24px;
+  min-height: 40px;
   max-height: 120px;
   margin: 0;
-  padding: 6px 0;
+  padding: 8px 0;
   border: 0;
   background: transparent;
   resize: none;
@@ -484,42 +538,46 @@
   line-height: 1.5;
 }
 .sa-input::placeholder { color: var(--sa-muted); }
-.sa-composer:focus-within { border-top-color: var(--sa-ink); }
-/* A thin arrow, not a filled button: the panel's weight is in its type. */
-.sa-send {
+/* The field shows its focus itself: no outline or theme ring on the textarea (owner: « the black box »). */
+.sa-root .sa-input:focus,
+.sa-root .sa-input:focus-visible { outline: none; box-shadow: none; border: 0; }
+.sa-composer:focus-within {
+  border-color: rgba(35, 32, 28, 0.35);
+  background: var(--sa-paper);
+  box-shadow: 0 0 0 4px rgba(35, 32, 28, 0.05);
+}
+/* .sa-root: the generic « button { color: inherit } » would turn the arrow dark on dark. */
+.sa-root .sa-send {
   flex: none;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  margin-right: -8px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--sa-accent);
-  transition: opacity 0.2s, background 0.2s, transform 0.2s var(--sa-ease);
+  border-radius: 10px;
+  background: var(--sa-accent);
+  color: #ffffff;
+  transition: opacity 0.2s, transform 0.2s var(--sa-ease);
 }
 .sa-send svg {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.2;
+  stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.sa-send:hover:not(:disabled) {
-  background: var(--sa-ivory);
-  transform: translateX(2px);
-}
+.sa-send:hover:not(:disabled) { transform: translateX(1px); }
 /* Quiet until there is something to send. */
-.sa-composer:has(.sa-input:placeholder-shown) .sa-send { opacity: 0.35; }
-.sa-send:disabled { opacity: 0.35; cursor: default; }
+.sa-composer:has(.sa-input:placeholder-shown) .sa-send { opacity: 0.45; }
+.sa-send:disabled { opacity: 0.45; cursor: default; }
 
 .sa-disclaimer {
   margin: 0;
-  padding: 0 24px 14px;
+  padding: 0 24px 12px;
+  text-align: center;
   font-size: 11px;
   line-height: 1.4;
   color: var(--sa-muted);
@@ -528,7 +586,7 @@
 /* ---------- routine mode: the wide panel (owner, 2026-10-18) ---------- */
 .sa-panel--wide {
   width: min(960px, calc(100vw - 2 * var(--sa-gap)));
-  height: calc(100vh - 2 * var(--sa-gap));
+  height: max(420px, calc(100vh - var(--sa-top, var(--sa-gap)) - var(--sa-gap)));
 }
 .sa-header__buttons { display: flex; gap: 4px; }
 .sa-size svg,
@@ -546,28 +604,37 @@
 .sa-panel--wide .sa-products { max-width: 100%; }
 .sa-panel--wide .sa-card { flex: 1 0 200px; max-width: 300px; }
 
-/* ---------- the routine cards ---------- */
+/* ---------- the routine (owner, 2026-10-30: the prototype's layout) ---------- */
+/* Wide: « en un coup d'œil » on the left, the products on the right. Narrow: one under the other. */
 .sa-message--routine { max-width: 100%; align-self: stretch; }
 .sa-routine {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   padding-top: 6px;
 }
 .sa-routine__eyebrow,
-.sa-moment__eyebrow,
-.sa-rcard__stage,
+.sa-routine__label,
 .sa-routine__banner-eyebrow,
-.sa-routine__count,
+.sa-pick__eyebrow,
 .sa-rcard__fold summary {
   margin: 0;
   font-size: 11px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--sa-muted);
+  font-weight: 600;
 }
 .sa-routine__eyebrow { display: flex; align-items: center; gap: 14px; }
 .sa-routine__eyebrow::after { content: ""; flex: 1; height: 1px; background: var(--sa-line); }
+.sa-routine__headline {
+  margin: 12px 0 0;
+  font-family: var(--sa-heading);
+  font-size: 30px;
+  font-weight: 500;
+  line-height: 1.1;
+  color: var(--sa-ink);
+}
 .sa-routine__hint { margin: 6px 0 0; font-size: 13px; color: var(--sa-muted); }
 
 .sa-routine__banner {
@@ -576,110 +643,276 @@
   justify-content: space-between;
   gap: 16px;
   padding: 16px 20px;
+  border-radius: 16px;
   background: var(--sa-accent);
   color: #ffffff;
 }
 .sa-routine__banner-eyebrow { color: rgba(255, 255, 255, 0.7); }
-.sa-routine__banner-title { margin: 4px 0 2px; font-family: var(--sa-heading); font-size: 22px; line-height: 1.2; }
+.sa-routine__banner-title { margin: 4px 0 2px; font-family: var(--sa-heading); font-size: 25px; line-height: 1.2; font-weight: 500; }
 .sa-routine__banner-text { margin: 0; font-size: 12px; color: rgba(255, 255, 255, 0.75); }
 .sa-routine__badge {
   flex: none;
-  padding: 11px 16px;
+  padding: 11px 18px;
   border: 1px solid #ffffff;
-  border-radius: 0;
+  border-radius: 999px;
   background: #ffffff;
   color: var(--sa-accent) !important;
   font-size: 12px !important;
-  letter-spacing: 0.16em !important;
+  letter-spacing: 0.14em !important;
   text-transform: uppercase !important;
   cursor: pointer;
+  font-weight: 600;
 }
 .sa-routine__badge:hover { background: transparent; color: #ffffff !important; }
 .sa-routine__badge:disabled { opacity: 0.6; cursor: default; }
 .sa-routine__badge--done { background: transparent; color: #ffffff !important; }
 
-.sa-routine__moments { display: grid; gap: 18px; }
-.sa-panel--wide .sa-routine__moments { grid-template-columns: 1fr 1fr; align-items: start; }
-.sa-moment { display: flex; flex-direction: column; gap: 12px; }
-.sa-moment__head { padding: 16px 18px; border: 1px solid var(--sa-line); background: var(--sa-ivory); }
-.sa-moment__title { margin: 4px 0 6px; font-family: var(--sa-heading); font-size: 24px; font-weight: 400; line-height: 1.2; }
-.sa-moment__text,
-.sa-moment__note { margin: 0; font-size: 13px; color: var(--sa-muted); }
-.sa-moment__note { margin-top: 8px; color: var(--sa-ink); }
-.sa-moment__complete {
-  margin-top: 12px;
+.sa-routine__layout { display: grid; gap: 20px; }
+.sa-panel--wide .sa-routine__layout {
+  grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.25fr);
+  align-items: start;
+  gap: 24px;
+}
+
+/* At a glance: both moments, each step that moment's tick. */
+.sa-ritual {
+  padding: 20px;
+  border: 1px solid var(--sa-line);
+  border-radius: 16px;
+  background: var(--sa-ivory);
+}
+.sa-ritual__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.sa-ritual__title {
+  margin: 8px 0 4px;
+  font-family: var(--sa-heading);
+  font-size: 25px;
+  font-weight: 500;
+  line-height: 1.15;
+}
+.sa-ritual__sub { margin: 0; font-size: 12px; line-height: 1.5; color: var(--sa-muted); }
+.sa-ritual__count {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--sa-line);
+  border-radius: 50%;
+  background: var(--sa-paper);
+  font-family: var(--sa-heading);
+  font-size: 20px;
+  font-weight: 600;
+}
+.sa-ritual__expand {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--sa-line);
+  border-radius: 12px;
+  background: var(--sa-paper);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+.sa-ritual__expand svg,
+.sa-pick__more svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.2s var(--sa-ease);
+}
+.sa-ritual--open .sa-ritual__expand svg,
+.sa-pick--open .sa-pick__more svg { transform: rotate(180deg); }
+/* Narrow, the steps fold away so the products come first; « Compléter ma routine » stays. */
+.sa-panel:not(.sa-panel--wide) .sa-ritual__expand { display: flex; }
+.sa-panel:not(.sa-panel--wide) .sa-ritual:not(.sa-ritual--open) .sa-time__steps { display: none; }
+
+.sa-time { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--sa-line); }
+.sa-time__head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+.sa-time__name { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.sa-time__name strong { font-weight: 600; }
+.sa-time__name svg { width: 17px; height: 17px; fill: none; stroke: var(--sa-muted); stroke-width: 1.5; stroke-linecap: round; }
+.sa-time__head small { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sa-muted); font-weight: 600; }
+.sa-time__steps { display: flex; flex-direction: column; gap: 2px; transition: opacity 0.2s var(--sa-ease); }
+.sa-time--muted .sa-time__steps { opacity: 0.5; }
+.sa-time--muted .sa-time__steps:hover { opacity: 0.75; }
+.sa-time__note { margin: 10px 0 0; font-size: 12px; color: var(--sa-muted); }
+.sa-time__complete {
+  width: 100%;
+  margin-top: 10px;
   padding: 10px 16px;
   border: 1px solid var(--sa-ink);
-  border-radius: 0;
+  border-radius: 999px;
   background: var(--sa-ink);
   color: #ffffff !important;
   font-size: 12px !important;
-  letter-spacing: 0.14em !important;
+  letter-spacing: 0.12em !important;
   text-transform: uppercase !important;
+  font-weight: 600;
 }
-.sa-moment__complete:disabled { opacity: 0.5; cursor: default; }
-.sa-moment__steps { display: flex; flex-direction: column; gap: 10px; transition: opacity 0.2s var(--sa-ease); }
-.sa-moment--muted .sa-moment__steps { opacity: 0.5; }
-.sa-moment--muted .sa-moment__steps:hover { opacity: 0.75; }
+/* Added: « Retirer de ma routine », quieter. */
+.sa-time:not(.sa-time--muted) .sa-time__complete { background: transparent; color: var(--sa-ink) !important; }
 
-.sa-rcard {
-  padding: 14px 16px;
+.sa-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 8px 6px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  transition: background 0.2s var(--sa-ease);
+}
+.sa-step:hover:not(:disabled) { background: rgba(35, 32, 28, 0.05); }
+.sa-step:disabled { cursor: default; }
+.sa-step__mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
   border: 1px solid var(--sa-line);
+  border-radius: 50%;
   background: var(--sa-paper);
-  transition: border-color 0.2s var(--sa-ease);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sa-muted);
 }
-.sa-rcard--included { border-color: rgba(35, 32, 28, 0.45); }
-.sa-rcard__include[hidden],
-.sa-rcard__owned[hidden] { display: none; }
-/* Unticked: greyed like the moment not chosen; its checkbox stays live. */
-.sa-rcard--off { opacity: 0.5; }
-.sa-rcard--off:hover { opacity: 0.75; }
-.sa-rcard__head { display: grid; grid-template-columns: 64px 1fr auto; gap: 12px; align-items: start; }
-.sa-rcard__media { width: 64px; height: 64px; background: var(--sa-ivory); overflow: hidden; }
-.sa-rcard__media img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.sa-rcard__placeholder { display: block; width: 100%; height: 100%; }
-.sa-rcard__main { min-width: 0; }
-.sa-rcard__title {
+.sa-step--on .sa-step__mark { border-color: var(--sa-accent); background: var(--sa-accent); color: #ffffff; }
+.sa-step__mark svg,
+.sa-pick__toggle svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.sa-step__text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+.sa-step__text strong { font-size: 13px; font-weight: 600; }
+.sa-step__text small { overflow: hidden; font-size: 12px; color: var(--sa-muted); white-space: nowrap; text-overflow: ellipsis; }
+.sa-step__state { flex: none; max-width: 96px; font-size: 11px; line-height: 1.3; text-align: right; color: var(--sa-muted); }
+.sa-step--on .sa-step__state { color: var(--sa-ink); }
+
+/* The products, each once. */
+.sa-picks__intro,
+.sa-picks__more { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+.sa-picks__more { margin: 26px 0 12px; }
+.sa-picks__title { margin: 6px 0 0; font-family: var(--sa-heading); font-size: 25px; font-weight: 500; line-height: 1.15; }
+.sa-picks__subtitle { margin: 6px 0 0; font-family: var(--sa-heading); font-size: 25px; font-weight: 500; line-height: 1.2; }
+.sa-picks__pill {
+  flex: none;
+  padding: 6px 12px;
+  border: 1px solid var(--sa-line);
+  border-radius: 999px;
+  background: var(--sa-ivory);
+  font-size: 11px;
+  white-space: nowrap;
+  color: var(--sa-muted);
+}
+.sa-picks__optional { flex: none; font-size: 11px; color: var(--sa-muted); }
+.sa-picks__list { display: flex; flex-direction: column; gap: 12px; }
+.sa-picks__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.sa-panel--wide .sa-picks__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.sa-pick {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid var(--sa-line);
+  border-radius: 14px;
+  background: var(--sa-paper);
+  transition: border-color 0.2s var(--sa-ease), box-shadow 0.2s var(--sa-ease);
+}
+.sa-pick:hover { border-color: rgba(35, 32, 28, 0.28); }
+.sa-pick--on { border-color: rgba(35, 32, 28, 0.4); box-shadow: 0 6px 18px rgba(35, 32, 28, 0.06); }
+/* Not included: greyed (owner, 2026-10-19), its « Ajouter » still at full strength. */
+.sa-pick:not(.sa-pick--on) > .sa-pick__media,
+.sa-pick:not(.sa-pick--on) > .sa-pick__main,
+.sa-pick:not(.sa-pick--on) .sa-pick__price { opacity: 0.55; transition: opacity 0.2s var(--sa-ease); }
+.sa-pick:not(.sa-pick--on):hover > .sa-pick__media,
+.sa-pick:not(.sa-pick--on):hover > .sa-pick__main { opacity: 0.8; }
+.sa-pick__media { width: 84px; height: 84px; overflow: hidden; border-radius: 10px; background: var(--sa-ivory); }
+.sa-pick__media img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.sa-pick__placeholder { display: block; width: 100%; height: 100%; background: linear-gradient(160deg, #f3ede5 0%, #e7ded3 100%); }
+.sa-pick__main { min-width: 0; }
+.sa-pick__eyebrow { margin-bottom: 4px; font-size: 11px; }
+.sa-pick__title {
   display: block;
-  margin: 2px 0;
-  font-family: var(--sa-heading);
-  font-size: 17px;
-  line-height: 1.25;
-  color: var(--sa-ink);
-  text-decoration: none;
-}
-a.sa-rcard__title:hover { text-decoration: underline; text-underline-offset: 3px; }
-.sa-rcard__rating { display: flex; gap: 6px; margin: 0; font-size: 12px; color: var(--sa-muted); }
-.sa-rcard__stars { color: var(--sa-ink); letter-spacing: 1px; }
-.sa-rcard__aside { text-align: right; }
-.sa-rcard__price { margin: 0; font-size: 15px; }
-.sa-rcard__volume { margin: 0 0 6px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--sa-muted); }
-.sa-rcard__include { display: inline-flex; align-items: center; gap: 3px; font-size: 6px; letter-spacing: 0.1em; white-space: nowrap; text-transform: uppercase; cursor: pointer; }
-.sa-rcard__check { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--sa-ink); }
-.sa-rcard__owned { display: inline-block; max-width: 130px; font-size: 11px; line-height: 1.35; color: var(--sa-muted); }
-.sa-rcard__why { margin-top: 12px; padding-left: 12px; border-left: 2px solid var(--sa-line); }
-.sa-rcard__why-text {
   margin: 0;
-  font-size: 13px;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  font-family: var(--sa-heading);
+  font-size: 21px;
+  line-height: 1.2;
+  color: var(--sa-ink) !important;
+  text-decoration: none;
+  font-weight: 500;
 }
-.sa-rcard__why-text--open { display: block; }
-.sa-rcard__tags { color: var(--sa-muted); }
-.sa-rcard__more {
-  margin-top: 4px;
+a.sa-pick__title:hover { text-decoration: underline; text-underline-offset: 3px; }
+.sa-rcard__rating { display: flex; gap: 6px; margin: 4px 0 0; font-size: 12px; color: var(--sa-muted); }
+.sa-rcard__stars { color: var(--sa-ink); letter-spacing: 1px; }
+.sa-pick__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
   padding: 0;
   border: 0;
-  border-bottom: 1px solid currentColor;
   background: none;
-  font-size: 11px !important;
-  letter-spacing: 0.14em !important;
-  text-transform: uppercase !important;
+  font-size: 12px !important;
   color: var(--sa-muted) !important;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
 }
-.sa-rcard__fold { border-top: 1px solid var(--sa-line); margin-top: 10px; }
+.sa-pick__more svg { width: 13px; height: 13px; }
+.sa-pick__aside {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: right;
+}
+.sa-pick__amount { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
+.sa-pick__size { margin: 2px 0 0; font-size: 11px; color: var(--sa-muted); }
+.sa-pick__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border: 1px solid var(--sa-ink);
+  border-radius: 999px;
+  background: var(--sa-paper);
+  font-size: 12px !important;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.2s var(--sa-ease), color 0.2s var(--sa-ease);
+}
+.sa-pick__toggle svg { width: 13px; height: 13px; }
+.sa-pick__toggle:hover { background: var(--sa-ivory); }
+.sa-pick__toggle--on,
+.sa-pick__toggle--on:hover { border-color: var(--sa-accent); background: var(--sa-accent); color: #ffffff !important; }
+.sa-pick__status { max-width: 120px; font-size: 11px; line-height: 1.35; color: var(--sa-muted); }
+.sa-pick__toggle[hidden],
+.sa-pick__status[hidden],
+.sa-pick__detail[hidden] { display: none; }
+.sa-pick__detail {
+  grid-column: 1 / -1;
+  margin: 2px -14px -14px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--sa-line);
+  border-radius: 0 0 14px 14px;
+  background: var(--sa-ivory);
+  font-size: 14px;
+}
+.sa-pick__why { margin: 0; }
+.sa-rcard__fold { margin-top: 10px; border-top: 1px solid var(--sa-line); }
 .sa-rcard__fold summary {
   display: flex;
   justify-content: space-between;
@@ -690,43 +923,88 @@ a.sa-rcard__title:hover { text-decoration: underline; text-underline-offset: 3px
 .sa-rcard__fold summary::-webkit-details-marker { display: none; }
 .sa-rcard__fold summary::after { content: "+"; font-size: 16px; line-height: 1; letter-spacing: 0; }
 .sa-rcard__fold[open] summary::after { content: "\2212"; }
-.sa-rcard__fold-body { padding-top: 6px; font-size: 13px; }
+.sa-rcard__fold-body { padding-top: 6px; font-size: 14px; }
 .sa-rcard__fold-body p { margin: 0 0 6px; }
 
+/* « Compléter mon rituel »: a small card; opened, it takes the row as a full one. */
+.sa-pick--compact {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+  padding: 0;
+  overflow: hidden;
+}
+.sa-pick--compact .sa-pick__media { width: 100%; height: auto; aspect-ratio: 4 / 3; border-radius: 0; }
+.sa-pick--compact .sa-pick__main { padding: 0 12px; }
+.sa-pick--compact .sa-pick__title { font-size: 18px; }
+.sa-pick--compact .sa-pick__aside { flex-direction: row; align-items: center; padding: 0 12px 12px; text-align: left; }
+.sa-pick--compact .sa-pick__amount { font-size: 13px; }
+.sa-pick--compact .sa-pick__toggle { flex: none; width: 32px; height: 32px; padding: 0; }
+.sa-pick--compact .sa-pick__toggle-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.sa-pick--compact .sa-pick__detail { margin: 0; border-radius: 0; }
+.sa-pick--compact.sa-pick--open { grid-column: 1 / -1; grid-template-columns: 84px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px; }
+.sa-pick--compact.sa-pick--open .sa-pick__media { width: 84px; height: 84px; aspect-ratio: auto; border-radius: 10px; }
+.sa-pick--compact.sa-pick--open .sa-pick__main,
+.sa-pick--compact.sa-pick--open .sa-pick__aside { padding: 0; }
+.sa-pick--compact.sa-pick--open .sa-pick__aside { flex-direction: column; align-items: flex-end; text-align: right; }
+.sa-pick--compact.sa-pick--open .sa-pick__detail { margin: 2px -14px -14px; }
+
+/*
+ * The checkout strip, kept in view at the bottom of the conversation, as short as it can be
+ * (owner, 2026-10-30: « the height is too high »): the count and the minimum, the prices beside
+ * them, the button on the same row when wide and under them when narrow.
+ */
 .sa-routine__footer {
   position: sticky;
   bottom: -24px;
-  z-index: 1;
+  z-index: 2;
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 0 24px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  margin: 0 -24px;
+  padding: 10px 24px 34px;
   border-top: 1px solid var(--sa-line);
-  background: var(--sa-paper);
+  background: rgba(255, 255, 255, 0.96);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
-.sa-routine__sum { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
-.sa-routine__prices { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; margin: 0; }
-.sa-routine__was { color: var(--sa-muted); font-size: 14px; }
+.sa-routine__sum { flex: 1 1 260px; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.sa-routine__copy { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.sa-routine__count { margin: 0; font-size: 13px; font-weight: 600; }
+.sa-routine__min { margin: 0; font-size: 12px; line-height: 1.35; color: var(--sa-muted); }
+.sa-routine__prices { flex: none; display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-end; gap: 0 8px; margin: 0; }
+.sa-routine__was { color: var(--sa-muted); font-size: 13px; }
 .sa-routine__was[hidden],
 .sa-routine__saving[hidden],
 .sa-routine__min[hidden] { display: none; }
-.sa-routine__now { font-size: 22px; font-weight: 400; }
-.sa-routine__saving { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #3c6e47; }
-.sa-routine__min { margin: 0; font-size: 12px; color: var(--sa-muted); }
+.sa-routine__now { font-size: 20px; font-weight: 500; line-height: 1.2; }
+.sa-routine__saving { flex-basis: 100%; text-align: right; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #3c6e47; font-weight: 600; }
 .sa-routine__add {
-  width: 100%;
-  padding: 15px 18px;
+  flex: none;
+  padding: 12px 22px;
   border: 0;
-  border-radius: 0;
+  border-radius: 999px;
   background: var(--sa-accent);
   color: #ffffff !important;
   font-size: 12px !important;
-  letter-spacing: 0.16em !important;
+  font-weight: 600;
+  letter-spacing: 0.14em !important;
   text-transform: uppercase !important;
+  transition: opacity 0.2s var(--sa-ease);
 }
+.sa-routine__add:hover:not(:disabled) { opacity: 0.88; }
 .sa-routine__add:disabled { opacity: 0.5; cursor: default; }
 .sa-routine__add--done { background: #3c6e47; }
-.sa-routine__status { margin: 0; font-size: 13px; color: #3c6e47; }
+.sa-panel:not(.sa-panel--wide) .sa-routine__add { flex: 1 1 100%; }
+.sa-routine__status { flex-basis: 100%; margin: 0; font-size: 13px; color: #3c6e47; }
 .sa-routine__status[hidden] { display: none; }
 
 /* ---------- phone: a full-screen sheet ---------- */
@@ -750,8 +1028,8 @@ a.sa-rcard__title:hover { text-decoration: underline; text-underline-offset: 3px
   .sa-header { padding: 18px 16px 14px; }
   .sa-log { padding: 20px 16px; }
   .sa-actions { padding: 0 16px 12px; }
-  .sa-composer { margin: 0 16px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
-  .sa-disclaimer { padding: 0 16px 12px; }
+  .sa-composer { margin: 4px 12px 10px; }
+  .sa-disclaimer { padding: 0 16px max(12px, env(safe-area-inset-bottom)); }
   .sa-input { font-size: 16px; }
   /* Already full screen: no size button, the moments one under the other. */
   .sa-size { display: none; }
@@ -761,12 +1039,25 @@ a.sa-rcard__title:hover { text-decoration: underline; text-underline-offset: 3px
   .sa-banner__text { font-size: 17px; }
   .sa-banner__close { top: 10px; right: 8px; margin-top: 0; }
   .sa-panel--wide .sa-message:not(.sa-message--routine) { max-width: 88%; }
-  .sa-panel--wide .sa-routine__moments { grid-template-columns: 1fr; }
-  .sa-routine__footer { bottom: -20px; padding-bottom: 20px; }
-  .sa-rcard__head { grid-template-columns: 56px 1fr; }
-  .sa-rcard__media { width: 56px; height: 56px; }
-  .sa-rcard__aside { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; }
-  .sa-rcard__volume { margin: 0; }
+  /* The routine on a phone: one column, the steps folded, the checkout full width. */
+  .sa-panel--wide .sa-routine__layout { grid-template-columns: 1fr; }
+  .sa-panel--wide .sa-picks__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sa-ritual { padding: 16px; }
+  .sa-ritual__expand { display: flex; }
+  .sa-ritual:not(.sa-ritual--open) .sa-time__steps { display: none; }
+  .sa-routine__headline { font-size: 26px; }
+  .sa-pick,
+  .sa-pick--compact.sa-pick--open { grid-template-columns: 64px minmax(0, 1fr) auto; gap: 10px; padding: 10px; }
+  .sa-pick--compact { grid-template-columns: minmax(0, 1fr); padding: 0; }
+  .sa-pick__media,
+  .sa-pick--compact.sa-pick--open .sa-pick__media { width: 64px; height: 72px; }
+  .sa-pick--compact .sa-pick__media { width: 100%; height: auto; }
+  .sa-pick__title { font-size: 19px; }
+  .sa-pick__detail,
+  .sa-pick--compact.sa-pick--open .sa-pick__detail { margin: 2px -10px -10px; }
+  .sa-pick--compact .sa-pick__detail { margin: 0; }
+  .sa-routine__footer { bottom: -20px; margin: 0 -16px; padding: 10px 16px 30px; }
+  .sa-routine__add { flex: 1 1 100%; }
   .sa-routine__banner { flex-direction: column; align-items: flex-start; }
 }
 
@@ -775,9 +1066,13 @@ html.sa-scroll-lock body { overflow: hidden; }
 
 @media (prefers-reduced-motion: reduce) {
   .sa-panel,
+  .sa-viewing,
   .sa-typing__dots i { animation: none; }
-  .sa-moment__steps,
-  .sa-rcard { transition: none; }
+  .sa-time__steps,
+  .sa-pick,
+  .sa-step,
+  .sa-ritual__expand svg,
+  .sa-pick__more svg { transition: none; }
   .sa-launcher,
   .sa-chip,
   .sa-send,

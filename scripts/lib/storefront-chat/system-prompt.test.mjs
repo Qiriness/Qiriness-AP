@@ -43,11 +43,12 @@ test('health questions go to a professional', () => {
   assert.match(buildStorefrontSystemPrompt({ company: COMPANY }), /No medical claim[^\n]*dermatologist/);
 });
 
-test('the reply follows the latest customer message; French only as the fallback, with « vous »', () => {
+test('the reply follows the latest customer message, then the site\'s language (owner, 2026-10-30), with the formal « you »', () => {
   const prompt = buildStorefrontSystemPrompt({ company: COMPANY, context: { locale: 'fr' } });
   assert.match(prompt, /language of the customer's LATEST message/);
-  assert.match(prompt, /gives no clue[^\n]*reply in French/);
+  assert.match(prompt, /gives no clue[^\n]*reply in the storefront language[^\n]*French, English, Italian, German, Dutch, Spanish; in English for any other storefront language; in French when none is given/);
   assert.match(prompt, /always use « vous »/);
+  assert.match(prompt, /In Italian, German, Dutch, Spanish, address the customer formally: « Lei », « Sie », « u », « usted »/);
   assert.match(prompt, /Storefront language: fr \(the language of the site, not necessarily the customer's\)/);
 });
 

@@ -53,7 +53,8 @@ import { clearSession, writeSession, type SupabaseSession } from "./lib/session-
  * advisor app's secret, and the route checks that and a shop allow-list. It
  * answers 404 while STOREFRONT_APP_CLIENT_SECRET is unset.
  * `/api/storefront/event` is the same advisor's card-click beacon, behind the
- * same signature and allow-list.
+ * same signature and allow-list. `/api/storefront/opening` is its first
+ * message for a signed-in customer, behind the same two.
  */
 const PUBLIC = new Set([
   "/login",
@@ -64,6 +65,7 @@ const PUBLIC = new Set([
   "/api/reports/sales",
   "/api/storefront/chat",
   "/api/storefront/event",
+  "/api/storefront/opening",
 ]);
 
 export async function middleware(request: NextRequest) {

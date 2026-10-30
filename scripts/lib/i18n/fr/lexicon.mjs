@@ -3,7 +3,7 @@
  * text: lower case, no accents, apostrophes as spaces (« j ai », « l oeil »).
  *
  * LANGUAGE, NOT BRAND. Every phrase is ordinary skincare French; the keys are
- * the config's vocabulary. lexicon-en.mjs has the same shape, and a test
+ * the config's vocabulary. en/lexicon.mjs has the same shape, and a test
  * holds the two to the same keys.
  */
 
@@ -14,7 +14,7 @@ export default {
   code: 'fr',
 
   /** Words only French uses: they tell the language of a message. */
-  /** Words that carry nothing about the skin (see lexicon-en.mjs `fillers`). */
+  /** Words that carry nothing about the skin (see en/lexicon.mjs `fillers`). */
   fillers: ['peaux', 'contre', 'hiver', 'ete', 'printemps', 'automne', 'saison', 'saisons', 'froid', 'chaud', 'jaime', 'aime', 'jaimerais', 'aimerai', 'aimerais', 'gamme', 'mode', 'detail', 'details', 'evoluer', 'adapte', 'adaptee', 'adaptes', 'adaptees', 'voir', 'commencer', 'debut', 'quoi', 'comment', 'ou', 'where', 'vraiment', 'trop', 'peu', 'beaucoup', 'assez', 'souvent', 'toujours', 'parfois', 'depuis', 'temps', 'ci', 'ces', 'cette', 'moment', 'dernierement', 'recemment', 'aujourd', 'hui', 'jours', 'jour', 'tous', 'toutes', 'tout', 'matin', 'soir', 'nuit', 'encore', 'plutot', 'aussi', 'alors', 'donc', 'voila', 'bien', 'oui', 'non', 'car', 'parce', 'comme', 'quand', 'apres', 'avant', 'pendant', 'sens', 'sent', 'sentir', 'trouve', 'semble', 'devient', 'reste', 'suis', 'es', 'sont', 'etre', 'avoir', 'as', 'a', 'eu', 'fait', 'faire', 'en', 'au', 'aux', 'de', 'd', 'l', 'y', 'il', 'elle', 'ils', 'elles', 'me', 'm', 'moi', 'mais', 'ou', 'si', 'ne', 'n', 'plus', 'moins', 'quelque', 'chose', 'produit', 'produits', 'routine', 'soins', 'conseil', 'conseils', 'conseiller', 'conseillez', 'recommander', 'recommandez', 'veux', 'voudrais', 'aimerais', 'besoin', 'utilise', 'utiliser', 'essaye', 'essaie', 'peux', 'pouvez', 'pourriez', 'savoir', 'sais', 'zone', 'type', 'genre', 'construire', 'ensemble', 'trouver', 'choisir', 'meilleur', 'mieux', 'salut', 'coucou', 'svp', 'stp', 'merci', 'surtout', 'principalement', 'autour', 'ca'],
 
   markers: ['je', 'j', 'ai', 'est', 'et', 'le', 'la', 'un', 'on', 'peut', 'que', 'qui', 'ce', 'c', 'qu', 'sans', 'svp', 'avez', 'votre', 'vos', 'les', 'des', 'du', 'mon', 'ma', 'mes', 'une', 'pour', 'avec', 'pas', 'peau', 'quel', 'quelle', 'vous', 'nous', 'sur', 'dans', 'mais', 'tres', 'aussi', 'bonjour', 'merci', 'oui', 'yeux', 'visage', 'rides', 'creme', 'soin'],
@@ -86,6 +86,25 @@ export default {
     /\b(?:sans|pas de|pas d|allergique (?:a|au|aux)(?: l| la| le)?|j evite(?: le| la| les)?) (?<item>parfum|alcool|retinol|huiles? essentielles?|huile|silicones?|sulfates?|parabenes?|niacinamide|vitamine c|acide [a-z]+)\b/g
   ],
 
+  /** Ingredient names a customer can exclude (advisory/ingredients.mjs): the same keys in every language. */
+  ingredients: {
+    fragrance: ['parfum', 'parfums'],
+    alcohol: ['alcool'],
+    retinol: ['retinol'],
+    essential_oils: ['huiles essentielles', 'huile essentielle'],
+    oil: ['huile', 'huiles'],
+    silicones: ['silicone', 'silicones'],
+    sulfates: ['sulfate', 'sulfates'],
+    parabens: ['parabene', 'parabenes'],
+    niacinamide: ['niacinamide'],
+    vitamin_c: ['vitamine c'],
+    salicylic_acid: ['acide salicylique'],
+    glycolic_acid: ['acide glycolique'],
+    hyaluronic_acid: ['acide hyaluronique'],
+    lactic_acid: ['acide lactique'],
+    azelaic_acid: ['acide azelaique'],
+  },
+
   routineNone: /\b(pas de routine|aucune routine|rien du tout|je n utilise rien|n utilise aucun)\b/,
   /** `clause`: what follows « j'utilise déjà », up to « mais ». */
   routineClause: /\b(?:j utilise (?:deja )?|j ai deja |ma routine (?:actuelle )?(?:c est |est |comprend )?|j applique (?:deja )?)(?<clause>.{0,120}?)(?:\bmais\b|$)/,
@@ -111,7 +130,9 @@ export default {
     night_cream: /\b(une|un|la|ma) creme de nuit\b/,
     eye_care: /\b(un|le|mon) contour des yeux\b/,
     cleanser: /\b(un|une|le|la) (nettoyant|demaquillant)\b/,
-    mask: /\b(un|le) masque\b/,
+    // « je cherche une masque exfoliant pour ma peau grasse » (owner, 2026-10-29) was read as nothing.
+    exfoliant: /\b(exfoliants?|exfoliation|exfolier|gommages?|gommant|peeling)\b/,
+    mask: /\b(un|une|le|la|des|mon|ma) masques?\b/,
     // « un creme » typed: still a cream. « ma crème visage » too, as « mon sérum » is a serum.
     moisturiser: /\b(une|un|la|ma|mon) (creme|creme de jour|creme hydratante)\b/
   },
@@ -161,5 +182,8 @@ export default {
   // A medical situation, a treatment, an allergy or a reaction (owner's notes v4, 2026-10-19): no product
   // cards, no routine offer. Not « rougeurs », « peau sensible », « rosacée »: those get sensitive-skin care.
   // A treatment they are ON, not one they look for (« un traitement anti-acné » is a product request).
-  caution: /\b(traitements? (dermatologiques?|medica(l|ux)|medicamenteux|prescrits?)|(je suis |suis )?sous traitement|je prends (un |une |des )?(traitement|medicament|creme prescrite)|medicaments?|ordonnance|isotretinoine|roaccutane|curacne|antibiotiques?|grains? de beaute|allergi\w*|brulures?|ma peau brule|ca brule|plaques? rouges?|reactions? (allergiques?|cutanees?)|j ai (eu )?une reaction|eczema|psoriasis|dermatite|enceinte|(pendant|durant) (la |ma )?grossesse|allait\w*)\b/
+  caution: /\b(traitements? (dermatologiques?|medica(l|ux)|medicamenteux|prescrits?)|(je suis |suis )?sous traitement|je prends (un |une |des )?(traitement|medicament|creme prescrite)|medicaments?|ordonnance|isotretinoine|roaccutane|curacne|antibiotiques?|grains? de beaute|allergi\w*|brulures?|ma peau brule|ca brule|plaques? rouges?|reactions? (allergiques?|cutanees?)|j ai (eu )?une reaction|eczema|psoriasis|dermatite|enceinte|(pendant|durant) (la |ma )?grossesse|allait\w*)\b/,
+  // An accessory or a device asked for (owner, 2026-10-29: « should not propose accessories unless explicitly
+  // asked »): only then may one be offered. One named (« le Gua Sha ») is the resolver's.
+  accessoryAsk: /\b(accessoires?|outils?|appareils?|ustensiles?|gua sha|rouleaux?|rollers?|pierres?|quartz|jade|masques? led|led|electrocosmetique)\b/
 };

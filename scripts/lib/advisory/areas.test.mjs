@@ -170,15 +170,16 @@ test('« rougeurs » and « irritation » are blemishes on a sensitive skin; « 
   assert.equal(advise("J'ai la peau sensible").next_question?.field, 'primary_concern');
 });
 
-test('puffiness under the eyes: an actual eye care first, the roller (an accessory) after it, FR and EN', () => {
+test('puffiness under the eyes: an actual eye care, and no accessory beside it, FR and EN', () => {
   // Owner's notes v4: « poches sous les yeux, we definitly have a product for this »; then, 2026-10-19: « autre
   // category should not be prioritised over an actual soin ». Nothing but the roller is made for puffiness: the
   // Routines tab's eye step chooses, no range known, the generic one (« sinon le Sérum Élixir Regard Éclat »).
+  // 2026-10-29: « should not propose accessories unless explicitly asked »: the roller is no longer added.
   for (const m of ["J'ai les poches sous les yeux très visibles le matin. Quel soin me conseillez-vous ?", 'I have very puffy eyes in the morning, what do you recommend?']) {
     const a = advise(m);
     assert.equal(a.status, 'recommended', m);
     assert.equal(a.steps[0].handle, 'serum-anti-age-elixir-regard-eclat', m);
-    assert.equal(a.steps[0].alternatives[0].handle, 'roller-yeux-rafraichissant-et-decongestionnant', m);
+    assert.ok(!shown(a).includes('roller-yeux-rafraichissant-et-decongestionnant'), m);
   }
   assert.equal(KNOWLEDGE.get('roller-yeux-rafraichissant-et-decongestionnant').functional_type, 'tool');
   // A concern an eye care is made for keeps its own pick, with no accessory.
@@ -202,4 +203,21 @@ test('the routine cards tick the serum and the cream in the morning, the eye ser
   assert.deepEqual(ticked(build('puffiness', 'night').moments.night), ['night_3', 'night_4']);
   // Outside the builder nothing is marked.
   assert.ok(advise("J'ai des rides").steps.every((s) => s.preselected === undefined));
+});
+
+test('an exfoliant asked for is an exfoliant, « une masque exfoliant » included; for blemishes, the one that treats them first, FR and EN', () => {
+  // Owner, 2026-10-29: « je cherche aussi une masque exfoliant pour aider avec ma peau grasse, jai aussi des
+  // imperfections » got the Lotion Tonique (the type was not read), the model naming two masks with no card.
+  for (const m of ['je cherche aussi une masque exfoliant pour aider avec ma peau grasse, jai aussi des imperfections', "I'm looking for an exfoliating mask for my oily skin, I also have blemishes"]) {
+    const updates = extractProfile(m).updates;
+    assert.equal(updates.find((u) => u.field === 'desired_care_type')?.value, 'exfoliant', m);
+    const a = advise(m);
+    assert.equal(a.status, 'recommended', m);
+    assert.ok(shown(a).every((h) => KNOWLEDGE.get(h).functional_type === 'exfoliant'), `${m}: ${shown(a)}`);
+    assert.equal(shown(a)[0], 'gommage-grains-wrap-exfolys-au-riz', m);
+  }
+  // A mask is still a mask; « my skin peels » is not an exfoliant asked for; one already used is not asked.
+  assert.equal(extractProfile('je cherche une masque hydratant').updates.find((u) => u.field === 'desired_care_type')?.value, 'mask');
+  assert.equal(extractProfile('I want something because my skin peels').updates.find((u) => u.field === 'desired_care_type'), undefined);
+  assert.equal(extractProfile("j'utilise déjà un gommage mais je cherche une crème").updates.find((u) => u.field === 'desired_care_type')?.value, 'moisturiser');
 });

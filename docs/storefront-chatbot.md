@@ -71,7 +71,7 @@ message (+ chip value, + quick action)
 | Piece | Where | Channel |
 |---|---|---|
 | profile schema, merge rules | `scripts/lib/advisory/profile.mjs` | shared later |
-| phrasing → profile, message language | `scripts/lib/advisory/lexicon.mjs` over `lexicon-fr.mjs`, `lexicon-en.mjs` | shared later |
+| phrasing → profile, message language | `scripts/lib/advisory/lexicon.mjs` over `scripts/lib/i18n/<code>/lexicon.mjs` (fr, en, it, de, nl, es) | shared later |
 | ingredient exclusions across languages | `scripts/lib/advisory/ingredients.mjs` | shared later |
 | the lexicon's backup: gate + model reading | `scripts/lib/storefront-chat/profile-reader.mjs` | storefront only |
 | config validate / compile / check against the catalogue | `scripts/lib/advisory/config.mjs` | shared later |

@@ -2,6 +2,7 @@ import { cartDiscountTrace, evaluatePromotionsForCart, getActivePromotions, getC
 import cartContract from '../../../storefront-app/extensions/storefront-advisor/assets/advisor-cart.js';
 import { simulateOffers } from './offer-solver.mjs';
 import { countryAnswer } from './knowledge-topics.mjs';
+import { alternation, messages, wordsAt } from '../i18n/languages.mjs';
 
 export const SHOPPING_TOOL_NAMES = ['get_cart_context', 'get_stock_context', 'get_active_promotions', 'evaluate_promotions_for_cart', 'simulate_offers'];
 export function shoppingToolDefinitions() {
@@ -17,11 +18,18 @@ export function shoppingToolDefinitions() {
 
 /** A lazy reader shared by opening retrieval and tools within ONE turn. */
 /** Words that follow « code » in a sentence and are not a code: « mon code ne marche pas », « my code isn't working ». */
-const CODE_FILLER = new Set([
-  'PROMO', 'NE', 'DE', 'EST', 'REDUCTION', 'MARCHE', 'FONCTIONNE', 'PAS', 'QUE', 'QUI', 'POUR', 'SUR', 'DANS', 'ET',
-  'IS', 'ISN', 'ISNT', 'DOES', 'DOESN', 'DOESNT', 'DID', 'DIDN', 'DIDNT', 'WON', 'WONT', 'NOT', 'WORK', 'WORKS', 'WORKING', 'THAT', 'THIS',
-  'FOR', 'ON', 'IN', 'AT', 'IT', 'YOU', 'AND', 'OR', 'TO', 'WAS', 'WASN', 'CAN', 'CANNOT', 'CANT', 'WILL', 'STILL', 'ALSO'
-]);
+const CODE_FILLER = new Set(wordsAt('shopping.codeFiller'));
+
+// Which shopping data a message needs, in every language (i18n/<code>/words.mjs, `shopping`).
+const any = (path) => new RegExp(alternation(path), 'i');
+const CART_CUE = any('shopping.cart');
+const STOCK_CUE = any('shopping.stock');
+const OFFERS_AVAILABLE = new RegExp(`\\b(${alternation('shopping.offerNouns')})\\s+(?:${alternation('shopping.areVerb')})?(?:${alternation('shopping.available')})`, 'i');
+const QUANTITIES = Object.assign({}, ...wordsAt('shopping.quantities'));
+const BUY_QUANTITY = new RegExp(`(?:${alternation('shopping.buyVerbs')})\\s+(\\d{1,3}|${Object.keys(QUANTITIES).join('|')})\\b`, 'i');
+const EVERYTHING_CUE = any('shopping.everything');
+const OFFERS_CUE = any('shopping.offers');
+const EVALUATE_CUE = any('shopping.evaluate');
 
 export function createShoppingTurn({ readShopping, readPublicPromotions = null, shopDomain, cart, context = {}, message = '', history = [], resolvedProducts = [], baseCurrency = null, hiddenCodes = [] }) {
   // CODES NEVER NAMED (owner, 2026-10-17: the routine discount): the shopping data says « remise
@@ -119,7 +127,7 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
       if (/\b(?=[A-Z0-9_-]*\d)[A-Z][A-Z0-9_-]{2,79}\b/.test(text ?? '')) await load().catch(() => null);
     },
     sanitizeReply(text, replyLanguage = 'fr') {
-      const placeholder = replyLanguage?.startsWith('en') ? 'that code' : replyLanguage?.startsWith('es') ? 'ese código' : 'ce code';
+      const placeholder = messages(replyLanguage).thatCode;
       const typedNow = new Set((message.match(/(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]{2,79}(?![A-Za-z0-9_-])/g) ?? []).filter((w) => /\d/.test(w)).map((w) => w.toUpperCase()));
       const candidates = new Set([...(cart?.codes ?? []), ...(cart?.discounts ?? []).filter((d) => d.type === 'code').map((d) => d.title), ...requestedCodes(), ...hidden]);
       for (const body of [text, ...history.map((h) => h.content ?? '')]) {
@@ -172,16 +180,16 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
         if (offerIds.length && cartContract.normalizeSnapshot(cart)) await add('evaluate_promotions_for_cart', { promotion_ids: offerIds });
         return { route: 'shopping_context', topics: ['free_shipping'], results };
       }
-      if (/panier|cart|basket|déjà|deja|already|appliqu|applied|reduction|réduction|discount|voucher|coupon/i.test(message) || context.pageType === 'cart' && cartContract.needsCartSnapshot(message, null, context)) await add('get_cart_context');
-      if (/stock|disponib|availab/i.test(message) && !/\b(offres?|promotions?|promos?|offers?|deals?|codes?)\s+(?:sont\s+|are\s+)?(?:disponib|availab)/i.test(message)) {
-        const q = message.match(/(?:prends?|prendre|acheter|commande|veux|want|buy)\s+(\d{1,3}|un|une|deux|trois|quatre|cinq|two|three)\b/i)?.[1]?.toLowerCase();
-        const quantity = q ? Number(q) || ({ un: 1, une: 1, deux: 2, trois: 3, quatre: 4, cinq: 5, two: 2, three: 3 })[q] : undefined;
-        await add('get_stock_context', /panier|cart|basket|tout|everything/i.test(message) || !ids.size ? {} : { product_ids: [...ids], ...(quantity ? { quantity } : {}) });
+      if (CART_CUE.test(message) || context.pageType === 'cart' && cartContract.needsCartSnapshot(message, null, context)) await add('get_cart_context');
+      if (STOCK_CUE.test(message) && !OFFERS_AVAILABLE.test(message)) {
+        const q = message.match(BUY_QUANTITY)?.[1]?.toLowerCase();
+        const quantity = q ? Number(q) || QUANTITIES[q] : undefined;
+        await add('get_stock_context', EVERYTHING_CUE.test(message) || !ids.size ? {} : { product_ids: [...ids], ...(quantity ? { quantity } : {}) });
       }
-      if (/promo|offre|offer|deal|voucher|coupon|soldes|code|cumul|combin|stack|remise|discount|réduction|reduction/i.test(message)) {
+      if (OFFERS_CUE.test(message)) {
         const codes = requestedCodes();
         if (codes.length) for (const code of codes) await add('evaluate_promotions_for_cart', { code });
-        else if (/panier|cart|basket|cumul|combin|stack|manque|missing|fonctionn|marche|work|appliqu|applied|réduction|reduction|remise|discount|voucher|coupon/i.test(message)) await add('evaluate_promotions_for_cart');
+        else if (EVALUATE_CUE.test(message)) await add('evaluate_promotions_for_cart');
         else {
           await add('get_active_promotions');
           // WITH A CART, AN OFFERS QUESTION IS ALSO AN ELIGIBILITY QUESTION.

@@ -23,6 +23,7 @@
  */
 
 import { replenishment } from '../advisory/replenishment.mjs';
+import { alternation, messages } from '../i18n/languages.mjs';
 
 /** Chip value: `purchase:<answer>:<catalogue product id>`. */
 export const PURCHASE_CHOICE = /^purchase:(around|running_low|focus):([0-9a-f-]{36})$/;
@@ -32,28 +33,9 @@ export const MAX_PURCHASE_QUESTIONS = 1;
 /** Shown to the model: the most recent, enough to answer « what did I buy? ». */
 export const MAX_PROMPT_PURCHASES = 8;
 
-const LABELS = {
-  fr: { around: 'Construire ma routine autour', running_low: "Il m'en reste peu", focus: 'Me concentrer sur ma préoccupation' },
-  en: { around: 'Build my routine around it', running_low: "I'm running low", focus: 'Focus on my concern' },
-};
 
-// French and English, the minimum for every chatbot layer.
-const PAST_PURCHASE = new RegExp(
-  [
-    "(?:j'|j’|je )ai (?:déjà )?(?:acheté|commandé|pris)",
-    'mes (?:derniers? |précédents? )?(?:achats?|commandes?)',
-    'ma (?:dernière |précédente )?commande',
-    'la dernière fois',
-    'racheter|recommander|reprendre (?:le|la|les|mon|ma|mes)',
-    'mes produits',
-    'i (?:have |\'ve )?(?:already )?(?:bought|ordered|purchased|got)',
-    'my (?:last |previous |past )?(?:orders?|purchases?)',
-    'last time',
-    're-?order|re-?buy|buy (?:it|that|them) again',
-    'my products',
-  ].join('|'),
-  'iu'
-);
+// Every language the chat speaks (i18n/<code>/words.mjs, `pastPurchase`).
+const PAST_PURCHASE = new RegExp(alternation('pastPurchase'), 'iu');
 
 export function mentionsPastPurchase(message) {
   return PAST_PURCHASE.test(String(message ?? ''));
@@ -136,7 +118,7 @@ export function purchaseToAsk(items, state, { isDue = () => false } = {}) {
 }
 
 export function purchaseChoices(item, locale = 'fr') {
-  const labels = LABELS[String(locale).slice(0, 2)] ?? LABELS.fr;
+  const labels = messages(locale).purchase;
   return ANSWERS.map((a) => ({ label: labels[a], value: `purchase:${a}:${item.product_id}` }));
 }
 

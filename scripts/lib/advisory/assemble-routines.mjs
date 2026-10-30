@@ -19,6 +19,8 @@
  * said, never guessed. Brand-free: every name comes from the two inputs.
  */
 
+import { pickNames, renamed } from './routine-knowledge.mjs';
+
 const fold = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').replace(/[’‘`´]/g, "'").toLowerCase().trim();
 const withoutNotes = (o) => Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => !k.startsWith('_')));
 
@@ -49,8 +51,7 @@ export function assembleRoutines({ routines, rules, products, settings }) {
   const perFoundation = withoutNotes(settings.foundations);
   const foundations = routines.foundations.map((f) => ({
     key: f.key,
-    name_fr: f.name_fr,
-    name_en: f.name_en,
+    ...pickNames(f, 'name_'),
     primary_concerns: f.primary_concerns,
     preferred_range: rangeOf(f.preferred_ranges?.[0], `main concern ${f.key}`),
     ...(f.range_by_age ? { range_by_age: true } : {}),
@@ -80,7 +81,7 @@ export function assembleRoutines({ routines, rules, products, settings }) {
     if (!extra) warnings.push(`module « ${m.name_fr} » (${m.type}) has no settings: keyed by its type`);
     const when = [...new Set([...(m.when ?? []), ...(extra?.when ?? [])])];
     for (const c of when) if (!concernKeys.has(c)) warnings.push(`module ${m.type}: concern « ${c} » is not a standard concern`);
-    return { key: extra?.key ?? m.type, name_fr: m.name_fr, name_en: m.name_en, type: m.type, frequency: m.frequency, when, ...(extra?.standalone ? { standalone: true } : {}), ...(extra?.when_size ? { when_size: extra.when_size } : {}) };
+    return { key: extra?.key ?? m.type, ...pickNames(m, 'name_'), type: m.type, frequency: m.frequency, when, ...(extra?.standalone ? { standalone: true } : {}), ...(extra?.when_size ? { when_size: extra.when_size } : {}) };
   });
 
   const concernMap = withoutNotes(settings.concern_map);
@@ -108,11 +109,12 @@ export function assembleRoutines({ routines, rules, products, settings }) {
       age_ranges: ageRanges,
       routine_times: rules.routine_times ?? [],
       skin_type_texture: rules.skin_type_texture ?? {},
-      // The concerns' and skin types' names (Rules tab), for the routine cards' « Pourquoi pour vous ? ».
+      // The concerns' and skin types' names (Rules tab), for the routine cards' « Pourquoi pour vous ? »:
+      // one per language ({ fr, en, it… }, null when its column is blank; read with `localized`).
       labels: {
-        concerns: Object.fromEntries(rules.concerns.map((c) => [c.key, { fr: c.label_fr, en: c.label_en ?? c.label_fr }])),
+        concerns: Object.fromEntries(rules.concerns.map((c) => [c.key, renamed(pickNames(c, 'label_'), 'label_', '')])),
         skin: rules.skin_labels ?? {},
-        main: Object.fromEntries(foundations.map((f) => [f.key, { fr: f.name_fr, en: f.name_en ?? f.name_fr }])),
+        main: Object.fromEntries(foundations.map((f) => [f.key, renamed(pickNames(f, 'name_'), 'name_', '')])),
       },
       modules,
       questions: settings.questions ?? {},
@@ -123,6 +125,8 @@ export function assembleRoutines({ routines, rules, products, settings }) {
       // Its minimum (owner, 2026-10-18): a routine the customer trims below it on the cards loses the discount.
       // The size or texture a routine product is added in (owner, 2026-10-18): its texture from their skin type.
       variant_choice: variantChoice(settings.variant_choice),
+      // The repurchase message on opening (owner, 2026-10-29): the window and the favourite's type order.
+      repurchase_opening: withoutNotes(settings.repurchase_opening),
       routine_discount: settings.routine_discount?.code ? { code: String(settings.routine_discount.code), min_products: Math.max(1, Number(settings.routine_discount.min_products) || 1) } : null,
     },
     warnings,

@@ -7,12 +7,15 @@ import { fileURLToPath } from 'node:url';
 // THE ADVISORY CORE IS CHANNEL-FREE, AND NOTHING ELSE DEPENDS ON IT YET.
 //
 // scripts/lib/advisory/ is meant to be lifted out for the email agent later
-// without a rewrite, so it imports nothing outside its own directory. And the
-// email agent and the dashboard must not start depending on unfinished
-// chatbot code: only the storefront advisor (and its scripts) may import it.
+// without a rewrite, so it imports nothing outside its own directory but the
+// language packs (scripts/lib/i18n/, 2026-10-30), which go with it and import
+// nothing outside themselves. And the email agent and the dashboard must not
+// start depending on unfinished chatbot code: only the storefront advisor (and
+// its scripts) may import it.
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../../..');
+const i18n = path.join(root, 'scripts', 'lib', 'i18n');
 
 const importsOf = (file) => [...fs.readFileSync(file, 'utf8').matchAll(/^\s*(?:import|export)[^'"]*from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
 
@@ -29,7 +32,16 @@ function walk(dir, out = []) {
 test('the advisory core imports only from its own directory and node built-ins', () => {
   for (const file of fs.readdirSync(here).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs'))) {
     for (const spec of importsOf(path.join(here, file))) {
-      assert.ok(spec.startsWith('./') || spec.startsWith('node:'), `${file} imports ${spec}`);
+      assert.ok(spec.startsWith('./') || spec.startsWith('../i18n/') || spec.startsWith('node:'), `${file} imports ${spec}`);
+    }
+  }
+});
+
+test('the language packs import only from their own directory and node built-ins', () => {
+  for (const file of walk(i18n).filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs'))) {
+    for (const spec of importsOf(file)) {
+      const target = path.resolve(path.dirname(file), spec);
+      assert.ok(spec.startsWith('node:') || (spec.startsWith('.') && target.startsWith(i18n + path.sep)), `${path.relative(root, file)} imports ${spec}`);
     }
   }
 });

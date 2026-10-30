@@ -1,6 +1,8 @@
 import { normalise, nearWord } from './knowledge-topics.mjs';
+import { wordsOf } from '../i18n/languages.mjs';
 
-const STOPWORDS = new Set(('a au aux avec ce cet cette ces ca de des du en et est il elle ils elles je le la les leur ma mes mon ne nous on ou par pas pour puis puisje peux peut quel quelle quels quelles que qui se ses si son sont sur un une vous votre vos comment combien dois do doisje the a an is are can i my to of how what it this for and does faut faire produit produits soin soins').split(' '));
+/** Words that say nothing about which FAQ is meant, in every language (i18n/<code>/words.mjs). */
+const STOPWORDS = new Set(wordsOf('faqStopwords'));
 export function keywords(value) {
   return [...new Set(normalise(value).split(' ').filter((w) => w.length > 2 && !STOPWORDS.has(w)))];
 }

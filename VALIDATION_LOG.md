@@ -42,6 +42,30 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 65. Six languages: tested offline on the real sheet only; the Italian, German and Dutch not reviewed by a native speaker — 2026-10-30
+
+**Translations to review.** Everything in `scripts/lib/i18n/{it,de,nl,es}/` (messages, the word lists, the lexicons), the widget locales `storefront-app/extensions/storefront-advisor/locales/{it,de,nl,es}.json`, the Rules tab's `label_it/de/nl/es` columns, the routine settings' questions and buttons, and the config's labels. The owner reviews the Spanish (including « usted » or « tú »); Italian, German and Dutch need a native speaker before they count as done.
+
+**To try it.** Run `npm run advisor:load` (settings and labels), then deploy the server and the theme extension. On the dev store, switch the storefront to each language (Spanish only once it is published), and in each:
+- Open the chat: the greeting and the buttons are in that language.
+- Build a routine by buttons, then by typed answers: every question, button and the routine cards are in that language.
+- Answer the cart question in words (« Sì, aggiungi », « Nein danke »).
+- Ask a delivery question and a product question: the AI replies in that language, with product names still French.
+
+Also check:
+- A message in Portuguese on the English storefront gets English.
+- The German treat sentence keeps « Falten » capitalised.
+
+**Measured offline.** The Italian, German, Dutch and Spanish parity sentences read the same profile as the English (languages.test.mjs). That is nine sentences per language; real customers will phrase things the lexicons miss, and the model reader then fills in, so watch the residue logs for each language.
+
+## 64. The routine's new layout and the rounder panel: rendered in jsdom only — 2026-10-30
+
+Deploy the theme extension, then build a routine on the dev store, once with « Le matin » and once with « Matin et soir ». Wide (desktop): « En un coup d'œil » on the left, the products on the right, the checkout strip sticky at the bottom. Collapse the panel to 400 px and use a phone: the steps fold under « Voir mes gestes du matin et du soir » and the products come first. Check that the real product images fill the cards, that long titles and « Taille à choisir sur sa fiche » wrap cleanly, that the compact cards open across the row, and that the added routine in `/cart` matches the ticks. Also check the composer: a softly rounded field, taller, growing with several lines, no black box on focus, and a white arrow on the send button. Check that the panel's top sits just under the dev theme's header, including after scrolling with a sticky header. The header is found with generic selectors (`HEADER_SELECTOR`); another theme may need its own. On a product page, check the header's product card: picture, name and price; it stays short; the price follows a variant changed on the page. Check that Cormorant Garamond and DM Sans load (Network tab: only once the banner or the panel shows). Check that the theme editor shows the three font settings. Check in the Dawn theme's fonts as well.
+
+## 63. The repurchase message on opening, and accessories only when asked: tested offline only — 2026-10-29
+
+Not yet on the dev store. To try it: `npm run advisor:load` (the new `repurchase_opening` settings), deploy the server (the `/opening` route) and the theme extension (`advisor-panel.js`), and set `STOREFRONT_CHAT_PURCHASE_HISTORY=on`. Then sign in on the dev store as a customer with a cream bought about its « Durée d'utilisation » ago and open the chat: the message and the card come under the greeting, once per tab. Check that nothing comes signed out, after « Nouvelle conversation », or when no product is in the window. Also check that `data_access_events` logs the read. Measured intervals (`repurchaseIntervals`) are still not passed to the agent in production, so the stated « Durée d'utilisation » decides. The accessory rule: « produits à moins de 40 € » must show no Gua Sha, roller or LED mask; « un accessoire pour le visage » must.
+
 ## 62. The owner's notes v4: tested offline and on the live model with invented data, not yet on the dev store — 2026-10-19
 
 Server-side only (no theme deploy). `qiriness-routine-settings.json` gained `questions.eye_concern_buttons` and `area_fallback`: they reach the dev store with `npm run advisor:load` (not run). Until then the eyes get the face's concern buttons (a « Rides » click still records the eye concern) and there is no hand or lip fallback. Every product the notes name is now on the dev store and in stock (queried 2026-10-19: the roller, the hand cream, the lip balm, the body cream, milk and oil, the Éclat Parfait serum and cream).

@@ -1,6 +1,6 @@
 /**
  * English skincare phrasing, as data for lexicon.mjs: the same shape and keys
- * as lexicon-fr.mjs. Patterns run on `norm` text: lower case, apostrophes as
+ * as fr/lexicon.mjs. Patterns run on `norm` text: lower case, apostrophes as
  * spaces (« i m », « don t », « men s »).
  */
 
@@ -87,6 +87,24 @@ export default {
     /\b(?<item>fragrance|perfume|alcohol|paraben|sulfate|sulphate|silicone|oil) free\b/g
   ],
 
+  ingredients: {
+    fragrance: ['fragrance', 'fragrances', 'perfume'],
+    alcohol: ['alcohol'],
+    retinol: ['retinol'],
+    essential_oils: ['essential oils', 'essential oil'],
+    oil: ['oil', 'oils'],
+    silicones: ['silicone', 'silicones'],
+    sulfates: ['sulfate', 'sulfates', 'sulphate', 'sulphates'],
+    parabens: ['paraben', 'parabens'],
+    niacinamide: ['niacinamide'],
+    vitamin_c: ['vitamin c'],
+    salicylic_acid: ['salicylic acid'],
+    glycolic_acid: ['glycolic acid'],
+    hyaluronic_acid: ['hyaluronic acid'],
+    lactic_acid: ['lactic acid'],
+    azelaic_acid: ['azelaic acid'],
+  },
+
   routineNone: /\b(no routine|don t have a routine|do not have a routine|nothing at all|i don t use anything|i use nothing|i don t use any)\b/,
   routineClause: /\b(?:i (?:already )?use |i m (?:already )?using |i already have |my (?:current )?routine (?:is |includes |has )?)(?<clause>.{0,120}?)(?:\bbut\b|$)/,
   routineSteps: {
@@ -111,6 +129,8 @@ export default {
     night_cream: /\b(a|the|my) night cream\b/,
     eye_care: /\b(an|the|my) eye (cream|contour|care|serum)\b/,
     cleanser: /\b(a|the|my) (cleanser|face wash|make ?up remover)\b/,
+    // Not "peel": "my skin peels" is dryness.
+    exfoliant: /\b(exfoliants?|exfoliators?|exfoliating|exfoliation|scrubs?)\b/,
     mask: /\b(a|the|my) (face )?mask\b/,
     moisturiser: /\b(a|the|my) (moisturi[sz]er|cream|day cream|face cream)\b/
   },
@@ -157,5 +177,7 @@ export default {
   dontKnow: /\b(i don t know|i do not know|no idea|not sure|dunno|i m not sure)\b/,
   // A medical situation, a treatment, an allergy or a reaction (owner's notes v4): no cards, no routine offer.
   // A treatment they are ON, not one they look for ("an acne cream" is a product request).
-  caution: /\b((dermatolog\w*|prescription|prescribed|medical) (\w+ )?(treatment|medication|medicine|cream)|on (a |an )?(\w+ ){0,2}(treatment|medication)|taking (a |an )?(\w+ ){0,2}(treatment|medication|medicine)|medications?|prescription|isotretinoin|accutane|roaccutane|antibiotics?|moles?|allerg\w*|burns?|my skin (is )?burning|red patches|(allergic |skin )?reactions?|rash(es)?|eczema|psoriasis|dermatitis|pregnan\w*|breastfeeding|nursing)\b/
+  caution: /\b((dermatolog\w*|prescription|prescribed|medical) (\w+ )?(treatment|medication|medicine|cream)|on (a |an )?(\w+ ){0,2}(treatment|medication)|taking (a |an )?(\w+ ){0,2}(treatment|medication|medicine)|medications?|prescription|isotretinoin|accutane|roaccutane|antibiotics?|moles?|allerg\w*|burns?|my skin (is )?burning|red patches|(allergic |skin )?reactions?|rash(es)?|eczema|psoriasis|dermatitis|pregnan\w*|breastfeeding|nursing)\b/,
+  // An accessory or a device asked for (owner, 2026-10-29): only then may one be offered.
+  accessoryAsk: /\b(accessor(y|ies)|tools?|devices?|gadgets?|gua sha|rollers?|stones?|quartz|jade|led( masks?)?)\b/
 };

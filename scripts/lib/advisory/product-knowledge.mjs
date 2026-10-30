@@ -160,6 +160,9 @@ export const fillsStep = (record, type) => record?.functional_type === type || (
 export const BUNDLE_TYPES = new Set(['coffret', 'kit']);
 export const isBundle = (record) => BUNDLE_TYPES.has(record?.functional_type);
 
+/** An accessory or a device (« Accessoire », « Électrocosmétique »): offered only when asked for (owner, 2026-10-29). */
+export const isAccessory = (record) => record?.functional_type === 'tool' || record?.functional_type === 'device';
+
 /** Records by handle, for the engine and the purchase turn. */
 export function knowledgeIndex(products) {
   return new Map((products ?? []).map((p) => [p.handle, p]));

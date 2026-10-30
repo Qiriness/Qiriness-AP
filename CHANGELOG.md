@@ -10,6 +10,80 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The advisor speaks six languages: French, English, Italian, German, Dutch and Spanish (2026-10-30)
+
+Owner: the store's five languages plus Spanish, « expandable to more languages … if this requires refactoring existing things then please do ». Rule and reasons: DECISIONS.md § « Six languages, built to take more ».
+
+- **Phase 1, the refactor, with no change in behaviour.**
+  - `scripts/lib/i18n/` holds one folder per language (`lexicon.mjs`, moved from `advisory/`; `words.mjs`; `messages.mjs`) and the registry `languages.mjs` (`SUPPORTED`, `languageOf`, `localized`, the fallback chain).
+  - Every FR/EN pattern and text table in `routine-flow`, `llm-agent`, `conversation-refs`, `conversation-language`, `knowledge-topics`, `shopping-tools`, `product-resolver`, `product-tools`, `faq-matcher`, `profile-reader`, `order-status`, `purchase-turn`, `repurchase-opening`, `agent` and `ingredients` now reads the packs.
+  - The brand labels are read per language (`label_<code>`, `localized`) in `routine-knowledge`, `assemble-routines`, `recommend`, `foundations` and `routine-view`.
+  - The widget's two word patterns are generated (`npm run widget:words`, `scripts/build-widget-words.mjs`).
+  - Checked: the rebuilt patterns are byte-identical to the old ones; `npm test` 3896/3896; eval:advisory, advisor:score (20/54) and eval:resolution printed exactly the same before and after.
+- **Phases 2–4, the four languages.**
+  - Italian, German, Dutch and Spanish lexicons, words and messages.
+  - Widget locales `it.json`, `de.json`, `nl.json` and `es.json` (every key of the French).
+  - The Rules tab's `label_it/de/nl/es` columns (39 rows), imported.
+  - The routine settings' questions and buttons, and the config's labels, in the four languages.
+  - The model's fallback language is now the storefront's (English for one the chat does not speak), with the formal « you » in each.
+  - `norm` keeps « ß » as « ss ».
+  - The cart and offer answers use accent-aware word edges.
+- **Tests:**
+  - `i18n.test.mjs`: every language has every key of the French, the messages take the same arguments, the widget locales are complete, and the widget's generated words are up to date.
+  - `languages.test.mjs`, on the real sheet:
+    - The advisory parity sentences read the same profile as in English in each language, and each language is recognised.
+    - A routine is built from typed answers alone in each language, with that language's routine sentence.
+    - The cart question is answered in words in each language.
+  - `npm test` 3935/3935; the three evals unchanged.
+- **Not yet proven:** a native speaker's review of the Italian, German and Dutch, the owner's review of the Spanish, a dev-store run in each language (VALIDATION_LOG 65). Product names, descriptions and FAQs stay the French catalogue's. Needs `npm run advisor:load` (the settings and config labels) after deploying.
+
+## The advisor: the routine laid out as the owner's prototype; a rounder panel (2026-10-30)
+
+Owner: the prototype `qiriness_chatbot_preview.html`, adapted to our designs, and « rounding the edges of the popup, adding a slight shadow, rounding the input box, making it slightly taller ». Rule and reasons: DECISIONS.md § « The routine laid out as the prototype ».
+
+- `advisor-panel.js`: `RoutineView` rewritten. It has an « En un coup d'œil » column (both moments as numbered steps, each one that moment's tick), each product once (essentials as full cards, the rest under « Compléter mon rituel »), and a checkout strip. The selection, discount and cart helpers are unchanged. `advisor.css`: the routine section rewritten; the panel, composer, send button and cards modernised. 20 new FR/EN strings in the locales and `advisor-embed.liquid`; `morning_text`, `evening_text`, `read_more` and `read_less` are no longer used and were removed.
+- Owner's first test, same day: ticks are now per product (`routineFreshRemoved`, `routineRemoved` by product id). « Compléter ma routine » had ticked the evening's eye cream and lotion but not their morning rows. Cleansers and make-up removers are labelled « Nettoyer » (`stage_cleanse`). The composer is less round and has no black focus box. The send arrow is visible (it was dark on dark). The panel is 440 px wide and reaches up to just under the shop's header (`--sa-top`). The owner's sequence was re-run in jsdom: complete the evening, tick the eye cream from the evening row, untick it from the morning row, add the lotion from its card, take the evening out. Both moments agreed at every step.
+- Second round, same day:
+  - A shorter checkout strip.
+  - On a product page, a card in the header with the product's picture, name and the chosen variant's price (`ViewingCard`; `productJson` now shared with the routine images).
+  - The owner's typography table: Cormorant Garamond and DM Sans, set as theme settings (`font_heading`, `font_body`, `fonts_url`). The loader (`advisor.js`, now 8.6 KB) loads the stylesheet only when the advisor shows.
+  - New string `advisor.viewing` (FR/EN).
+  - Checked in jsdom: the card on a product page, its price following a variant changed on the page, and the routine still drawn with the new footer.
+- Checked in jsdom with the real panel code on two real routines from the Qiriness sheet (wrinkles, dry skin; day, then day and night). Checked: the ticks shared between a card and its rows, the minimum and saving appearing at 3 products, « Déjà le matin », evening-only products waiting for « Compléter ma routine », the details, and the choice persisted. `routine-view.test.mjs` 9/9. Not yet seen in a browser (VALIDATION_LOG 64).
+
+## The advisor: asked to add, the chat asks to confirm; « ajouter svp » is a yes (2026-10-29)
+
+Owner: « the agent should check do you want to add this product to the cart and then the customer can confirm yes or no or say it »; « ajouter svp » under the routine's cart question got « je ne peux pas ajouter directement ». Rule and reasons: DECISIONS.md § « Asked to add, the chat asks to confirm ».
+
+- `routine-flow.mjs`: `asksToAdd`, `askToAdd`; `cartAnswer` takes add-words as a yes and refusals as a no. `llm-agent.mjs`: the request is a code turn (`model_skipped: 'cart_ask'`) on the product named, the last card, the routine just shown or the page's product.
+- Tests in `conversation-guards.test.mjs` (2, FR and EN): the question, then « Oui » by button and in words, « Je cherche encore »; the yes / no words; requests and non-requests. `npm test` 3890/3890; eval:advisory 43/49, advisor:score 20/54, eval:resolution 122/123, unchanged. Server-side only.
+
+## The advisor: an exfoliant can be asked for; « une masque » is a mask (2026-10-29)
+
+Owner: « products suggested but not given » (« une masque exfoliant … peau grasse … imperfections » got the Lotion Tonique, and two masks named in the text only). Rule and reasons: DECISIONS.md § « An exfoliant can be asked for ».
+
+- `qiriness.json`: an `exfoliant` slot, so the type can be asked for; `DESIRED_TYPE.exfoliant` (`foundations.mjs`); `desired.exfoliant` in the FR and EN lexicons, read before the mask; the FR mask with any article.
+- Test in `areas.test.mjs` on the real sheet, FR and EN: the Gommage Grains Wrap Exfolys au Riz first, every product an exfoliant; a mask still a mask; "my skin peels" no type; a gommage already used no request. `npm test` 3888/3888; eval:advisory 43/49, advisor:score 20/54, eval:resolution 122/123, unchanged. Needs `npm run advisor:load`.
+
+## The advisor: a signed-in customer opening the chat hears about their favourite product, if it is due (2026-10-29)
+
+Owner's design: logged in → products in the repurchase window → the favourite → a message after the greeting. Rule and reasons: DECISIONS.md § « A signed-in customer opening the chat ».
+
+- `repurchase-opening.mjs`: the window (from the interval less the larger of 20 % and 14 days, to 50 % of the interval after it) and the favourite (type order, then bought most, most recent, dearer), from `repurchase_opening` in the routine settings (passed through by `assemble-routines.mjs`). FR/EN sentence.
+- `agent.opening()` (`llm-agent.mjs`): no model call; the card from the catalogue. `handleStorefrontOpening` (`storefront-chat-service.ts`) opens a session only when there is a message. New route `POST /api/storefront/opening` (proxy `/apps/storefront-advisor/opening`), public to the middleware like `/chat`, 204 when there is nothing.
+- Widget (`advisor-panel.js`): asked on page load for a signed-in customer with an empty chat, once per tab, so it is there when the chat opens (it took 3 s on opening); not again for 30 days once seen (`localStorage`, no request); the starter buttons hidden under it; `**bold**` rendered in the advisor's bubbles.
+- Same day, owner's words: « Nous avons remarqué que vous aviez déjà apprécié « X ». Cela fait maintenant **N jours**… Souhaitez-vous en reprendre ? », the cart question's buttons, and « On a même une promo de 20 % sur ce produit en ce moment » for an automatic offer on it (reward only, never named; `openingPromotion`). `/opening` writes nothing: the first answer carries `opening: true` and the server stores the message then, with the product pending in the cart question.
+- `MERCHANT_DATA_USE_DISCLOSURE.md` names the new use.
+- Tests: `repurchase-opening.test.mjs` (7, on the real sheet and settings). `npm test` 3887/3887, `tsc` clean. **Not deployed:** needs `npm run advisor:load`, a theme/extension deploy, and `STOREFRONT_CHAT_PURCHASE_HISTORY=on` (VALIDATION_LOG § 63).
+
+## The advisor: an accessory or a device only when asked for (2026-10-29)
+
+Owner: « Agent should not propose accessories unless explicitly asked » (« products under 40 pounds » got the Gua Sha Quartz Rose). Rule and reasons: DECISIONS.md § « An accessory or a device only when asked for ».
+
+- `search_products` skips accessories and devices (`isAccessory`, `product-knowledge.mjs`) unless the message asks for one (`asksForAccessory`, FR/EN lexicons), names it, or is sent from its page; the cards drop them too (`llm-agent.mjs`, `withheld`).
+- The engine: the treat is never an accessory; the roller is no longer added after the eye care for puffiness (`foundations.mjs`).
+- Tests: `accessories.test.mjs` (5, on the real sheet; the « under 40 » one fails on the code before the change), `areas.test.mjs` puffiness test updated. `npm test` 3880/3880; eval:advisory 43/49, advisor:score 20/54 and eval:resolution 122/123, each identical to before the change. **Not on the dev store yet** (server-side only, no theme deploy).
+
 ## Ticket header, composer and filters follow the marks (2026-10-28)
 
 - **Header:** no chip for what a status icon already says (the level, « awaiting human », « awaiting customer », a forward). L1/L2 get a teal robot icon (« The agent can handle it »), on the cards and the rail too.

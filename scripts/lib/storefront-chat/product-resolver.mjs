@@ -31,6 +31,7 @@
  */
 
 import { buildProductIndex, matchProduct, normalise, tokenise } from '../../../agent/src/retrieval/product-matching.mjs';
+import { wordsOf } from '../i18n/languages.mjs';
 import {
   ANCHOR_WORDS,
   COMMON_WORDS,
@@ -196,7 +197,7 @@ export function buildResolutionIndex(catalogue, { aliases = new Map(), ranges: p
 // « cette crème », « ce soin », "this cream" on a product page: that product, not
 // another cream found by its name (customer batch, 2026-10-13: « cette crème »
 // on the Light cream's page resolved to another cream).
-const DEMONSTRATIVE = /\b(?:cette|cet|ce) (?:creme|serum|soin|produit|masque|lotion|baume|gel|lait|huile|contour|fluide|nettoyant|elixir|coffret)\b|\bthis (?:cream|serum|product|one|mask|lotion|balm|gel|cleanser|fluid|oil|kit|set)\b/;
+const DEMONSTRATIVE = new RegExp(wordsOf('demonstrativeCare').map((f) => `\\b${f}\\b`).join('|'));
 
 export function resolveProducts(message, { index, pageProductId = null, refs = null, choice = null, known = [] }) {
   const out = { products: [], candidates: [], unresolved: [], range: null, clarificationFor: null };

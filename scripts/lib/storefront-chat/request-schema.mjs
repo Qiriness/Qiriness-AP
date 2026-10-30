@@ -55,7 +55,21 @@ export function parseChatRequest(body) {
     action: QUICK_ACTIONS.includes(body.action) ? body.action : null,
     choice: typeof body.choice === 'string' && CHOICE.test(body.choice) ? body.choice : null,
     context: parseContext(body.context),
-    ...(body.cart !== undefined ? { cart: normalizeSnapshot(body.cart) } : {})
+    ...(body.cart !== undefined ? { cart: normalizeSnapshot(body.cart) } : {}),
+    // The first answer under the repurchase message: the server makes that message again and stores it first.
+    ...(body.opening === true ? { opening: true } : {})
+  };
+}
+
+/**
+ * The chat opening (repurchase-opening.mjs): no message, only the visit's context.
+ * @returns {{ sessionToken: string | null, context: ChatContext }}
+ */
+export function parseOpeningRequest(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new ChatRequestError('Expected a JSON object.');
+  return {
+    sessionToken: typeof body.sessionId === 'string' && UUID.test(body.sessionId) ? body.sessionId.toLowerCase() : null,
+    context: parseContext(body.context)
   };
 }
 

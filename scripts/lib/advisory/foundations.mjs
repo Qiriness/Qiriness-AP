@@ -70,12 +70,13 @@ import { ingredientWords } from './ingredients.mjs';
 import { hasPhrase, norm } from './text.mjs';
 import { FIT, NO_MATCH, PINNED, SKIPPED, STATUS } from './reason-codes.mjs';
 import { fillsStep, isBundle } from './product-knowledge.mjs';
+import { fallbackChain, localized } from '../i18n/languages.mjs';
 
 const MAX_BUILDER_QUESTIONS = 4;
 /** Profile current_routine kinds → product types. */
 const OWNED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'cream', serum: 'serum', lotion: 'lotion', mask: 'mask', eye_care: 'eye', booster: 'serum' };
 /** The engine's desired care types → product types. */
-const DESIRED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'cream', serum: 'serum', lotion: 'lotion', mask: 'mask', eye_care: 'eye', booster: 'serum' };
+const DESIRED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'cream', serum: 'serum', lotion: 'lotion', exfoliant: 'exfoliant', mask: 'mask', eye_care: 'eye', booster: 'serum' };
 /** The engine's step kinds per product type, for the conversation layer (Phase 2's « already owned » and its prompts). */
 const KIND = { cleanser: 'cleanser', makeup_remover: 'cleanser', lotion: 'lotion', exfoliant: 'lotion', serum: 'serum', cream: 'moisturiser', spf: 'spf', eye: 'eye_care', mask: 'mask', sheet_mask: 'mask', kit: 'kit' };
 const QUESTION_FIELDS = { concern: 'primary_concern', skin_type: 'skin_type', eye_concern: 'eye_concern', sensitivity: 'sensitivity', current_routine: 'current_routine', size: 'routine_scope', age: 'age_band', routine_time: 'routine_time' };
@@ -386,11 +387,8 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       const eyeCare = eyeStep
         ? products.filter((x) => eligible(x, { ...step, types: eyeStep.types, targets: null }, f, c, used)).map((x) => ({ x, ...timedKey(x, eyeStep, 'day', f, c, range), s: 0, reasons: [] })).sort(byKey)
         : [];
-      // The accessory made for it (the roller) after the soin, never before.
-      if (eyeCare.length) {
-        const accessories = products.filter((x) => (x.k.area ?? 'face') === 'eyes' && NOT_ALONE.has(x.k.functional_type) && x.k.primary_concern === c.primary && suitable(x, c) && !used.has(x.id));
-        eyeCare.splice(1, 0, ...accessories.map((x) => ({ x, codes: [`${FIT.PRIMARY_CONCERN}:${c.primary}`], s: 0 })));
-      }
+      // No accessory beside it (owner, 2026-10-29: « should not propose accessories unless explicitly
+      // asked »): one asked for by name is the resolver's, not the engine's.
       // One product for a need: the products that treat their concern first, when there are any
       // (« un produit pour les taches » ranked an anti-fatigue serum first, on its range's concerns).
       const treating = scope === 'targeted' && c.primary && !eyesAlone ? reachable.filter((x) => [x.k.primary_concern, ...x.k.other_concerns].includes(c.primary)) : [];
@@ -857,9 +855,11 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
 
   /**
    * What may be a « petit plaisir »: the settings' treat types when set (owner, 2026-10-18: « only
-   * mask, masque tissu and kits »), else the sheet's « Petit plaisir » column.
+   * mask, masque tissu and kits »), else the sheet's « Petit plaisir » column. Never an accessory or a
+   * device (owner, 2026-10-29: the Gua Sha, « Petit plaisir » in the sheet, came for « under 40 »).
    */
   function isTreat(k) {
+    if (NOT_ALONE.has(k.functional_type)) return false;
     const types = routines.treats?.types;
     return Array.isArray(types) && types.length ? types.includes(k.functional_type) : Boolean(k.treat);
   }
@@ -907,7 +907,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
 
   /** A question's sentence (settings `questions.text`): a button answer gets the next question with no model call. */
   const withText = (q, locale) => {
-    const text = questions.text?.[String(locale).slice(0, 2)]?.[q.field] ?? questions.text?.fr?.[q.field];
+    const text = fallbackChain(locale).map((lang) => questions.text?.[lang]?.[q.field]).find(Boolean);
     return text ? { ...q, text } : q;
   };
 
@@ -916,13 +916,12 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     // representative customer key for its first concern. The eyes asked about (owner's notes v4: « contour
     // des yeux », then « Rides » gave face products): the settings' `eye_concern_buttons`, eye concerns.
     const buttons = questions.concern_buttons ?? {};
-    const lang = String(locale).slice(0, 2);
     const valid = (value) => value && String(value).split('+').every((v) => allowed.primary_concern.includes(v));
     const eyeButtons = eyes && Array.isArray(questions.eye_concern_buttons) ? questions.eye_concern_buttons.filter((b) => valid(b?.value)) : [];
-    const entries = eyeButtons.length ? eyeButtons.map((b) => ({ value: b.value, label: b[lang] ?? b.fr ?? null })) : routines.foundations.filter((f) => f.primary_concerns.length).map((f) => {
+    const entries = eyeButtons.length ? eyeButtons.map((b) => ({ value: b.value, label: localized(b, locale) })) : routines.foundations.filter((f) => f.primary_concerns.length).map((f) => {
       const b = buttons[f.key] ?? {};
       const value = b.value ?? Object.entries(routines.concern_map ?? {}).find(([k, v]) => v === f.primary_concerns[0] && allowed.primary_concern.includes(k))?.[0];
-      return valid(value) ? { value, label: b[lang] ?? b.fr ?? null } : null;
+      return valid(value) ? { value, label: localized(b, locale) } : null;
     }).filter(Boolean);
     const q = question('primary_concern', entries.map((e) => e.value), locale, 'missing');
     q.options = q.options.map((o, i) => (entries[i]?.label ? { ...o, label: entries[i].label } : o));
@@ -931,7 +930,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
 
   function sizeQuestion(locale, profile, history) {
     const q = question('routine_scope', QUESTION_OPTIONS.routine_scope.filter((v) => allowed.routine_scope.includes(v)), locale, 'changes_recommendation');
-    const labels = sizeLabels[String(locale).slice(0, 2)] ?? sizeLabels.fr;
+    const labels = localized(sizeLabels, locale);
     if (labels?.length === q.options.length) q.options = q.options.map((o, i) => ({ ...o, label: labels[i] }));
     Object.assign(q, withText(q, locale));
     // Each size's price, from the products it would hold (plan § 3.3): the channel formats it.
@@ -958,11 +957,11 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   function chipQuestion(field, values, locale, profile, history) {
     const q = question(field, values, locale, 'changes_recommendation');
     const rows = field === 'age_band' ? ageRanges : field === 'routine_time' ? routines.routine_times ?? [] : [];
-    const en = String(locale).startsWith('en');
-    const own = field === 'eye_concern' ? questions.eye_concern?.labels?.[en ? 'en' : 'fr'] ?? questions.eye_concern?.labels?.fr ?? {} : {};
+    const own = field === 'eye_concern' ? localized(questions.eye_concern?.labels, locale) ?? {} : {};
     q.options = q.options.map((o) => {
       const row = rows.find((r) => r.key === o.value);
-      return row ? { ...o, label: (en ? row.label_en : row.label_fr) ?? row.label_fr } : own[o.value] ? { ...o, label: own[o.value] } : o;
+      const rowLabel = row ? localized(row, locale, { prefix: 'label_' }) : null;
+      return rowLabel ? { ...o, label: rowLabel } : own[o.value] ? { ...o, label: own[o.value] } : o;
     });
     return withText(q, locale);
   }

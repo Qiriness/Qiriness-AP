@@ -19,16 +19,17 @@
  */
 
 import { FIELDS } from '../advisory/profile.mjs';
+import { alternation } from '../i18n/languages.mjs';
 
 export const READER_TIMEOUT_MS = 2500;
 /** Mapping words to a fixed vocabulary needs little thought; the default effort took 2–4 s (2026-10-12). */
 export const READER_REASONING = 'none';
 const MAX_UPDATES = 12;
 
-/** Words that make a message about the skin even when the lexicon read nothing of it (French and English). */
-const SKIN = /\b(skin|peau|peaux|teint|complexion|face|visage|pores?|lips?|levres?|cheeks?|joues?|forehead|front|eyes?|yeux|hands?|mains?|body|corps)\b/;
+/** Words that make a message about the skin even when the lexicon read nothing of it (every language, i18n/<code>/words.mjs). */
+const SKIN = new RegExp(`\\b(${alternation('skin')})\\b`);
 export function mentionsSkin(message) {
-  const text = ` ${String(message ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ')} `;
+  const text = ` ${String(message ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/ß/g, 'ss').replace(/[^a-z0-9]+/g, ' ')} `;
   return SKIN.test(text);
 }
 

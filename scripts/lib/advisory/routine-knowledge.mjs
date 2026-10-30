@@ -20,6 +20,7 @@
  * steps are the brand's rows.
  */
 import { ENUMS, FUNCTIONAL_TYPES } from './product-knowledge.mjs';
+import { SOURCE_LANGUAGE, SUPPORTED } from '../i18n/languages.mjs';
 
 /** Types that never fill a routine step (a bundle, a device, anything else). */
 const NOT_A_STEP = new Set(['coffret', 'kit', 'device', 'tool', 'out_of_routine']);
@@ -52,6 +53,26 @@ function ageBounds(key) {
 }
 
 /**
+ * A row's names in every language the chat speaks (`label_fr`, `label_en`, `label_it`… columns): the
+ * shop's own language always (empty text when blank), the others null when blank (owner, 2026-10-30:
+ * the Rules and Routines tabs have one column per language). A language with no column yet is null.
+ */
+function namesOf(row, prefix) {
+  return Object.fromEntries(SUPPORTED.map((code) => {
+    const value = text(row[`${prefix}${code}`]);
+    return [`${prefix}${code}`, code === SOURCE_LANGUAGE ? value : value || null];
+  }));
+}
+/** The same names under another prefix: `label_fr` → `name_fr`, or → `fr`. */
+export function renamed(names, from, to) {
+  return Object.fromEntries(Object.entries(names).map(([k, v]) => [to + k.slice(from.length), v]));
+}
+/** A record's `name_<code>` entries, every language. */
+export function pickNames(record, prefix) {
+  return Object.fromEntries(SUPPORTED.map((code) => [`${prefix}${code}`, record?.[`${prefix}${code}`] ?? null]));
+}
+
+/**
  * @param {object[]} rows  the Rules tab, keyed by its (key) names, with `_row`
  * @returns {{ concerns: object[], foundations: object[], age_ranges: object[], routine_times: object[], skin_type_texture: object, skin_labels: object, errors: object[] }}
  */
@@ -68,12 +89,12 @@ export function parseRuleRows(rows) {
     const key = text(row.key);
     const sectionName = text(row.section);
     const section = CONCERN_SECTION.exec(sectionName);
-    const labels = { label_fr: text(row.label_fr), label_en: text(row.label_en) || null };
+    const labels = namesOf(row, 'label_');
     if (MAIN_SECTION.test(sectionName)) {
       // A main concern: its letter, its name, its range (or the range by age).
       if (!/^[A-Z]$/.test(key)) { bad(row, 'key', key); continue; }
       const effect = text(row.effect);
-      foundations.push({ key, name_fr: labels.label_fr, name_en: labels.label_en, range: BY_AGE.test(effect) ? null : effect || null, range_by_age: BY_AGE.test(effect), note: text(row.note) || null });
+      foundations.push({ key, ...renamed(labels, 'label_', 'name_'), range: BY_AGE.test(effect) ? null : effect || null, range_by_age: BY_AGE.test(effect), note: text(row.note) || null });
     } else if (section) {
       // « A Hydratation » → main concern A; « Module Yeux » → the module named Yeux; « Type de peau sensible ».
       const effect = text(row.effect);
@@ -101,7 +122,7 @@ export function parseRuleRows(rows) {
       const texture = ENUMS.texture[text(row.effect)];
       if (!texture) bad(row, 'effect', text(row.effect));
       else skinTypeTexture[SKIN_KEY.exec(key)[1]] = texture;
-      if (labels.label_fr) skinLabels[SKIN_KEY.exec(key)[1]] = { fr: labels.label_fr, en: labels.label_en };
+      if (labels[`label_${SOURCE_LANGUAGE}`]) skinLabels[SKIN_KEY.exec(key)[1]] = renamed(labels, 'label_', '');
     }
   }
   return { concerns, foundations, age_ranges: ageRanges, routine_times: routineTimes, skin_type_texture: skinTypeTexture, skin_labels: skinLabels, errors };
@@ -142,7 +163,7 @@ export function parseRoutineRows(rows, { concerns, foundations: mains = [] }) {
       const name = text(row.name_fr);
       const type = list(row.functional_type).map((label) => typeOf(row, label))[0] ?? null;
       modules.push({
-        name_fr: name, name_en: text(row.name_en) || null, type,
+        ...namesOf(row, 'name_'), type,
         frequency: pick(row, 'frequency', ENUMS.frequency, { required: true }), required: false,
         time_of_day: pick(row, 'time_of_day', ENUMS.time_of_day), note: text(row.note) || null,
         when: concerns.filter((c) => c.module && fold(c.module) === fold(name)).map((c) => c.key),
@@ -169,7 +190,7 @@ export function parseRoutineRows(rows, { concerns, foundations: mains = [] }) {
     const product = text(row.product) || null;
     if (chosenBy.includes('product') && !product) bad(row, 'product', '(vide)');
     into.push({
-      order, name_fr: text(row.name_fr), name_en: text(row.name_en) || null, types,
+      order, ...namesOf(row, 'name_'), types,
       area: pick(row, 'area', ENUMS.area) ?? 'face', chosen_by: chosenBy,
       concern_required: pick(row, 'concern_required', YES_NO) ?? false, note: text(row.note) || null,
       ...(product ? { product } : {}),
@@ -186,7 +207,7 @@ export function parseRoutineRows(rows, { concerns, foundations: mains = [] }) {
 
   // The main concerns (Rules tab) with the standard concerns that lead to them.
   const foundations = mains.map((f) => ({
-    key: f.key, name_fr: f.name_fr, name_en: f.name_en,
+    key: f.key, ...pickNames(f, 'name_'),
     primary_concerns: concerns.filter((c) => c.foundation === f.key).map((c) => c.key),
     preferred_ranges: f.range ? [f.range] : [], range_by_age: f.range_by_age, note: f.note,
   }));

@@ -19,6 +19,9 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |   |                                    # fr/en/es/it/de, into
 |   |                                    # Email-Example-Queries.translations.json.
 |   |                                    # Reviewed as a diff, then imported
+|   |-- build-widget-words.mjs          # widget:words -- the storefront widget's word patterns
+|   |                                    # (advisor-cart.js, advisor-panel.js) from lib/i18n/;
+|   |                                    # i18n.test.mjs fails while they differ
 |   |-- cluster-ticket-messages.mjs      # cluster:tickets -- recurring topics per
 |   |                                    # subject. Print-only by default;
 |   |                                    # cluster:tickets:save persists a run
@@ -157,13 +160,17 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # purchase question, the anchor, the treat: the
 |       |                                # follow-up message, words and buttons from code;
 |       |                                # conversation-guards.test: the offer waits, caution
-|       |                                # turns, concern buttons, the order-number reminder) ·
+|       |                                # turns, concern buttons, the order-number reminder;
+|       |                                # accessories.test: an accessory only when asked) ·
 |       |                                # routine-view (a finished routine → the widget's
 |       |                                # routine cards: both moments, each product's content
 |       |                                # and « Pourquoi pour vous ? », the saving; never
 |       |                                # read to the model) ·
 |       |                                # purchase-turn (when to read, which purchase to
 |       |                                # ask about, the FR/EN chips, the prompt view) ·
+|       |                                # repurchase-opening (on opening, signed in: the
+|       |                                # favourite product in its repurchase window, the
+|       |                                # FR/EN sentence; agent.opening) ·
 |       |                                # knowledge-repository (active policies + parameters,
 |       |                                # approved general FAQs; lazy product-id-scoped guidance) ·
 |       |                                # shopping-repository (signed-shop-scoped public promotions,
@@ -190,9 +197,15 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # advisor-state (context.advisor folded from the log) ·
 |       |                                # profile-reader (the lexicon's backup: gate on residue,
 |       |                                # one structured model call → profile values)
+|       |-- i18n/                        # the chat's LANGUAGES, one folder each (fr, en, it, de, nl, es):
+|       |                                # lexicon (skin phrasing) · words (yes/no, cart, orders, references,
+|       |                                # topics, the widget's words) · messages (every sentence the server
+|       |                                # writes) · languages.mjs (registry: SUPPORTED, languageOf, localized,
+|       |                                # fallback chain) · widget-words (generated blocks in the widget) ·
+|       |                                # i18n.test (every language has every key of the French)
 |       |-- advisory/                    # the beauty consultation core, CHANNEL-FREE (imports
-|       |                                # nothing outside itself; isolation.test.mjs): profile ·
-|       |                                # lexicon (engine) over lexicon-fr + lexicon-en (same keys) ·
+|       |                                # nothing outside itself and i18n/; isolation.test.mjs): profile ·
+|       |                                # lexicon (engine over every language's i18n/<code>/lexicon) ·
 |       |                                # ingredients (exclusions across languages) · config (validate, compile, check against a
 |       |                                # catalogue; no product ids) · select-playbook · ranking
 |       |                                # (eligibility → suitability → routine fit → merchandising) ·

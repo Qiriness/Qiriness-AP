@@ -32,6 +32,8 @@
  * the widget adds it, on that click only.
  */
 
+import { messages, alternation } from '../i18n/languages.mjs';
+
 export const FLOW_CHOICE = /^flow:routine:(yes|no)$/;
 export const CART_CHOICE = /^flow:cart:(yes|no)$/;
 const GID_VARIANT = /^gid:\/\/shopify\/ProductVariant\/\d{1,20}$/;
@@ -39,62 +41,37 @@ const OFFERS = ['offered', 'accepted', 'declined'];
 const SOURCES = ['page', 'request', 'suggested'];
 const ID = /^[0-9a-f-]{36}$/;
 
-const TEXT = {
-  fr: {
-    offer: 'Souhaitez-vous que je vous construise une routine personnalisée ?',
-    yes: 'Oui, avec plaisir',
-    no: 'Non merci',
-    purchase: (name) => `Je vois que vous avez déjà acheté ${name}. Souhaitez-vous construire votre routine autour, vous en reste-t-il peu, ou préférez-vous vous concentrer sur votre préoccupation ?`,
-    runningLow: (name) => `Vous pouvez retrouver ${name} ici, ou l'ajouter directement à votre panier.`,
-    // With their concern (owner, 2026-10-19): « parfait pour atténuer vos imperfections ».
-    treatAfterRoutine: (concern) => concern ? `Et pour un moment de douceur, parfait pour atténuer ${frPossessive(concern)} ${concern}, ce petit plaisir pourrait vous plaire :` : 'Et pour un moment de douceur, ce petit plaisir pourrait vous plaire :',
-    treatAfterNo: "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :",
-    cartOne: (name) => `Souhaitez-vous que j'ajoute ${name} à votre panier ?`,
-    cartRoutine: 'Souhaitez-vous que j\'ajoute cette routine à votre panier ?',
-    cartRoutineDiscount: 'Souhaitez-vous que j\'ajoute cette routine à votre panier ? Votre remise routine s\'y appliquera automatiquement.',
-    cartYes: 'Oui, ajouter',
-    cartYesDiscount: 'Oui, ajouter avec la remise',
-    cartDiscount: 'Votre remise routine est appliquée à votre panier.',
-    cartNo: 'Je cherche encore',
-    cartDone: (names) => `C'est noté, j'ajoute à votre panier : ${names}.`,
-    cartSize: (names) => `Pour ${names}, choisissez la taille sur sa page.`,
-    cartRoutineDone: "C'est noté, j'ajoute à votre panier les soins inclus dans votre routine.",
-    cartNoDone: 'Très bien, prenez votre temps.',
-    routineReady: 'Voici votre routine personnalisée, matin et soir.',
-  },
-  en: {
-    offer: 'Would you like me to build you a personalised routine?',
-    yes: 'Yes please',
-    no: 'No thanks',
-    purchase: (name) => `I can see you've bought ${name} before. Would you like to build your routine around it, are you running low on it, or would you rather focus on your concern?`,
-    runningLow: (name) => `You'll find ${name} here, or you can add it straight to your cart.`,
-    treatAfterRoutine: (concern) => concern ? `And for a little moment of pampering, perfect for easing your ${concern}, you might like this treat:` : 'And for a little moment of pampering, you might like this treat:',
-    treatAfterNo: 'Of course. If you fancy a little treat, you might like this one:',
-    cartOne: (name) => `Would you like me to add ${name} to your cart?`,
-    cartRoutine: 'Would you like me to add this routine to your cart?',
-    cartRoutineDiscount: 'Would you like me to add this routine to your cart? Your routine discount will be applied automatically.',
-    cartYes: 'Yes, add it',
-    cartYesDiscount: 'Yes, add it with the discount',
-    cartDiscount: 'Your routine discount is applied to your cart.',
-    cartNo: "I'm still looking",
-    cartDone: (names) => `Done, adding to your cart: ${names}.`,
-    cartSize: (names) => `For ${names}, please choose the size on its page.`,
-    cartRoutineDone: 'Done, adding the products included in your routine to your cart.',
-    cartNoDone: 'Of course, take your time.',
-    routineReady: 'Here is your personalised routine, morning and evening.',
-  },
+// Every sentence here is the language pack's (i18n/<code>/messages.mjs, `flow`).
+const text = (lang) => messages(lang).flow;
+/** A concern's name inside a sentence: « Teint terne » → « teint terne »; German keeps its capital (« Falten »). */
+const inSentence = (label, lang) => {
+  if (typeof label !== 'string' || !label.trim()) return null;
+  const name = label.trim();
+  return messages(lang).lowercaseInSentence ? name.charAt(0).toLocaleLowerCase() + name.slice(1) : name;
 };
-const text = (lang) => TEXT[String(lang).slice(0, 2)] ?? TEXT.fr;
-// « vos rides », « votre déshydratation »: the concern's first word in the plural or not.
-const frPossessive = (concern) => (/[sx]$/i.test(concern.split(/\s+/)[0]) ? 'vos' : 'votre');
-/** A concern's name inside a sentence: « Teint terne » → « teint terne ». */
-const inSentence = (label) => (typeof label === 'string' && label.trim() ? label.trim().charAt(0).toLocaleLowerCase() + label.trim().slice(1) : null);
 
-// A typed answer to the offer, French and English. Only read while an offer is pending.
-const YES = /^\s*(oui|ouais|volontiers|avec plaisir|d'accord|ok(ay)?|bien s[uû]r|carr[ée]ment|go|yes|yeah|yep|sure|please|of course|let'?s (do it|go))\b(?!.*\b(pas|not|non|no)\b)/iu;
-const NO = /^\s*(non|nan|pas (maintenant|pour l'instant|besoin)|sans fa[cç]on|no|nope|not (now|right now|today)|no thanks?)\b/iu;
+// The customer's typed answers, in every language (i18n/<code>/words.mjs, `turns`). Only read while a question is pending.
+// Word edges that know accented letters: `\b` sees none after « Sì » or « pensaré ».
+const START = '(?<![\\p{L}\\p{N}])';
+const END = '(?![\\p{L}\\p{N}])';
+const NEGATION = alternation('turns.negation');
+const YES = new RegExp(`^\\s*(${alternation('turns.yes')})${END}(?!.*${START}(${NEGATION})${END})`, 'iu');
+const NO = new RegExp(`^\\s*(${alternation('turns.no')})${END}`, 'iu');
 // « Je cherche encore »: not now, still browsing (the cart question's « no »).
-const STILL_LOOKING = /\b(je cherche encore|je regarde encore|pas encore|plus tard|je reflechis|je réfléchis|still looking|just looking|not yet|maybe later|later)\b/iu;
+const STILL_LOOKING = new RegExp(`${START}(${alternation('turns.stillLooking')})${END}`, 'iu');
+// « Ajouter svp » under « Souhaitez-vous que j'ajoute cette routine à votre panier ? » is a yes (owner,
+// 2026-10-29: it was answered « je ne peux pas ajouter directement »).
+const CART_YES = new RegExp(`^\\s*(${alternation('turns.cartYes')})${END}(?!.*${START}(${NEGATION})${END})`, 'iu');
+// Asking to add something (owner, 2026-10-29: « the agent should check do you want to add this product to
+// the cart »): the code asks, the customer confirms with the button or in words.
+const ADD_REQUEST = new RegExp(`(${alternation('turns.addRequest')})`, 'iu');
+const NOT_ADD = new RegExp(`${START}(${alternation('turns.notAdd')})${END}`, 'iu');
+
+/** « Ajoutez-le au panier », "add it to my cart": the customer asks to add (in any language the chat speaks). */
+export function asksToAdd(message) {
+  const m = String(message ?? '');
+  return ADD_REQUEST.test(m) && !NOT_ADD.test(m);
+}
 
 export function emptyFlow() {
   return { offer: null, anchor: null, treat_offered: false, cart: { pending: [], asked: [] }, routine_ref: null };
@@ -117,9 +94,24 @@ export function cartAnswer(flow, { choice = null, message = '' } = {}) {
   const m = typeof choice === 'string' ? choice.match(CART_CHOICE) : null;
   if (m) return m[1];
   if (!cleanFlow(flow).cart.pending.length || choice) return null;
-  if (NO.test(message) || STILL_LOOKING.test(message)) return 'no';
-  if (YES.test(message)) return 'yes';
+  if (NO.test(message) || STILL_LOOKING.test(message) || NOT_ADD.test(message)) return 'no';
+  if (YES.test(message) || CART_YES.test(message) || asksToAdd(message)) return 'yes';
   return null;
+}
+
+/**
+ * The customer asked to add (asksToAdd): « Souhaitez-vous que j'ajoute X à votre panier ? » with « Oui,
+ * ajouter » / « Je cherche encore », whether or not it was asked before. Several products are the
+ * routine just shown (its ref still in the flow): the routine question, its discount if it has one.
+ * @returns {{ flow: object, followUp: { kind: 'cart', text: string, choices: object[], productIds: string[] } }}
+ */
+export function askToAdd(flow, items, lang, { discount = false } = {}) {
+  const next = cleanFlow(flow);
+  const t = text(lang);
+  next.cart = { pending: items.map((x) => ({ id: x.product_id, variant_id: x.variant_id ?? null })), asked: [...new Set([...next.cart.asked, ...items.map((x) => x.product_id)])] };
+  const withDiscount = discount && items.length > 1;
+  const words = withDiscount ? t.cartRoutineDiscount : items.length > 1 ? t.cartRoutine : t.cartOne(items[0].name);
+  return { flow: next, followUp: { kind: 'cart', text: words, choices: [{ label: withDiscount ? t.cartYesDiscount : t.cartYes, value: 'flow:cart:yes' }, { label: t.cartNo, value: 'flow:cart:no' }], productIds: [] } };
 }
 
 /**
@@ -240,11 +232,11 @@ export function followUpFor({ flow, lang, builder, answer, advice, showsProducts
   if (builder && advice?.status === 'recommended' && cartable.length && !cart) return askCart(cartable);
   if (cart && treat && !next.treat_offered) {
     next.treat_offered = true;
-    return say('treat', t.treatAfterRoutine(inSentence(concern)), { productIds: [treat.product_id] });
+    return say('treat', t.treatAfterRoutine(inSentence(concern, lang)), { productIds: [treat.product_id] });
   }
   if (builder && advice?.status === 'recommended' && treat && !next.treat_offered) {
     next.treat_offered = true;
-    return say('treat', t.treatAfterRoutine(inSentence(concern)), { productIds: [treat.product_id] });
+    return say('treat', t.treatAfterRoutine(inSentence(concern, lang)), { productIds: [treat.product_id] });
   }
   // THE OFFER WAITS FOR THE CONVERSATION (owner's notes v4: « routine builder does not wait for the
   // conversation to finish »): never under the engine's own question; it comes on a later turn.

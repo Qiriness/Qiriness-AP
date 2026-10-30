@@ -91,6 +91,8 @@ export interface StorefrontChatRequest {
   context: StorefrontChatContext;
   /** Ephemeral whitelist; never persisted in the session/message log. */
   cart?: object | null;
+  /** The first answer under the repurchase message (handleStorefrontOpening): it is stored first. */
+  opening?: boolean;
 }
 
 export interface StorefrontChoice {
@@ -152,7 +154,8 @@ export interface StorefrontRoutineStep {
 export interface StorefrontRoutineView {
   ref?: string;
   chosen: "day" | "night" | "both";
-  locale: "fr" | "en";
+  /** A language the chat speaks (scripts/lib/i18n/languages.mjs SUPPORTED). */
+  locale: string;
   currency: string;
   moments: { part: "day" | "night"; chosen: boolean; steps: StorefrontRoutineStep[] }[];
   discount: { code: string; min_products: number; percentage?: number } | null;
@@ -355,6 +358,7 @@ async function buildAdvisor(
     return {
       advisor: createAdvisor(raw, advisorCatalogue, loaded ? { knowledge: loaded.knowledge, routines: loaded.routines } : {}),
       productKnowledge: loaded?.knowledge ?? null,
+      repurchaseOpening: (loaded?.routines as { repurchase_opening?: object } | undefined)?.repurchase_opening ?? null,
     };
   } catch (error) {
     console.warn("[storefront chat] advisor unavailable", error instanceof Error ? error.message : error);
@@ -414,6 +418,7 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
     productBaseUrl: process.env.STOREFRONT_CHAT_PRODUCT_BASE_URL || null,
     advisor: consultation?.advisor ?? null,
     productKnowledge: consultation?.productKnowledge ?? null,
+    repurchaseOpening: consultation?.repurchaseOpening ?? null,
     // One order's status by its number (order-status-repository.mjs), on the
     // shop whose orders are synced. Off unless STOREFRONT_CHAT_ORDER_STATUS=on.
     readOrder: toolsOn && process.env.STOREFRONT_CHAT_ORDER_STATUS === "on" ? orderReader(db) : null,
@@ -460,6 +465,14 @@ export async function handleStorefrontChat(
     // Someone else's conversation: theirs stays untouched, this one starts afresh.
     session = await openSession(db, shopDomain, request, cap.retentionDays);
     history = [];
+  }
+  // The repurchase message answered (owner, 2026-10-29): stored as the new conversation's first row.
+  if (request.opening && !history.length && identity.kind === "customer") {
+    const opening = await openingMessage(db, shopDomain, request.context.locale, identity);
+    if (opening) {
+      await supabaseInsert(db, STOREFRONT_CHAT_T.MESSAGES, [{ session_id: session.id, ...opening, model: null }], { returning: "minimal" });
+      history = [opening];
+    }
   }
   // « les deux », « l'autre », a clarification just asked: folded from the log.
   const refs = refsFromHistory(history);
@@ -544,6 +557,49 @@ export async function handleStorefrontChat(
   const cart = ("cart" in reply && reply.cart ? reply.cart : null) as StorefrontCartItems | null;
   const routineView = ("routineView" in reply && reply.routineView ? reply.routineView : null) as StorefrontRoutineView | null;
   return { ok: true, sessionId: session.session_token, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}), ...(routineCart ? { routineCart } : {}), ...(routineView ? { routineView } : {}), ...(cart ? { cart } : {}), ...("layout" in reply && reply.layout === "routine" ? { layout: "routine" as const } : {}) } };
+}
+
+/**
+ * The chat for a signed-in customer (owner, 2026-10-29): their favourite product in its repurchase window,
+ * under the greeting (repurchase-opening.mjs). Nothing for an anonymous visitor (purchase history off means
+ * every visitor is). It writes nothing, so it answers fast and the widget can ask before the chat is opened:
+ * the conversation is stored only when the customer answers (`openingMessage`, from the chat route).
+ */
+export async function handleStorefrontOpening(
+  shopDomain: string,
+  request: { sessionToken: string | null; context: StorefrontChatRequest["context"] },
+  identity: StorefrontIdentity = ANONYMOUS
+): Promise<{ reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[] } } | null> {
+  if (identity.kind !== "customer") return null;
+  const db = client();
+  const opened = await openingFor(db, shopDomain, request.context.locale, identity);
+  return opened ? { reply: { text: opened.text, products: opened.products, choices: opened.choices as StorefrontChoice[] } } : null;
+}
+
+async function openingFor(db: ReturnType<typeof client>, shopDomain: string, locale: string | null, identity: StorefrontIdentity) {
+  const agent = await currentAgent(db);
+  if (identity.kind !== "customer" || !("opening" in agent)) return null;
+  return agent.opening({ purchases: purchasesLoader(db, identity, shopDomain), locale, shopDomain });
+}
+
+/**
+ * The opening message the customer is answering, as the conversation's first assistant row: what the model
+ * sees next, and the cart question pending (`context.advisor.flow`) so « Oui » adds the product. Made again
+ * here (the purchase summary is cached 10 minutes), never taken from the browser.
+ */
+async function openingMessage(db: ReturnType<typeof client>, shopDomain: string, locale: string | null, identity: StorefrontIdentity) {
+  const opened = await openingFor(db, shopDomain, locale, identity).catch(() => null);
+  if (!opened || identity.kind !== "customer") return null;
+  return {
+    role: "assistant" as const,
+    content: opened.text,
+    context: {
+      products: opened.products.map((p: StorefrontProductCard) => p.url),
+      opening: { kind: "repurchase", product_id: opened.product_id, ...opened.trace },
+      advisor: opened.advisor,
+      identity: identity.ref,
+    } as Record<string, unknown>,
+  };
 }
 
 /**

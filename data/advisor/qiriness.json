@@ -246,6 +246,7 @@
     "cleanser": { "kind": "cleanser", "collections": ["nettoyants-et-lotions"], "care_types": ["lait", "eau", "mousse", "gel", "pain", "nettoyant"] },
     "gentle_cleanser": { "kind": "cleanser", "collections": ["nettoyants-et-lotions"], "care_types": ["lait", "eau", "mousse", "pain"] },
     "lotion": { "kind": "lotion", "concern_required": true, "collections": ["exfoliant-lotion-gommage"], "care_types": ["lotion"] },
+    "exfoliant": { "kind": "exfoliant", "concern_required": true, "collections": ["exfoliant-lotion-gommage"], "care_types": ["gommage", "exfoliant"] },
     "weekly_mask": { "kind": "mask", "concern_required": true, "collections": ["masques-patch"], "care_types": ["masque"] },
     "eye_care": { "kind": "eye_care", "concern_required": true, "area": "eyes", "collections": ["soins-contour-des-yeux"] },
     "targeted_eye_treatment": { "kind": "eye_care", "concern_required": true, "area": "eyes", "collections": ["soins-contour-des-yeux"] },
@@ -405,6 +406,90 @@
         "clogged_pores": "Clogged pores", "tired_eyes": "Tired eyes", "early_signs": "First fine lines", "dark_circles": "Dark circles",
         "puffiness": "Puffiness", "fatigue": "Fatigue", "eye_wrinkles": "Eye wrinkles", "mature_eye_area": "Mature eye area",
         "advanced_eye_wrinkles": "Deep eye wrinkles"
+      }
+    },
+    "it": {
+      "body_area": { "face": "Viso", "eyes": "Contorno occhi", "body": "Corpo" },
+      "skin_type": { "very_dry": "Molto secca", "dry": "Secca", "normal": "Normale", "combination": "Mista", "oily": "Grassa", "sensitive": "Sensibile", "unknown": "Non lo so" },
+      "sensitivity": { "sensitive": "Sì, sensibile", "none": "No" },
+      "routine_scope": { "targeted": "Un trattamento mirato", "essential": "Una routine essenziale", "complete": "Una routine completa", "complete_existing": "Completare la mia routine" },
+      "current_routine": { "none": "Nessuna routine", "moisturiser": "Una crema", "cleanser+moisturiser": "Detergente e crema", "cleanser+serum+moisturiser": "Detergente, siero e crema" },
+      "age_band": { "under_30": "Meno di 30 anni", "30_44": "Da 30 a 44 anni", "45_59": "Da 45 a 59 anni", "60_plus": "60 anni e oltre" },
+      "concern": {
+        "dehydration": "Disidratazione", "dryness": "Secchezza", "tightness": "Sensazione di tensione", "lack_of_comfort": "Mancanza di comfort",
+        "dullness": "Colorito spento", "tired_skin": "Pelle stanca", "lack_of_radiance": "Mancanza di luminosità", "early_signs_of_ageing": "Prime rughe",
+        "loss_of_firmness": "Perdita di compattezza", "loss_of_tone": "Perdita di tono", "facial_contours": "Contorni del viso", "wrinkles": "Rughe",
+        "firmness": "Compattezza", "loss_of_density": "Perdita di densità", "mature_skin": "Pelle matura", "global_signs_of_ageing": "Segni dell’età",
+        "deep_wrinkles": "Rughe marcate", "significant_loss_of_density": "Forte perdita di densità", "advanced_loss_of_firmness": "Rilassamento marcato", "regeneration": "Rigenerazione",
+        "demanding_mature_skin": "Pelle matura esigente", "dark_spots": "Macchie", "pigmentation": "Pigmentazione", "uneven_tone": "Incarnato irregolare",
+        "lack_of_uniformity": "Mancanza di uniformità", "sensitivity": "Sensibilità", "reactive_skin": "Pelle reattiva", "discomfort": "Disagio cutaneo",
+        "redness": "Rossori", "irritation": "Irritazioni", "excess_sebum": "Eccesso di sebo", "shine": "Lucidità",
+        "imperfections": "Imperfezioni", "clogged_pores": "Pori ostruiti", "tired_eyes": "Sguardo stanco", "early_signs": "Prime linee sottili",
+        "dark_circles": "Occhiaie", "puffiness": "Borse", "fatigue": "Stanchezza", "eye_wrinkles": "Rughe del contorno occhi",
+        "mature_eye_area": "Contorno occhi maturo", "advanced_eye_wrinkles": "Rughe marcate del contorno occhi"
+      }
+    },
+    "de": {
+      "body_area": { "face": "Gesicht", "eyes": "Augenpartie", "body": "Körper" },
+      "skin_type": { "very_dry": "Sehr trocken", "dry": "Trocken", "normal": "Normal", "combination": "Mischhaut", "oily": "Fettig", "sensitive": "Empfindlich", "unknown": "Ich weiß es nicht" },
+      "sensitivity": { "sensitive": "Ja, empfindlich", "none": "Nein" },
+      "routine_scope": { "targeted": "Ein gezieltes Produkt", "essential": "Eine Basisroutine", "complete": "Eine komplette Routine", "complete_existing": "Meine Routine ergänzen" },
+      "current_routine": { "none": "Keine Routine", "moisturiser": "Eine Creme", "cleanser+moisturiser": "Reinigung und Creme", "cleanser+serum+moisturiser": "Reinigung, Serum und Creme" },
+      "age_band": { "under_30": "Unter 30 Jahren", "30_44": "30 bis 44 Jahre", "45_59": "45 bis 59 Jahre", "60_plus": "60 Jahre und älter" },
+      "concern": {
+        "dehydration": "Feuchtigkeitsmangel", "dryness": "Trockenheit", "tightness": "Spannungsgefühl", "lack_of_comfort": "Mangelndes Wohlgefühl",
+        "dullness": "Fahler Teint", "tired_skin": "Müde Haut", "lack_of_radiance": "Mangelnde Ausstrahlung", "early_signs_of_ageing": "Erste Falten",
+        "loss_of_firmness": "Festigkeitsverlust", "loss_of_tone": "Spannkraftverlust", "facial_contours": "Gesichtskonturen", "wrinkles": "Falten",
+        "firmness": "Festigkeit", "loss_of_density": "Dichteverlust", "mature_skin": "Reife Haut", "global_signs_of_ageing": "Zeichen der Hautalterung",
+        "deep_wrinkles": "Tiefe Falten", "significant_loss_of_density": "Starker Dichteverlust", "advanced_loss_of_firmness": "Deutliche Erschlaffung", "regeneration": "Regeneration",
+        "demanding_mature_skin": "Anspruchsvolle reife Haut", "dark_spots": "Pigmentflecken", "pigmentation": "Pigmentierung", "uneven_tone": "Ungleichmäßiger Teint",
+        "lack_of_uniformity": "Unebenes Hautbild", "sensitivity": "Empfindlichkeit", "reactive_skin": "Reaktive Haut", "discomfort": "Hautunbehagen",
+        "redness": "Rötungen", "irritation": "Reizungen", "excess_sebum": "Überschüssiger Talg", "shine": "Glanz",
+        "imperfections": "Unreinheiten", "clogged_pores": "Verstopfte Poren", "tired_eyes": "Müder Blick", "early_signs": "Erste Fältchen",
+        "dark_circles": "Augenringe", "puffiness": "Tränensäcke", "fatigue": "Müdigkeit", "eye_wrinkles": "Fältchen um die Augen",
+        "mature_eye_area": "Reife Augenpartie", "advanced_eye_wrinkles": "Tiefe Fältchen um die Augen"
+      }
+    },
+    "nl": {
+      "body_area": { "face": "Gezicht", "eyes": "Oogcontour", "body": "Lichaam" },
+      "skin_type": { "very_dry": "Zeer droog", "dry": "Droog", "normal": "Normaal", "combination": "Gemengd", "oily": "Vet", "sensitive": "Gevoelig", "unknown": "Ik weet het niet" },
+      "sensitivity": { "sensitive": "Ja, gevoelig", "none": "Nee" },
+      "routine_scope": { "targeted": "Eén gericht product", "essential": "Een basisroutine", "complete": "Een volledige routine", "complete_existing": "Mijn routine aanvullen" },
+      "current_routine": { "none": "Geen routine", "moisturiser": "Een crème", "cleanser+moisturiser": "Reiniger en crème", "cleanser+serum+moisturiser": "Reiniger, serum en crème" },
+      "age_band": { "under_30": "Jonger dan 30", "30_44": "30 tot 44 jaar", "45_59": "45 tot 59 jaar", "60_plus": "60 jaar en ouder" },
+      "concern": {
+        "dehydration": "Uitdroging", "dryness": "Droogte", "tightness": "Trekkerig gevoel", "lack_of_comfort": "Gebrek aan comfort",
+        "dullness": "Doffe teint", "tired_skin": "Vermoeide huid", "lack_of_radiance": "Gebrek aan uitstraling", "early_signs_of_ageing": "Eerste rimpels",
+        "loss_of_firmness": "Verlies van stevigheid", "loss_of_tone": "Verlies van spankracht", "facial_contours": "Gezichtscontouren", "wrinkles": "Rimpels",
+        "firmness": "Stevigheid", "loss_of_density": "Verlies van dichtheid", "mature_skin": "Rijpere huid", "global_signs_of_ageing": "Tekenen van veroudering",
+        "deep_wrinkles": "Diepe rimpels", "significant_loss_of_density": "Sterk verlies van dichtheid", "advanced_loss_of_firmness": "Duidelijke verslapping", "regeneration": "Herstel",
+        "demanding_mature_skin": "Veeleisende rijpere huid", "dark_spots": "Pigmentvlekken", "pigmentation": "Pigmentatie", "uneven_tone": "Ongelijkmatige teint",
+        "lack_of_uniformity": "Ongelijkmatige huid", "sensitivity": "Gevoeligheid", "reactive_skin": "Reactieve huid", "discomfort": "Ongemak",
+        "redness": "Roodheid", "irritation": "Irritaties", "excess_sebum": "Overmatige talg", "shine": "Glans",
+        "imperfections": "Onzuiverheden", "clogged_pores": "Verstopte poriën", "tired_eyes": "Vermoeide blik", "early_signs": "Eerste fijne lijntjes",
+        "dark_circles": "Donkere kringen", "puffiness": "Wallen", "fatigue": "Vermoeidheid", "eye_wrinkles": "Rimpels rond de ogen",
+        "mature_eye_area": "Rijpere oogcontour", "advanced_eye_wrinkles": "Diepe rimpels rond de ogen"
+      }
+    },
+    "es": {
+      "body_area": { "face": "Rostro", "eyes": "Contorno de ojos", "body": "Cuerpo" },
+      "skin_type": { "very_dry": "Muy seca", "dry": "Seca", "normal": "Normal", "combination": "Mixta", "oily": "Grasa", "sensitive": "Sensible", "unknown": "No lo sé" },
+      "sensitivity": { "sensitive": "Sí, sensible", "none": "No" },
+      "routine_scope": { "targeted": "Un tratamiento específico", "essential": "Una rutina esencial", "complete": "Una rutina completa", "complete_existing": "Completar mi rutina" },
+      "current_routine": { "none": "Ninguna rutina", "moisturiser": "Una crema", "cleanser+moisturiser": "Limpiador y crema", "cleanser+serum+moisturiser": "Limpiador, sérum y crema" },
+      "age_band": { "under_30": "Menos de 30 años", "30_44": "De 30 a 44 años", "45_59": "De 45 a 59 años", "60_plus": "60 años o más" },
+      "concern": {
+        "dehydration": "Deshidratación", "dryness": "Sequedad", "tightness": "Tirantez", "lack_of_comfort": "Falta de confort",
+        "dullness": "Tez apagada", "tired_skin": "Piel cansada", "lack_of_radiance": "Falta de luminosidad", "early_signs_of_ageing": "Primeras arrugas",
+        "loss_of_firmness": "Pérdida de firmeza", "loss_of_tone": "Pérdida de tono", "facial_contours": "Contornos del rostro", "wrinkles": "Arrugas",
+        "firmness": "Firmeza", "loss_of_density": "Pérdida de densidad", "mature_skin": "Piel madura", "global_signs_of_ageing": "Signos de la edad",
+        "deep_wrinkles": "Arrugas marcadas", "significant_loss_of_density": "Fuerte pérdida de densidad", "advanced_loss_of_firmness": "Flacidez marcada", "regeneration": "Regeneración",
+        "demanding_mature_skin": "Piel madura exigente", "dark_spots": "Manchas", "pigmentation": "Pigmentación", "uneven_tone": "Tono irregular",
+        "lack_of_uniformity": "Falta de uniformidad", "sensitivity": "Sensibilidad", "reactive_skin": "Piel reactiva", "discomfort": "Incomodidad",
+        "redness": "Rojeces", "irritation": "Irritaciones", "excess_sebum": "Exceso de sebo", "shine": "Brillos",
+        "imperfections": "Imperfecciones", "clogged_pores": "Poros obstruidos", "tired_eyes": "Mirada cansada", "early_signs": "Primeras líneas finas",
+        "dark_circles": "Ojeras", "puffiness": "Bolsas", "fatigue": "Cansancio", "eye_wrinkles": "Arrugas del contorno de ojos",
+        "mature_eye_area": "Contorno de ojos maduro", "advanced_eye_wrinkles": "Arrugas marcadas del contorno de ojos"
       }
     }
   },

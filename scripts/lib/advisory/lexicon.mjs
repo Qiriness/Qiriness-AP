@@ -6,7 +6,7 @@
  * wrinkles » both give skin_type dry and primary concern early_signs_of_ageing
  * without a tool round.
  *
- * LANGUAGE, NOT BRAND. The tables (lexicon-fr.mjs, lexicon-en.mjs) hold
+ * LANGUAGE, NOT BRAND. The tables (i18n/<code>/lexicon.mjs) hold
  * ordinary skincare phrasing; the values they produce are the config's
  * vocabulary keys, and an update whose value the shop's config does not know
  * is dropped by `mergeProfile`. What the lexicon misses, the model adds
@@ -21,10 +21,10 @@
 
 import { norm } from './text.mjs';
 import { ingredientKey } from './ingredients.mjs';
-import fr from './lexicon-fr.mjs';
-import en from './lexicon-en.mjs';
+import { LEXICONS } from '../i18n/languages.mjs';
 
-export const LANGUAGES = [fr, en];
+/** Every supported language's table (i18n/<code>/lexicon.mjs), in reading order. */
+export const LANGUAGES = LEXICONS;
 
 /**
  * Concern keys in matching order (specific first), with the eye-area concern
@@ -62,7 +62,8 @@ const CONCERN_ORDER = [
 const SKIN_TYPE_ORDER = ['very_dry', 'dry', 'normal', 'combination', 'oily'];
 const SENSITIVITY_ORDER = ['none', 'reactive', 'sensitive'];
 const ROUTINE_STEP_ORDER = ['night_cream', 'eye_care', 'cleanser', 'serum', 'lotion', 'mask', 'moisturiser'];
-const DESIRED_ORDER = ['serum', 'night_cream', 'eye_care', 'cleanser', 'mask', 'moisturiser'];
+// The exfoliant before the mask: « un masque exfoliant » is an exfoliant (owner, 2026-10-29).
+const DESIRED_ORDER = ['serum', 'night_cream', 'eye_care', 'cleanser', 'exfoliant', 'mask', 'moisturiser'];
 const SCOPE_ORDER = ['complete', 'complete_existing', 'essential', 'targeted'];
 const REQUEST_ORDER = ['basic_routine', 'gift', 'spa'];
 const ROUTINE_TIME_ORDER = ['both', 'day', 'night'];
@@ -107,7 +108,8 @@ const L = {
   routineAsk: union((l) => l.routineAsk),
   routineWord: union((l) => l.routineWord),
   dontKnow: union((l) => l.dontKnow),
-  caution: union((l) => l.caution)
+  caution: union((l) => l.caution),
+  accessoryAsk: union((l) => l.accessoryAsk)
 };
 
 /** The areas the face routines do not cover, read in this order (owner's notes v4): one product for the need. */
@@ -119,6 +121,11 @@ export const BODY_AREAS = ['hands', 'lips', 'feet', 'body'];
  */
 export function mentionsCaution(message) {
   return L.caution.test(` ${norm(message)} `);
+}
+
+/** An accessory or a device asked for (FR/EN, owner, 2026-10-29): without it, none is offered. */
+export function asksForAccessory(message) {
+  return L.accessoryAsk.test(` ${norm(message)} `);
 }
 
 /** A concern's eye-area version (« Rides » chosen with a button while the eyes are discussed): eye_wrinkles. */
