@@ -14,6 +14,11 @@ export function fixture() {
   const cart = { currency: 'EUR', originalSubtotal: 4000, subtotal: 4000, total: 4000, lines: [{ productId: P1, variantId: V1, quantity: 1, unitPrice: 4000, originalTotal: 4000, finalTotal: 4000 }], discounts: [], codes: [], enteredCodesAvailable: false };
   return { source, cart, promotion };
 }
+/** The fixture's offer as an automatic one: the chat never offers a code the customer did not type (owner, 2026-11-02). */
+export function asAutomatic(promotion) {
+  Object.assign(promotion, { method: 'automatic', codes: [], describable_in_replies: true, discount_type: String(promotion.discount_type ?? '').replace('DiscountCode', 'DiscountAutomatic') });
+  return promotion;
+}
 export function addSecond(cart, quantity = 1) {
   cart.lines.push({ productId: P2, variantId: V2, quantity, unitPrice: 1000, originalTotal: 1000 * quantity, finalTotal: 1000 * quantity });
   cart.originalSubtotal += 1000 * quantity; cart.subtotal += 1000 * quantity; cart.total += 1000 * quantity;

@@ -10,6 +10,21 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The widget follows Weglot's language (2026-11-02)
+
+Owner: « the chatbot text still doesn't change when I change the Shopify language ». The live store translates with **Weglot**: Shopify serves every page in French (`Shopify.locale = "fr"`, `<html lang="fr">`) and Weglot rewrites the page in the browser, so the embed's `t` filter only ever gave French, and Weglot machine-translated whatever widget text existed at load (« Individuelle Beratung ») and not the greeting or buttons drawn later.
+- `assets/advisor-strings.js` (generated: `npm run advisor:widget-strings`, from locales/*.json and the embed's own key map; a test fails when stale): the widget's words in its six languages, with `detect()` (Weglot's `getCurrentLang()`, else the URL's « /de/ », else `<html lang>`) and `apply()`. The loader fetches it only when Weglot is on the page or the URL's language is not Shopify's, waits for Weglot (≤ 1.5 s), and applies the language before drawing; a greeting or banner text the merchant wrote in the theme editor stays theirs. `context.locale` follows, so the chat's replies, buttons and routines come in that language too.
+- The widget's root carries `data-wg-notranslate`, `translate="no"` and `notranslate`: Weglot and the browser no longer machine-translate it.
+- `advisor.js` 9.9 KB (Theme Check cap 10 KB). **Checked:** the generator test (fresh; German applied with the shop name; merchant text kept), `npm test`. Not viewed in a browser (no jsdom here); needs `shopify app deploy`.
+
+## A code the customer names is checked, whatever it is (2026-11-02)
+
+Owner: « if the user mentions a code that exists, the chatbot checks and answers using code information » — no longer only « Proposable » codes or codes in the cart. `createNamedCodeReader` looks up the codes typed in the conversation (letters with a digit, or after « code », at most three, case-insensitive) by that exact code: any code discount of the shop, live or expired, Klaviyo's unique ones included (« PANIER-SGDR64LH » → CHECKOUT_OFFRE, 10 %). They join that turn's shopping data as the customer's own, so `evaluate_promotions_for_cart` answers from their rules; nothing is looked up when no code is typed, and the chat still never offers a code. **Checked:** a shopping test (named Klaviyo code evaluated, unknown code not found, no lookup without a code), the reader on the live shop, `npm test`, `tsc`. Needs the web deploy.
+
+## The storefront chat offers no promo code; the email agent still does (2026-11-02)
+
+Owner: « why are these codes being given? » (the chat volunteered QIRINESS10, QIRINESS20 and QIRINESS30), then « email agent offers them, chatbot doesn't, no need for switch now ». « Proposable » (`offerable_in_replies`, Agent setup → Promotions) stays the email agent's switch. In the chat, `createShoppingTurn` keeps a code offer in the shopping data only when the customer typed that code in the conversation or has it in the cart, so no tool lists it, attaches it to a product or suggests it as the best saving; automatic offers are untouched; a prompt line forbids naming a code the customer did not bring; the existing backstop still blanks any other code in a reply. Tests that used a code fixture as « an offer » now use an automatic one (`asAutomatic`); a new test checks the rule. **Checked:** `npm test` 3951/3951. Needs the web deploy.
+
 ## The panel's eyebrow: « Qiriness à votre service » (2026-11-02)
 
 Owner: replace « Conseil personnalisé » with « Qiriness à votre service ». Written as `{{ shop }} à votre service` (the shop's name from Shopify, as the title already is), in all six languages: « at your service », « al Suo servizio », « ist für Sie da », « tot uw dienst », « a su servicio ». Needs `shopify app deploy`.

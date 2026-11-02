@@ -1,10 +1,7 @@
 /*
- * Storefront advisor — the loader. Draws the launcher only; the panel
- * (advisor-panel.js) is fetched the first time a customer opens it, or at once
- * when the panel was left open on the previous page (desktop).
- *
- * Everything shop-specific arrives in the JSON config the app embed writes next
- * to the root element. Nothing here knows a backend URL, a shop or a key.
+ * Storefront advisor — the loader (Theme Check caps it at 10 KB). Draws the launcher; the panel
+ * (advisor-panel.js) is fetched on first open, or at once if left open on the previous page.
+ * Everything shop-specific is in the embed's JSON config: no backend URL, shop or key here.
  */
 (function () {
   'use strict';
@@ -31,7 +28,27 @@
     }
     root.setAttribute('data-ready', 'true');
     decodeConfigText(config);
+    // Another language than Shopify's (Weglot): our own words in it (advisor-strings.js).
+    var shopLang = String((config.context || {}).locale || '').slice(0, 2);
+    var pageLang = String((location.pathname.match(/^\/([a-z]{2})(\/|$)/) || [])[1] || document.documentElement.lang || '').slice(0, 2);
+    if (config.stringsScript && (window.Weglot || (pageLang && pageLang !== shopLang))) {
+      var s = document.createElement('script');
+      s.src = config.stringsScript;
+      s.onload = s.onerror = function () {
+        var words = window.StorefrontAdvisorStrings;
+        if (!words) return draw(root, config);
+        words.ready(function () {
+          var lang = words.detect();
+          if (lang && lang !== shopLang) words.apply(config, lang);
+          draw(root, config);
+        });
+      };
+      return document.head.appendChild(s);
+    }
+    draw(root, config);
+  }
 
+  function draw(root, config) {
     var strings = config.strings || {};
     var launcher = document.createElement('button');
     launcher.type = 'button';
@@ -176,12 +193,7 @@
     }
   }
 
-  /*
-   * Liquid's `t` filter HTML-escapes every translation (« dites-m'en » arrives
-   * as `dites-m&#39;en`), and the widget writes text with textContent, never as
-   * HTML, so the entity would show literally. Decode once here; the panel gets
-   * plain text. DOMParser builds an inert document: nothing in it runs.
-   */
+  /* Liquid's `t` HTML-escapes (« m&#39;en »); we write textContent, so decode once. DOMParser runs nothing. */
   function decodeConfigText(config) {
     var parser = typeof DOMParser === 'function' ? new DOMParser() : null;
     function decode(value) {

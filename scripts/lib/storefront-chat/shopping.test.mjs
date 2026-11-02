@@ -6,7 +6,7 @@ import { createShoppingReader } from './shopping-repository.mjs';
 import { createShoppingTurn } from './shopping-tools.mjs';
 import { parseChatRequest } from './request-schema.mjs';
 import { createLlmAgent } from './llm-agent.mjs';
-import { SHOPPING_CASES, fixture, addSecond, NOW, P1, V1, V2 } from './shopping-cases.mjs';
+import { SHOPPING_CASES, fixture, addSecond, asAutomatic, NOW, P1, V1, V2 } from './shopping-cases.mjs';
 
 for (const c of SHOPPING_CASES) test(`French cart case ${c.id}: ${c.question}`, () => {
   const f = fixture(); c.change?.(f);
@@ -284,7 +284,7 @@ test('free delivery is evaluated against the cart: the minimum, the gap, the des
 });
 
 test('an offers question that came with a cart also evaluates the cart', async () => {
-  const f = fixture();
+  const f = fixture(); asAutomatic(f.promotion);
   const withCart = await createShoppingTurn({ message: 'Quelle offre puis-je avoir ?', shopDomain: f.source.shopDomain, cart: f.cart, readShopping: async () => f.source }).opening();
   assert.deepEqual(withCart.results.map((r) => r.tool), ['get_active_promotions', 'evaluate_promotions_for_cart', 'simulate_offers']);
   const noCart = await createShoppingTurn({ message: 'Quelle offre puis-je avoir ?', shopDomain: f.source.shopDomain, cart: null, readShopping: async () => f.source }).opening();
@@ -362,7 +362,7 @@ test('a private code the shopper applied is named back to them and used for stac
 });
 
 test('a follow-up with a cart, after a shopping reply, is evaluated again — without a shopping word', async () => {
-  const f = fixture();
+  const f = fixture(); asAutomatic(f.promotion);
   const history = [
     { role: 'user', content: 'What is in my basket?' },
     { role: 'assistant', content: 'Your basket contains…', context: { trace: { shopping: { route: 'shopping_context' } } } }
@@ -396,7 +396,7 @@ test('one product discount per line: an offer whose lines are all discounted alr
 });
 
 test('an amount names the offer: « why did the 30 % not apply? » evaluates that offer, marked', async () => {
-  const f = fixture();
+  const f = fixture(); asAutomatic(f.promotion);
   const pct = Math.round(getActivePromotions(f.source, {}, NOW).promotions[0].reward.percentage ?? 0);
   const turn = createShoppingTurn({ message: `why did the ${pct} percent off not apply?`, shopDomain: f.source.shopDomain, cart: f.cart, readShopping: async () => f.source });
   const opening = await turn.opening();
@@ -456,7 +456,7 @@ test('a public automatic offer named like a code is that offer, and its name is 
 });
 
 test('a shopping question with a cart that names no known word still evaluates the cart, with the best combination', async () => {
-  const f = fixture();
+  const f = fixture(); asAutomatic(f.promotion);
   const turn = createShoppingTurn({ readShopping: async () => f.source, shopDomain: f.source.shopDomain, cart: f.cart, message: 'Why did it apply to my checkout and not the free one?', baseCurrency: 'EUR' });
   const opening = await turn.opening();
   assert.deepEqual(opening.results.map((r) => r.tool), ['get_cart_context', 'evaluate_promotions_for_cart', 'simulate_offers']);
@@ -501,4 +501,31 @@ test('a code we cannot see gets reasoning from the cart: an applied code that re
   await turn.run('get_cart_context');
   assert.equal(turn.sanitizeReply('Le code QIRINESS10 ne se cumule pas avec BIENVENUE20.'), 'Le code QIRINESS10 ne se cumule pas avec BIENVENUE20.', 'the customer typed it; BIENVENUE20 is in their cart');
   assert.ok(!turn.sanitizeReply('Essayez SECRET99.').includes('SECRET99'));
+});
+
+test('the chat offers no code: a « Proposable » code reaches the tools only once the customer types it or has it in the cart', async () => {
+  // Owner, 2026-11-02: « email agent offers them, chatbot doesn't ».
+  const f = fixture();
+  const listed = async (message, cart = null) => (await createShoppingTurn({ message, shopDomain: f.source.shopDomain, cart, readShopping: async () => f.source }).run('get_active_promotions')).promotions.map((p) => p.code);
+  assert.deepEqual(await listed('Quelles sont les offres du moment ?'), []);
+  assert.deepEqual(await listed('Est-ce que le code WELCOME20 marche ?'), ['WELCOME20']);
+  assert.deepEqual(await listed('Pourquoi ma remise ne marche pas ?', { ...f.cart, codes: ['WELCOME20'] }), ['WELCOME20']);
+});
+
+test('a code the customer names is checked from its own rules, « Proposable » or not, in the cart or not', async () => {
+  // Owner, 2026-11-02: « if the user mentions a code that exists, the chatbot checks and answers using the code's information ».
+  const f = fixture();
+  const klaviyo = { ...structuredClone(f.promotion), id: 'klaviyo', title: 'CHECKOUT_OFFRE', codes: [{ code: 'PANIER-SGDR64LH' }], offerable_in_replies: false };
+  const asked = [];
+  const readNamedCodes = async (shop, codes) => { asked.push(...codes); return codes.includes('PANIER-SGDR64LH') ? [klaviyo] : []; };
+  const turn = (message) => createShoppingTurn({ message, shopDomain: f.source.shopDomain, cart: f.cart, readShopping: async () => ({ ...f.source, promotions: [] }), readNamedCodes });
+  const result = await turn('mon code panier-sgdr64lh ne marche pas').run('evaluate_promotions_for_cart', { code: 'PANIER-SGDR64LH' });
+  assert.equal(result.status, 'ok');
+  assert.equal(result.promotions[0].promotion_id, 'klaviyo');
+  assert.deepEqual(asked, ['PANIER-SGDR64LH']);
+  const unknown = await turn('le code INCONNU99 ?').run('evaluate_promotions_for_cart', { code: 'INCONNU99' });
+  assert.equal(unknown.status, 'not_found');
+  asked.length = 0;
+  assert.deepEqual((await turn('Quelles sont les offres ?').run('get_active_promotions')).promotions, []);
+  assert.deepEqual(asked, [], 'no code typed: nothing looked up');
 });

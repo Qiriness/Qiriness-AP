@@ -23,7 +23,9 @@
 -%}
 <div
   id="storefront-advisor"
-  class="sa-root sa-root--{{ block.settings.position }}"
+  class="sa-root sa-root--{{ block.settings.position }} notranslate"
+  translate="no"
+  data-wg-notranslate
   style="--sa-accent: {{ block.settings.accent_color }};{% if block.settings.font_heading != blank %} --sa-heading: '{{ block.settings.font_heading | strip | escape }}', Georgia, serif;{% endif %}{% if block.settings.font_body != blank %} --sa-body: '{{ block.settings.font_body | strip | escape }}', 'Helvetica Neue', Arial, sans-serif;{% endif %}"
 ></div>
 <script type="application/json" id="storefront-advisor-config">
@@ -32,6 +34,13 @@
     "endpoint": {{ endpoint | json }},
     "panelScript": {{ 'advisor-panel.js' | asset_url | json }},
     "cartScript": {{ 'advisor-cart.js' | asset_url | json }},
+    "stringsScript": {{ 'advisor-strings.js' | asset_url | json }},
+    "shopName": {{ shop.name | json }},
+    "custom": {
+      "greeting": {% if block.settings.greeting != blank %}true{% else %}false{% endif %},
+      "bannerText": {% if block.settings.banner_text != blank %}true{% else %}false{% endif %},
+      "bannerButton": {% if block.settings.banner_button != blank %}true{% else %}false{% endif %}
+    },
     "fontsUrl": {{ block.settings.fonts_url | strip | json }},
     "termsPath": {{ block.settings.terms_path | strip | json }},
     "context": {

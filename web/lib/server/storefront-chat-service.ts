@@ -39,7 +39,7 @@ import { loadCompany } from "../../../scripts/lib/company.mjs";
 import { createMockAgent } from "../../../scripts/lib/storefront-chat/agent.mjs";
 import { loadCatalogue } from "../../../scripts/lib/storefront-chat/product-repository.mjs";
 import { loadKnowledge, createProductPolicyReader, KNOWLEDGE_TTL_MS } from "../../../scripts/lib/storefront-chat/knowledge-repository.mjs";
-import { createShoppingReader, createPublicPromotionReader, createRoutineCodeReader } from "../../../scripts/lib/storefront-chat/shopping-repository.mjs";
+import { createNamedCodeReader, createShoppingReader, createPublicPromotionReader, createRoutineCodeReader } from "../../../scripts/lib/storefront-chat/shopping-repository.mjs";
 import { parseAllowedShops } from "../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
 import { refsFromHistory } from "../../../scripts/lib/storefront-chat/conversation-refs.mjs";
 import { advisorStateFromHistory } from "../../../scripts/lib/storefront-chat/advisor-state.mjs";
@@ -409,6 +409,7 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
     knowledge,
     readProductPolicies: toolsOn && shop ? await productPolicyReader(reader, shop.id, devCatalogue, catalogue) : null,
     readShopping: toolsOn ? createShoppingReader(reader) : null,
+    readNamedCodes: toolsOn ? createNamedCodeReader(reader) : null,
     readRoutineCode: toolsOn ? createRoutineCodeReader(reader) : null,
     readPublicPromotions: toolsOn && shop ? createPublicPromotionReader(reader, { shopId: shop.id, catalogueShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain, allowedShops: parseAllowedShops(process.env.STOREFRONT_CHAT_ALLOWED_SHOPS) }) : null,
     // The shop whose prices the catalogue holds, so its currency is known:

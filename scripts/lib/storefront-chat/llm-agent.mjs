@@ -129,6 +129,7 @@ function rangesByHandle(knowledge) {
  *   knowledge?: object | null,
  *   readProductPolicies?: Function | null,
  *   readShopping?: Function | null,
+ *   readNamedCodes?: Function | null,
  *   readPublicPromotions?: Function | null,
  *   readRoutineCode?: Function | null,
  *   catalogueShopDomain?: string | null,
@@ -164,6 +165,7 @@ export function createLlmAgent({
   knowledge = null,
   readProductPolicies = null,
   readShopping = null,
+  readNamedCodes = null,
   readPublicPromotions = null,
   readRoutineCode = null,
   catalogueShopDomain = null,
@@ -327,7 +329,7 @@ export function createLlmAgent({
       // THE ROUTINE DISCOUNT (owner, 2026-10-17): applied with a finished routine, never named; the
       // shopping data the model reads says « remise routine » in its place.
       const routineDiscount = advisor?.routineDiscount ?? null;
-      const shopping = readShopping ? createShoppingTurn({ readShopping: (domain) => withDeadline(readShopping(domain), 2500), readPublicPromotions: readPublicPromotions ? (domain) => withDeadline(readPublicPromotions(domain), 2500) : null, shopDomain, cart, context, message, history, resolvedProducts: [...resolvedIds].map(byId).filter(Boolean), baseCurrency: shopDomain === catalogueShopDomain ? currency : null, hiddenCodes: routineDiscount ? [routineDiscount] : [] }) : null;
+      const shopping = readShopping ? createShoppingTurn({ readShopping: (domain) => withDeadline(readShopping(domain), 2500), readPublicPromotions: readPublicPromotions ? (domain) => withDeadline(readPublicPromotions(domain), 2500) : null, readNamedCodes: readNamedCodes ? (domain, codes) => withDeadline(readNamedCodes(domain, codes), 1500) : null, shopDomain, cart, context, message, history, resolvedProducts: [...resolvedIds].map(byId).filter(Boolean), baseCurrency: shopDomain === catalogueShopDomain ? currency : null, hiddenCodes: routineDiscount ? [routineDiscount] : [] }) : null;
       const shoppingOpening = shopping ? await shopping.opening() : null;
       const retrievalMs = Date.now() - retrievalStarted;
 

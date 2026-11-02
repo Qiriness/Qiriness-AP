@@ -69,6 +69,25 @@ export function createRoutineCodeReader(db, { now = Date.now, ttlMs = SHOPPING_T
   };
 }
 
+/**
+ * A CODE THE CUSTOMER NAMED, looked up by that exact code (owner, 2026-11-02: « if the user mentions a
+ * code that exists, the chatbot checks and answers using the code's information »): any code discount
+ * of the shop, « Proposable » or not, live or expired, a Klaviyo unique code (« PANIER-SGDR64LH ») too.
+ * Read only for the codes typed in the conversation, at most three, never listed: the customer already
+ * holds the code, so its own rules disclose nothing to them.
+ */
+export function createNamedCodeReader(db) {
+  return async function readNamedCodes(shopDomain, codes) {
+    const wanted = [...new Set((codes ?? []).map((c) => String(c).toUpperCase()).filter((c) => /^[A-Z0-9_-]{3,80}$/.test(c)))].slice(0, 3);
+    if (!wanted.length || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shopDomain || '')) return [];
+    const shops = await db.selectAll('shops', { shop_domain: shopDomain }, 'id');
+    if (!shops[0]?.id) return [];
+    const live = { shop_id: shops[0].id, deleted_at: { operator: 'is', value: 'null' }, method: 'code' };
+    const found = await Promise.all(wanted.map((code) => db.selectAll('promotions', { ...live, codes: { operator: 'cs', value: JSON.stringify([{ code }]) } }, SHOPPING_PROMOTION_COLUMNS)));
+    return found.flat();
+  };
+}
+
 export function isPublicPromotion(p) {
   return p?.method === 'code' ? p.offerable_in_replies === true : p?.method === 'automatic' && p.describable_in_replies === true;
 }

@@ -5,7 +5,7 @@ import { retrieveKnowledge } from './knowledge-router.mjs';
 import { buildKnowledge } from './knowledge-repository.mjs';
 import { languageContext } from './conversation-language.mjs';
 import { createShoppingTurn } from './shopping-tools.mjs';
-import { fixture } from './shopping-cases.mjs';
+import { asAutomatic, fixture } from './shopping-cases.mjs';
 import { createPublicPromotionReader } from './shopping-repository.mjs';
 
 const HISTORY = [
@@ -60,7 +60,7 @@ test('Country continuation never revives delivery after the topic has changed', 
 
 test('Free shipping reads public promotion terms without estimating delivery cost', async () => {
   const f = fixture();
-  f.promotion.discount_type = 'DiscountCodeFreeShipping';
+  f.promotion.discount_type = 'DiscountCodeFreeShipping'; asAutomatic(f.promotion);
   f.promotion.rule_snapshot.minimum_requirement = { type: 'subtotal', amount: '70', currency: 'EUR' };
   f.promotion.rule_snapshot.destination = { scope: 'countries', countries: ['FR'], include_rest_of_world: false };
   const turn = createShoppingTurn({ message: 'Can I get free shipping?', readShopping: async () => f.source, shopDomain: f.source.shopDomain });
@@ -76,13 +76,14 @@ test('Free shipping reads public promotion terms without estimating delivery cos
 });
 
 test('Unsynced dev shop can preview public brand offers without borrowing cart eligibility or stock', async () => {
-  const f = fixture(); let previews = 0;
+  const f = fixture(); asAutomatic(f.promotion); let previews = 0;
   const turn = createShoppingTurn({ message: 'What offers are available?', shopDomain: 'dev.myshopify.com', readShopping: async () => ({ status: 'unavailable', reason: 'shop_not_synced' }), readPublicPromotions: async () => { previews++; return f.source; } });
   const result = await turn.run('get_active_promotions');
   assert.equal(result.status, 'ok');
   assert.equal(result.store_eligibility, 'not_confirmed');
   assert.equal(result.offer_preview, true);
-  assert.equal(result.promotions[0].code, 'WELCOME20');
+  assert.equal(result.promotions[0].name, f.promotion.title);
+  assert.equal(result.promotions[0].code, null);
   assert.equal((await turn.run('evaluate_promotions_for_cart')).status, 'unavailable');
   assert.equal((await turn.run('get_stock_context')).status, 'unavailable');
   assert.equal(previews, 1);
@@ -114,7 +115,7 @@ test('Preview is not used to mask a real shopping source outage', async () => {
 });
 
 test('Language and public promotion preview reach the same opening call on a France follow-up', async () => {
-  const f = fixture(); f.promotion.discount_type = 'DiscountCodeFreeShipping';
+  const f = fixture(); f.promotion.discount_type = 'DiscountCodeFreeShipping'; asAutomatic(f.promotion);
   f.promotion.rule_snapshot.minimum_requirement = { type: 'subtotal', amount: '70', currency: 'EUR' };
   f.promotion.rule_snapshot.destination = { scope: 'countries', countries: ['FR'], include_rest_of_world: false };
   const agent = createLlmAgent({ readShopping: async () => ({ status: 'unavailable', reason: 'shop_not_synced' }), readPublicPromotions: async () => f.source, client: { async completeWithTools(input) {

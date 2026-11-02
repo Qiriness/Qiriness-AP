@@ -31,7 +31,7 @@ const EVERYTHING_CUE = any('shopping.everything');
 const OFFERS_CUE = any('shopping.offers');
 const EVALUATE_CUE = any('shopping.evaluate');
 
-export function createShoppingTurn({ readShopping, readPublicPromotions = null, shopDomain, cart, context = {}, message = '', history = [], resolvedProducts = [], baseCurrency = null, hiddenCodes = [] }) {
+export function createShoppingTurn({ readShopping, readPublicPromotions = null, readNamedCodes = null, shopDomain, cart, context = {}, message = '', history = [], resolvedProducts = [], baseCurrency = null, hiddenCodes = [] }) {
   // CODES NEVER NAMED (owner, 2026-10-17: the routine discount): the shopping data says « remise
   // routine » in their place, and the reply backstop removes them whoever wrote them.
   // A code the customer typed in the conversation is theirs: named back like any other (owner,
@@ -43,9 +43,39 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
   // one (capitals and a digit), and the code backstop replaced it with « ce
   // code » in every reply about it (dev store, 2026-10-06).
   const offerNames = new Set();
-  const load = () => source ??= Promise.resolve().then(() => readShopping(shopDomain)).catch(() => ({ status: 'unavailable', reason: 'shopping_source_unavailable' })).then((data) => {
+  // THE CHAT OFFERS NO CODE (owner, 2026-11-02: « email agent offers them, chatbot doesn't »). A code
+  // the team marked « Proposable » is the email agent's to offer: here it stays in the data only when
+  // the customer typed it in this conversation or has it in the cart, so no tool can list, attach or
+  // suggest it. Automatic offers are untouched.
+  const inCart = new Set([...(cart?.codes ?? []), ...(cart?.discounts ?? []).filter((d) => d.type === 'code').map((d) => d.title)].map((c) => String(c).toUpperCase()));
+  const theirs = (code) => {
+    const c = String(code ?? '').toUpperCase();
+    return /^[A-Z0-9_-]{1,80}$/.test(c) && (inCart.has(c) || new RegExp(`(?<![A-Z0-9_-])${c}(?![A-Z0-9_-])`).test(typedByCustomer));
+  };
+  const onlyTheirCodes = (data) => data?.status === 'ok' && Array.isArray(data.promotions)
+    ? { ...data, promotions: data.promotions.filter((p) => p.method !== 'code' || (p.codes ?? []).some((c) => theirs(c?.code))) }
+    : data;
+  // A CODE THEY NAMED IS CHECKED, whatever it is (owner, 2026-11-02): any code of the shop typed in
+  // this conversation, looked up by that exact code (Klaviyo's unique ones too), joins this turn's data
+  // as theirs. Word-shaped: letters and a digit (« qiriness10 », « PANIER-SGDR64LH »), or after « code ».
+  const typedCodes = () => {
+    const words = typedByCustomer.match(/(?<![A-Z0-9_-])(?=[A-Z0-9_-]*\d)(?=[A-Z0-9_-]*[A-Z])[A-Z0-9][A-Z0-9_-]{2,79}(?![A-Z0-9_-])/g) ?? [];
+    const afterCode = [...typedByCustomer.matchAll(/\bCODE\s+(?:PROMO\s+)?[«"']?([A-Z0-9][A-Z0-9_-]{2,79})/g)].map((m) => m[1]).filter((c) => !CODE_FILLER.has(c));
+    return [...new Set([...afterCode, ...words])].slice(0, 3);
+  };
+  const withNamedCodes = async (data) => {
+    if (data?.status !== 'ok' || !readNamedCodes) return data;
+    const codes = typedCodes();
+    if (!codes.length) return data;
+    const rows = await Promise.resolve().then(() => readNamedCodes(shopDomain, codes)).catch(() => []);
+    const known = new Set((data.promotions ?? []).map((p) => p.id));
+    // Named by the customer: evaluated like an offer for this turn only, never stored as one.
+    const named = (rows ?? []).filter((p) => p?.id && !known.has(p.id)).map((p) => ({ ...p, offerable_in_replies: true }));
+    return named.length ? { ...data, promotions: [...(data.promotions ?? []), ...named] } : data;
+  };
+  const load = () => source ??= Promise.resolve().then(() => readShopping(shopDomain)).catch(() => ({ status: 'unavailable', reason: 'shopping_source_unavailable' })).then(async (data) => {
     for (const p of data?.promotions ?? []) if (p.method === 'automatic' && p.title) offerNames.add(p.title.trim().toUpperCase());
-    return data;
+    return onlyTheirCodes(await withNamedCodes(data));
   });
   const ids = new Set(resolvedProducts.map((p) => p.id));
   const shopifyIds = new Map(resolvedProducts.map((p) => [p.id, p.shopifyId]));
@@ -61,7 +91,7 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
     if (name === 'get_cart_context') return getCartContext(cart, data, context);
     if (name === 'get_active_promotions') {
       if (data.reason === 'shop_not_synced' && readPublicPromotions) {
-        const preview = await readPublicPromotions(shopDomain).catch(() => ({ status: 'unavailable', reason: 'offer_preview_unavailable' }));
+        const preview = onlyTheirCodes(await readPublicPromotions(shopDomain).catch(() => ({ status: 'unavailable', reason: 'offer_preview_unavailable' })));
         const result = getActivePromotions(preview, args);
         return { ...result, offer_preview: true, store_eligibility: 'not_confirmed' };
       }
