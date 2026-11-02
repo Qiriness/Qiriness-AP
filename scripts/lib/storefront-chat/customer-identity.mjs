@@ -10,8 +10,8 @@ import { createHmac } from 'node:crypto';
  * the route has already verified that signature. An email, an order number or a
  * `loggedIn` flag in the body proves nothing and is never read here.
  *
- * OFF BY DEFAULT. Unless `STOREFRONT_CHAT_PURCHASE_HISTORY=on`, every request is
- * anonymous and the customer id goes no further than this function.
+ * ON BY DEFAULT (owner, 2026-11-02). `STOREFRONT_CHAT_PURCHASE_HISTORY=off` makes
+ * every request anonymous, and the customer id goes no further than this function.
  *
  * THE ID IS NEVER STORED. A conversation is bound to its customer by `ref`, an
  * HMAC of shop + id keyed with the app secret: stable for one customer of one
@@ -25,7 +25,7 @@ const CUSTOMER_ID = /^[1-9]\d{0,19}$/;
 export const ANONYMOUS = Object.freeze({ kind: 'anonymous' });
 
 export function purchaseHistoryEnabled(env) {
-  return String(env?.STOREFRONT_CHAT_PURCHASE_HISTORY ?? '').trim().toLowerCase() === 'on';
+  return String(env?.STOREFRONT_CHAT_PURCHASE_HISTORY ?? '').trim().toLowerCase() !== 'off';
 }
 
 /**

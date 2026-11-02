@@ -218,7 +218,7 @@ review is tracked in `VALIDATION_LOG.md` item 45.
 
 ## Phase 2 (still in place)
 
-- **`STOREFRONT_CHAT_AGENT=llm`** turns the model on (the default `mock` keeps the Phase 1 replies). Opt-in, because the production dashboard carries the same route.
+- **The model answers whenever `OPENAI_API_KEY` is set** (since 2026-11-02); `STOREFRONT_CHAT_AGENT=mock` forces the Phase 1 replies. Purchase history and order status are on unless set to `off`. Spending is gated by `STOREFRONT_CHAT_ALLOWED_SHOPS` and the theme's app embed.
 - **Model:** `STOREFRONT_CHAT_MODEL`, default `gpt-6-luna` (owner's choice, 2026-10-05), on the existing `OPENAI_API_KEY`. Measured: about 560 input and 60–190 output tokens, about $0.0001 a reply, 1.6–3.5 s.
 - **Prompt** (`system-prompt.mjs`): brand name and description from the shop's data, the reply in the language of the customer's latest message (French by default, with *vous*), and plain text. It never states a product, price, stock, offer, delivery time or return condition. Health questions go to a professional, orders and product reactions to customer service, and it never asks for personal data.
 - **Bounded wait:** each request is cut at `STOREFRONT_CHAT_TIMEOUT_MS` (12 s) under a wall-clock deadline 1 s longer, and a rate limit is not waited out. A failure answers 503 and the widget offers « Réessayer ».

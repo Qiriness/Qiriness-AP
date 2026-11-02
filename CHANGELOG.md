@@ -10,6 +10,10 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Storefront chat switches: on in code, a variable only to turn one off (2026-11-02)
+
+Owner: « can these be switches in code rather than in the env file … dont want to have 1000 of variables ». `STOREFRONT_CHAT_AGENT=llm`, `STOREFRONT_CHAT_PURCHASE_HISTORY=on` and `STOREFRONT_CHAT_ORDER_STATUS=on` are no longer needed: the model answers whenever `OPENAI_API_KEY` is set (`STOREFRONT_CHAT_AGENT=mock` forces demo replies), and purchase history and order status are on unless set to `off`, like `STOREFRONT_CHAT_TOOLS` already was. The guard against spending is the door: `STOREFRONT_CHAT_ALLOWED_SHOPS` (empty allows nobody) and the theme's app embed. **Checked:** `npm test`, `tsc`.
+
 ## The advisor moves into the support app; the past-purchase question is removed (2026-11-02)
 
 - **The support app carries the advisor** (owner: « we are going to use the Qiriness Email agent app »). The theme app extension moved from `storefront-app/extensions/` to `extensions/storefront-advisor` (its old `uid` dropped: the CLI issues the support app's on deploy), and the root `shopify.app.toml` gained `[app_proxy]` → `https://qiriness-ap.vercel.app/api/storefront`. The dev store was retired first (`dev-store:remove`: its shop row, 109 products, 3 collections, 12 promotions, 221 chat sessions). `extensions/package.json` keeps `advisor-cart.js` CommonJS for the tests that import it. Reverses DECISIONS.md § the advisor's own app.

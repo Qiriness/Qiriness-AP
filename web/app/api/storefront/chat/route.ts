@@ -27,7 +27,7 @@ export const runtime = "nodejs";
  * The allow-list is the second guard that keeps the advisor off production.
  *
  * WHO IS ASKING comes from the same signed query (`logged_in_customer_id`),
- * only when STOREFRONT_CHAT_PURCHASE_HISTORY=on; otherwise every visitor is
+ * unless STOREFRONT_CHAT_PURCHASE_HISTORY=off, which makes every visitor
  * anonymous. Never from the body.
  *
  * Errors are codes, never internals: the browser is the public internet.

@@ -15,7 +15,7 @@ const MAX_BODY_BYTES = 4 * 1024;
  * POST /api/storefront/opening — the widget's empty chat, asked on page load
  * (storefront `/apps/storefront-advisor/opening`, next to /chat). Same guards
  * as /chat: the app proxy signature, the shop allow-list, and who is asking
- * from the signed `logged_in_customer_id` only (STOREFRONT_CHAT_PURCHASE_HISTORY=on).
+ * from the signed `logged_in_customer_id` only (unless STOREFRONT_CHAT_PURCHASE_HISTORY=off).
  *
  * 200 { reply } with a signed-in customer's repurchase message (owner,
  * 2026-10-29); 204 when there is none, which is every anonymous visit. A

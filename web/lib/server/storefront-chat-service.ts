@@ -27,9 +27,11 @@
  * checked before the agent runs, so the model sits behind a door that already
  * has a limit.
  *
- * WHICH AGENT ANSWERS is `STOREFRONT_CHAT_AGENT`: `mock` (the default) or `llm`.
- * Opt-in on purpose — the production dashboard carries this route too, and a
- * deploy must never start spending because a key happens to be set.
+ * WHICH AGENT ANSWERS: the model, unless `STOREFRONT_CHAT_AGENT=mock` or there
+ * is no OPENAI_API_KEY (owner, 2026-11-02: switches in code, not variables).
+ * What keeps a deploy from spending is the door, not this switch: the route
+ * answers only STOREFRONT_CHAT_ALLOWED_SHOPS (empty allows nobody), and the
+ * widget runs only in a theme whose app embed is switched on.
  */
 
 import { createOpenAIClient } from "../../../agent/src/llm/openai-client.mjs";
@@ -221,7 +223,7 @@ let rebuilding: Promise<Agent> | null = null;
  * `STOREFRONT_CHAT_TOOLS=off` withholds it, which is Phase 2 again.
  */
 async function currentAgent(db: ReturnType<typeof client>): Promise<Agent> {
-  if (process.env.STOREFRONT_CHAT_AGENT !== "llm") return createMockAgent();
+  if (process.env.STOREFRONT_CHAT_AGENT === "mock" || !process.env.OPENAI_API_KEY) return createMockAgent();
 
   const model = process.env.STOREFRONT_CHAT_MODEL || DEFAULT_STOREFRONT_MODEL;
   const key = `${model}|${process.env.STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN || ""}`;
@@ -422,8 +424,8 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
     productKnowledge: consultation?.productKnowledge ?? null,
     repurchaseOpening: consultation?.repurchaseOpening ?? null,
     // One order's status by its number (order-status-repository.mjs), on the
-    // shop whose orders are synced. Off unless STOREFRONT_CHAT_ORDER_STATUS=on.
-    readOrder: toolsOn && process.env.STOREFRONT_CHAT_ORDER_STATUS === "on" ? orderReader(db) : null,
+    // shop whose orders are synced. On unless STOREFRONT_CHAT_ORDER_STATUS=off.
+    readOrder: toolsOn && process.env.STOREFRONT_CHAT_ORDER_STATUS !== "off" ? orderReader(db) : null,
     orderShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain,
   });
   remembered = { at: Date.now(), key, agent };

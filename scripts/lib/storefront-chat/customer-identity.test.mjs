@@ -9,11 +9,12 @@ const ON = { STOREFRONT_CHAT_PURCHASE_HISTORY: 'on' };
 
 const query = (id) => new URLSearchParams({ shop: SHOP, logged_in_customer_id: id, timestamp: '1' });
 
-test('off by default: a signed-in customer is anonymous unless the setting is on', () => {
-  assert.equal(purchaseHistoryEnabled({}), false);
-  assert.equal(purchaseHistoryEnabled({ STOREFRONT_CHAT_PURCHASE_HISTORY: 'true' }), false);
-  assert.deepEqual(customerIdentity(query('7001'), { shop: SHOP, secret: SECRET, env: {} }), ANONYMOUS);
-  assert.equal(purchaseHistoryEnabled({ STOREFRONT_CHAT_PURCHASE_HISTORY: ' ON ' }), true);
+test('on by default: a signed-in customer is anonymous only when the setting is off', () => {
+  assert.equal(purchaseHistoryEnabled({}), true);
+  assert.equal(purchaseHistoryEnabled({ STOREFRONT_CHAT_PURCHASE_HISTORY: 'on' }), true);
+  assert.equal(purchaseHistoryEnabled({ STOREFRONT_CHAT_PURCHASE_HISTORY: ' OFF ' }), false);
+  assert.deepEqual(customerIdentity(query('7001'), { shop: SHOP, secret: SECRET, env: { STOREFRONT_CHAT_PURCHASE_HISTORY: 'off' } }), ANONYMOUS);
+  assert.equal(customerIdentity(query('7001'), { shop: SHOP, secret: SECRET, env: {} }).kind, 'customer');
 });
 
 test('the signed id becomes a customer identity with a ref that is not the id', () => {

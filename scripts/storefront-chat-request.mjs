@@ -11,7 +11,7 @@ import { signAppProxyQuery } from './lib/storefront-chat/app-proxy-signature.mjs
 //   npm run storefront:chat -- --unsigned          (expect 401)
 //   npm run storefront:chat -- --shop other.myshopify.com   (expect 403)
 //   npm run storefront:chat -- --customer 7001 --session <uuid>   (signed in as a test customer;
-//     read only with STOREFRONT_CHAT_PURCHASE_HISTORY=on — another id gets a new session)
+//     read unless STOREFRONT_CHAT_PURCHASE_HISTORY=off — another id gets a new session)
 //
 // --url defaults to http://localhost:3000/api/storefront/chat (`npm --prefix web run dev`).
 // --shop defaults to the first STOREFRONT_CHAT_ALLOWED_SHOPS entry.
