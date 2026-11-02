@@ -1734,7 +1734,9 @@
     "report_sender text",
     "report_recipients jsonb not null default '[{\"role\": \"management\"}]'::jsonb",
     "stock_alert_sender text",
-    "stock_alert_recipients jsonb not null default '[]'::jsonb"
+    "stock_alert_recipients jsonb not null default '[]'::jsonb",
+    "storefront_chat_daily_cap integer",
+    "storefront_chat_session_cap integer"
    ],
    "constraints": [
     "shops_app_settings_object_check: CHECK ((jsonb_typeof(app_settings) = 'object'::text))",
@@ -1747,6 +1749,8 @@
     "shops_shop_domain_unique: UNIQUE (shop_domain)",
     "shops_stock_alert_recipients_array_check: CHECK ((jsonb_typeof(stock_alert_recipients) = 'array'::text))",
     "shops_stock_alert_sender_shape_check: CHECK (((stock_alert_sender IS NULL) OR (stock_alert_sender ~ '^[^@[:space:]]+@[^@[:space:]]+\\.[^@[:space:]]+$'::text)))",
+    "shops_storefront_chat_daily_cap_check: CHECK (((storefront_chat_daily_cap IS NULL) OR ((storefront_chat_daily_cap >= 1) AND (storefront_chat_daily_cap <= 100000))))",
+    "shops_storefront_chat_session_cap_check: CHECK (((storefront_chat_session_cap IS NULL) OR ((storefront_chat_session_cap >= 1) AND (storefront_chat_session_cap <= 500))))",
     "shops_sync_cursors_object_check: CHECK ((jsonb_typeof(sync_cursors) = 'object'::text))",
     "shops_vip_rule_check: CHECK ((((vip_min_spend IS NULL) AND (vip_min_orders IS NULL) AND (vip_window_months IS NULL)) OR ((vip_min_spend >= (0)::numeric) AND (vip_min_orders >= 0) AND ((vip_window_months >= 1) AND (vip_window_months <= 120)))))"
    ]
@@ -4492,6 +4496,8 @@
   "column public.shops.report_sender: The mailbox this shop's monthly sales report is sent from (Settings → Integrations). Null: not sent.",
   "column public.shops.stock_alert_recipients: Who this shop's stock alert goes to: [{\"role\": …} | {\"email\": …}]. Empty: no alert.",
   "column public.shops.stock_alert_sender: The mailbox this shop's stock alert is sent from (Settings → Integrations). Null: no alert.",
+  "column public.shops.storefront_chat_daily_cap: Storefront chat: customer messages the shop may receive over the last 24 hours (Storefront Agent → Dashboard). Null: the default.",
+  "column public.shops.storefront_chat_session_cap: Storefront chat: customer messages one conversation may send (Storefront Agent → Dashboard). Null: the default.",
   "column public.shops.storefront_url: Shopify primaryDomain.url -- where customers actually go, unlike shop_domain which is the *.myshopify.com identity webhooks key on. The only address a reply may contain, and the base for /account/login.",
   "column public.shops.sync_cursors: Per-resource sync cursors for Shopify imports, webhooks, and reconciliation jobs.",
   "column public.shops.vip_min_spend: VIP rule, set on the Customers panel: net spend inside the window must be MORE THAN this (EUR), AND orders more than vip_min_orders. Null with the other two = no rule, nobody is VIP.",

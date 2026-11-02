@@ -2172,7 +2172,7 @@ After the web deploy, open `/storefront-agent` as management:
 
 ## Storefront chat caps on the dashboard (2026-11-02) — open
 
-1. **Migration:** `npm run db:apply:migration -- supabase/migrations/01_storefront_chat_caps.sql`, then `npm run db:generate:baseline`, move the file to `archive/`, `npm run db:check:baseline -- --production`.
+1. ~~**Migration**~~ **done 2026-11-02:** applied to production, baseline regenerated (identical to production), file in `archive/`.
 2. **Card:** after the web deploy, open `/storefront-agent` as management. « Chat limits » shows two empty fields (placeholders 500 and 40) and « Last 24 hours: N of 500 messages ». Enter 5000 and 30, save: the line reads « of 5,000 », and the shop's row holds 5000 / 30. Empty a field and save: back to the default.
 3. **Applied by the chat:** set the per-conversation cap to 2 on staging; the third message of a new conversation shows « Cette conversation a atteint sa limite de messages… » with « Nouvelle conversation », which opens a fresh chat that answers. Put the cap back.
 4. **Contact role:** `PUT /api/storefront-agent/caps` answers 403.

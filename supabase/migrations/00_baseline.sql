@@ -4046,6 +4046,8 @@ create table public.shops (
   report_recipients jsonb default '[{"role": "management"}]'::jsonb not null,
   stock_alert_sender text,
   stock_alert_recipients jsonb default '[]'::jsonb not null,
+  storefront_chat_daily_cap integer,
+  storefront_chat_session_cap integer,
   constraint shops_app_settings_object_check CHECK ((jsonb_typeof(app_settings) = 'object'::text)),
   constraint shops_environment_check CHECK ((environment = ANY (ARRAY['development'::text, 'staging'::text, 'production'::text]))),
   constraint shops_order_retention_check CHECK ((((order_retention_mode = 'months'::text) AND (order_retention_months IS NOT NULL) AND (order_retention_months > 0)) OR ((order_retention_mode = 'indefinite'::text) AND (order_retention_months IS NULL)))),
@@ -4054,6 +4056,8 @@ create table public.shops (
   constraint shops_report_sender_shape_check CHECK (((report_sender IS NULL) OR (report_sender ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'::text))),
   constraint shops_stock_alert_recipients_array_check CHECK ((jsonb_typeof(stock_alert_recipients) = 'array'::text)),
   constraint shops_stock_alert_sender_shape_check CHECK (((stock_alert_sender IS NULL) OR (stock_alert_sender ~ '^[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$'::text))),
+  constraint shops_storefront_chat_daily_cap_check CHECK (((storefront_chat_daily_cap IS NULL) OR ((storefront_chat_daily_cap >= 1) AND (storefront_chat_daily_cap <= 100000)))),
+  constraint shops_storefront_chat_session_cap_check CHECK (((storefront_chat_session_cap IS NULL) OR ((storefront_chat_session_cap >= 1) AND (storefront_chat_session_cap <= 500)))),
   constraint shops_sync_cursors_object_check CHECK ((jsonb_typeof(sync_cursors) = 'object'::text)),
   constraint shops_vip_rule_check CHECK ((((vip_min_spend IS NULL) AND (vip_min_orders IS NULL) AND (vip_window_months IS NULL)) OR ((vip_min_spend >= (0)::numeric) AND (vip_min_orders >= 0) AND ((vip_window_months >= 1) AND (vip_window_months <= 120))))),
   constraint shops_pkey PRIMARY KEY (id),
@@ -6700,6 +6704,8 @@ comment on column public.shops.report_recipients is 'Who this shop''s monthly sa
 comment on column public.shops.report_sender is 'The mailbox this shop''s monthly sales report is sent from (Settings → Integrations). Null: not sent.';
 comment on column public.shops.stock_alert_recipients is 'Who this shop''s stock alert goes to: [{"role": …} | {"email": …}]. Empty: no alert.';
 comment on column public.shops.stock_alert_sender is 'The mailbox this shop''s stock alert is sent from (Settings → Integrations). Null: no alert.';
+comment on column public.shops.storefront_chat_daily_cap is 'Storefront chat: customer messages the shop may receive over the last 24 hours (Storefront Agent → Dashboard). Null: the default.';
+comment on column public.shops.storefront_chat_session_cap is 'Storefront chat: customer messages one conversation may send (Storefront Agent → Dashboard). Null: the default.';
 comment on column public.shops.storefront_url is 'Shopify primaryDomain.url -- where customers actually go, unlike shop_domain which is the *.myshopify.com identity webhooks key on. The only address a reply may contain, and the base for /account/login.';
 comment on column public.shops.sync_cursors is 'Per-resource sync cursors for Shopify imports, webhooks, and reconciliation jobs.';
 comment on column public.shops.vip_min_spend is 'VIP rule, set on the Customers panel: net spend inside the window must be MORE THAN this (EUR), AND orders more than vip_min_orders. Null with the other two = no rule, nobody is VIP.';
