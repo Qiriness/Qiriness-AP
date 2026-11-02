@@ -10,6 +10,10 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The line under the chat's message bar: an AI, medical questions, the terms (2026-11-02)
+
+Owner: « Conversation avec un IA. Pour toutes questions médicales parler à un professionnel, Voir T&Cs ». Now « Conversation avec une IA. Pour toute question médicale, parlez-en à un professionnel de santé. Voir les CGV », in all six languages, replacing « Conseiller automatisé… ». « Voir les CGV » opens the shop's terms in a new tab: the embed's new setting « Terms page », default Shopify's `/policies/terms-of-service`, a path on the shop only (`contactHref`'s rule); empty hides the link. **Checked:** locale tests, `node --check`, `npm test`. Not viewed in a browser; needs `shopify app deploy`.
+
 ## Storefront Agent → Routines: who the routines were built for (2026-11-02)
 
 A new section after the Overview, « Routines », with one donut per answer of the routine builder over the period's routines: main concern, skin type, age and routine wanted (day / night / both). The four most given answers in colour, the rest as « Autres », « Non demandé » in grey (the eye routine asks no skin type); the legend names each answer with its count and share. Answers are named by the shop's own labels (its Rules tab, from the active advisor knowledge), a code it never labelled shown as the code. The funnel no longer shows « Visites de la boutique » (no source for it).

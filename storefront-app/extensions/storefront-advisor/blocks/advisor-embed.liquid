@@ -33,6 +33,7 @@
     "panelScript": {{ 'advisor-panel.js' | asset_url | json }},
     "cartScript": {{ 'advisor-cart.js' | asset_url | json }},
     "fontsUrl": {{ block.settings.fonts_url | strip | json }},
+    "termsPath": {{ block.settings.terms_path | strip | json }},
     "context": {
       "pageType": {{ request.page_type | json }},
       "productHandle": {{ product_handle | json }},
@@ -89,6 +90,7 @@
       "cartFailed": {{ 'advisor.cart_failed' | t | json }},
       "contactForm": {{ 'advisor.contact_form' | t | json }},
       "disclaimer": {{ 'advisor.disclaimer' | t | json }},
+      "terms": {{ 'advisor.terms' | t | json }},
       "quickActionsLabel": {{ 'advisor.quick_actions_label' | t | json }},
       "productsLabel": {{ 'advisor.products_label' | t | json }},
       "you": {{ 'advisor.you' | t | json }},
@@ -224,6 +226,7 @@
     { "type": "checkbox", "id": "action_compare", "label": "Compare products", "default": true },
     { "type": "checkbox", "id": "action_delivery_returns", "label": "Delivery & returns", "default": true },
     { "type": "checkbox", "id": "action_offers", "label": "Current offers", "default": true },
+    { "type": "text", "id": "terms_path", "label": "Terms page", "info": "The page « See T&Cs » under the message bar opens, a path on this shop. Leave empty to hide the link.", "default": "/policies/terms-of-service" },
     { "type": "header", "content": "Routine banner" },
     { "type": "checkbox", "id": "banner_enabled", "label": "Show the routine banner", "info": "A bar across the bottom of the screen; its button opens the advisor and starts the routine builder.", "default": true },
     { "type": "textarea", "id": "greeting", "label": "Greeting", "info": "The advisor's first message. Leave empty for the default, in the visitor's language." },

@@ -582,6 +582,7 @@
   line-height: 1.4;
   color: var(--sa-muted);
 }
+.sa-terms { color: inherit; text-decoration: underline; white-space: nowrap; }
 
 /* ---------- routine mode: the wide panel (owner, 2026-10-18) ---------- */
 .sa-panel--wide {

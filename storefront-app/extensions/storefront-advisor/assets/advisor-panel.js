@@ -137,6 +137,16 @@
     return root.replace(/\/$/, '') + path;
   }
 
+  /* The line under the message bar: it is an AI, medical questions go to a professional, and the shop's terms. */
+  function Disclaimer(strings, terms) {
+    var node = el('p', { className: 'sa-disclaimer', text: strings.disclaimer });
+    if (terms && strings.terms) {
+      node.appendChild(document.createTextNode(' '));
+      node.appendChild(el('a', { className: 'sa-terms', href: terms, target: '_blank', rel: 'noopener', text: strings.terms }));
+    }
+    return node;
+  }
+
   function safeImage(url) {
     return typeof url === 'string' && /^https:\/\//i.test(url) ? url : null;
   }
@@ -1237,7 +1247,7 @@
       log,
       actionsSlot,
       composer,
-      el('p', { className: 'sa-disclaimer', text: strings.disclaimer })
+      Disclaimer(strings, contactHref({ url: config.termsPath }))
     ]);
 
     root.appendChild(panel);
