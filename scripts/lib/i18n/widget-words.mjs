@@ -12,8 +12,8 @@ export const END = '/* words:end */';
 
 /** The `widget` entries each browser file needs, as one alternation string per entry. */
 export const WIDGET_FILES = {
-  'storefront-app/extensions/storefront-advisor/assets/advisor-cart.js': ['shopping', 'discountAmount', 'cartPage', 'cartPagePhrase', 'cartAll', 'offerNouns', 'areVerb', 'available', 'offersNow', 'currentOffers', 'eligibility', 'stock', 'promo'],
-  'storefront-app/extensions/storefront-advisor/assets/advisor-panel.js': ['order'],
+  'extensions/storefront-advisor/assets/advisor-cart.js': ['shopping', 'discountAmount', 'cartPage', 'cartPagePhrase', 'cartAll', 'offerNouns', 'areVerb', 'available', 'offersNow', 'currentOffers', 'eligibility', 'stock', 'promo'],
+  'extensions/storefront-advisor/assets/advisor-panel.js': ['order'],
 };
 
 /** `{ shopping: 'panier|…|cart|…', … }`: every language's fragments for each entry, in reading order. */

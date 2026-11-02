@@ -49,7 +49,7 @@ import { ORDER_TOOL, orderToolDefinition, runOrderTool } from './order-tools.mjs
 import { USE_SKILL, activeSkill, skillBlock, skillNamed, useSkillDefinition } from './skills.mjs';
 import { GET_PAST_PURCHASES } from './skills/routine-builder.mjs';
 import { CART_CHOICE, FLOW_CHOICE, anchorFor, askToAdd, asksToAdd, beforeAdvice, cartDoneText, cartNoText, cartToAdd, emptyFlow, followUpFor, followUpNote, routineReadyText } from './routine-flow.mjs';
-import { cleanPurchaseState, customerRanges, describePurchases, mayBeRunningLow, emptyPurchaseState, mentionsPastPurchase, parsePurchaseChoice, purchaseChoices, purchaseItems, purchaseToAsk, recordAnswer } from './purchase-turn.mjs';
+import { cleanPurchaseState, customerRanges, describePurchases, emptyPurchaseState, mentionsPastPurchase, purchaseItems } from './purchase-turn.mjs';
 import { READER_TIMEOUT_MS, mentionsSkin, readProfile, shouldRead } from './profile-reader.mjs';
 import { isBuiltRoutine, routineRecord } from '../advisory/routine-record.mjs';
 import { alternation, languageOf, messages as languageMessages } from '../i18n/languages.mjs';
@@ -270,11 +270,9 @@ export function createLlmAgent({
       const byId = (id) => catalogue?.products.find((p) => p.id === id) ?? null;
       // A profile chip (« Sèche ») answers the consultation, not a product clarification.
       const profileChoice = typeof choice === 'string' && PROFILE_CHOICE.test(choice);
-      // A purchase chip (« Je l'utilise encore ») answers the consultant's purchase question.
-      const purchaseAnswer = parsePurchaseChoice(choice);
-      // Re-checked: a session saved before 2026-10-13 holds the old answer lists.
-      let purchaseState = cleanPurchaseState(advisorState?.purchases ?? emptyPurchaseState());
-      if (purchaseAnswer) purchaseState = recordAnswer(purchaseState, purchaseAnswer);
+      // Re-checked: a session saved before 2026-10-13 holds the old answer lists. No purchase
+      // question is asked any more (owner, 2026-11-02); a session from before keeps its answers.
+      const purchaseState = cleanPurchaseState(advisorState?.purchases ?? emptyPurchaseState());
       // The routine builder flow (routine-flow.mjs): the offer's answer, by button or typed.
       const flowChoice = typeof choice === 'string' && (FLOW_CHOICE.test(choice) || CART_CHOICE.test(choice));
       const flowStart = advisor ? beforeAdvice(advisorState?.flow ?? emptyFlow(), { choice, message }) : { flow: emptyFlow(), answer: null, cart: null, startBuilder: false };
@@ -286,7 +284,7 @@ export function createLlmAgent({
       // A profile chip is our own label, never a product name: « Moins de 25 ans » had resolved to the hand
       // products (« moins » one letter from « mains ») and their « which one? » replaced the routine question.
       let resolution = resolutionIndex && !profileChoice
-        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || purchaseAnswer || flowChoice ? null : choice })
+        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || flowChoice ? null : choice })
         : null;
       const resolvedIds = new Set(resolution?.products.map((p) => p.id) ?? []);
       // An accessory or a device only when asked for (owner, 2026-10-29: the Gua Sha came for « produits à moins
@@ -316,9 +314,9 @@ export function createLlmAgent({
             locale: displayLanguage(language, locale),
             catalogue,
             money,
-            productQuestion: !profileChoice && !purchaseAnswer && !flowStart.answer && !flowStart.cart && (resolution?.products.length ?? 0) > 0,
+            productQuestion: !profileChoice && !flowStart.answer && !flowStart.cart && (resolution?.products.length ?? 0) > 0,
             turn: history.filter((m) => m.role === 'user').length + 1,
-            consultation: Boolean(purchaseAnswer) || flowStart.startBuilder,
+            consultation: flowStart.startBuilder,
             // « Construire autour »: theirs, it fills its step. « Il m'en reste peu »: put in its step.
             stillUsing: purchaseState.around,
             // The product they came in with, built into the routine (builder only).
@@ -362,32 +360,20 @@ export function createLlmAgent({
       // policy or product question. A slow or failed read is no purchases.
       const purchaseTrace = { status: 'not_needed' };
       let purchaseView = null;
-      let purchaseAsk = null;
-      if (purchases && (advice || purchaseAnswer || mentionsPastPurchase(message))) {
+      if (purchases && (advice || mentionsPastPurchase(message))) {
         const summary = await withDeadline(Promise.resolve().then(purchases), Math.min(1500, Math.max(1, endsAt - Date.now() - 1500))).catch(() => undefined);
         purchaseTrace.status = summary === undefined ? 'failed' : 'read';
         const items = purchaseItems(summary ?? null, catalogue);
         purchaseTrace.products = items.length;
-        // Inside the builder only, once the concern is known (a playbook is
-        // chosen); never on the turn that receives an answer.
-        if (advisorTurn?.mode === 'routine_builder' && advice?.playbook && !purchaseAnswer && !resolution?.clarification) {
-          purchaseAsk = purchaseToAsk(items, purchaseState, { isDue: (i) => mayBeRunningLow(i, purchaseState, { knowledge: productKnowledge, measured: repurchaseIntervals }) });
-        }
-        if (purchaseAsk) purchaseState = { ...purchaseState, asked: [...purchaseState.asked, purchaseAsk.product_id] };
-        const answered = purchaseAnswer
-          ? items.find((i) => i.product_id === purchaseAnswer.productId) ?? { product_id: purchaseAnswer.productId, name: byId(purchaseAnswer.productId)?.name ?? null }
-          : null;
         // Phase 3: the ranges they use nudge the routine already computed.
         const ranges = customerRanges(items, purchaseState, productKnowledge);
         if (advisorTurn?.useRanges(ranges)) for (const h of advisorTurn.handles()) offered.add(h);
         if (ranges.length) purchaseTrace.ranges = ranges.length;
-        if (items.length || answered?.name) {
-          purchaseView = describePurchases(items, purchaseState, { answered: answered?.name ? answered : null, knowledge: productKnowledge, measured: repurchaseIntervals });
+        if (items.length) {
+          purchaseView = describePurchases(items, purchaseState, { knowledge: productKnowledge, measured: repurchaseIntervals });
           const low = purchaseView.purchases.filter((p) => p.may_be_running_low).length;
           if (low) purchaseTrace.running_low = low;
         }
-        purchaseTrace.asked = purchaseAsk?.product_id ?? null;
-        if (purchaseAnswer) purchaseTrace.answered = purchaseAnswer.answer;
       }
       // What « add to cart » would add: the routine's products, or the one product shown; never
       // a choice between top choices (« this » would be ambiguous).
@@ -416,7 +402,6 @@ export function createLlmAgent({
           flow = { ...flow, offer: flow.offer ?? 'accepted', anchor };
         }
         const finalAdvice = advisorTurn.advice;
-        const runningLow = purchaseAnswer?.answer === 'running_low' ? { product_id: purchaseAnswer.productId, name: byId(purchaseAnswer.productId)?.name ?? '' } : null;
         // A budget treat already is the treat: never another one, never the routine offer after it.
         const budgetTreat = finalAdvice?.playbook?.key === 'treat';
         // The treat follows a routine: right away, or after the answer to « shall I add it to your cart? ».
@@ -445,10 +430,7 @@ export function createLlmAgent({
           engineAsks: !builder && Boolean(finalAdvice?.next_question),
           caution,
           anchor: anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds], advice: finalAdvice }),
-          purchaseAsk,
-          runningLow,
           treat,
-          purchaseChoices: (item) => purchaseChoices(item, lang),
           cartable,
           cart: flowStart.cart,
           discount: Boolean(routineDiscount) && isBuiltRoutine(finalAdvice, advisorTurn.mode),
@@ -461,11 +443,6 @@ export function createLlmAgent({
         if (isBuiltRoutine(finalAdvice, advisorTurn.mode)) {
           routine = routineRecord({ advice: finalAdvice, profile: advisorTurn.profile, channel: 'storefront_chat', locale: lang, currency });
           flow = { ...flow, routine_ref: routine.ref };
-        }
-        // The purchase question is asked in the follow-up, and only there.
-        if (followUp?.kind !== 'purchase' && purchaseAsk) {
-          purchaseState = { ...purchaseState, asked: purchaseState.asked.filter((id) => id !== purchaseAsk.product_id) };
-          purchaseAsk = null;
         }
         for (const id of followUp?.productIds ?? []) if (byId(id)) offered.add(byId(id).handle);
       }
@@ -952,7 +929,7 @@ export function createLlmAgent({
         // A routine the model built itself through `advise` this turn (customer batch, EN): the
         // follow-up was decided before it existed, so the cart question is added now.
         if (!followUp && advisorTurn?.mode === 'routine_builder' && advisorTurn.advice?.status === 'recommended' && advice?.status !== 'recommended') {
-          const late = followUpFor({ flow, lang: displayLanguage(language, locale), builder: true, answer: null, advice: advisorTurn.advice, showsProducts: false, anchor: null, purchaseAsk: null, runningLow: null, treat: null, purchaseChoices: () => [], cartable: cartableFor(advisorTurn.advice, false), cart: null, discount: Boolean(routineDiscount) && isBuiltRoutine(advisorTurn.advice, advisorTurn.mode) });
+          const late = followUpFor({ flow, lang: displayLanguage(language, locale), builder: true, answer: null, advice: advisorTurn.advice, showsProducts: false, anchor: null, treat: null, cartable: cartableFor(advisorTurn.advice, false), cart: null, discount: Boolean(routineDiscount) && isBuiltRoutine(advisorTurn.advice, advisorTurn.mode) });
           if (late.followUp?.kind === 'cart') { followUp = late.followUp; flow = late.flow; }
         }
         // …and kept, like one built before the model.
@@ -985,9 +962,9 @@ export function createLlmAgent({
         // the reply must ask it: two of its options named, or a question about their concern. Dropped, it is
         // not counted as asked, so it can come later.
         const engineQuestion = advisorTurn?.advice?.next_question ?? null;
-        questionDropped = Boolean(engineQuestion) && !purchaseAsk && (caution || (advisorTurn.mode !== 'routine_builder' && engineQuestion.field === 'primary_concern' && !asksConcern(parsed.text, engineQuestion.options)));
+        questionDropped = Boolean(engineQuestion) && (caution || (advisorTurn.mode !== 'routine_builder' && engineQuestion.field === 'primary_concern' && !asksConcern(parsed.text, engineQuestion.options)));
         if (questionDropped) trace.question_dropped = engineQuestion.field;
-        const engineChoices = advisorTurn && !purchaseAsk && !questionDropped ? advisorTurn.choices() : [];
+        const engineChoices = advisorTurn && !questionDropped ? advisorTurn.choices() : [];
         // Only the last bubble's buttons are live: a follow-up without its own carries the engine's.
         const followUpChoices = followUp ? (followUp.choices.length ? followUp.choices : engineChoices) : [];
         const advisorChoices = followUp ? [] : engineChoices;

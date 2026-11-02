@@ -6,9 +6,8 @@
  *               « construisez-moi une routine » (straight into the builder)
  *   offer       after we propose products, a FOLLOW-UP message: « Souhaitez-vous
  *               une routine personnalisée ? » Oui / Non (buttons or typed)
- *   builder     the engine asks the concern; then, signed in, ONE past purchase:
- *               build around it / « il m'en reste peu » (its card, view or add
- *               to cart) / focus on the concern
+ *   builder     the engine asks its questions (no past-purchase question since
+ *               2026-11-02: the owner found it did not work as wanted)
  *   anchor      the product they came in with (page, named, our top pick) is
  *               built into the routine (`pinned` in the engine)
  *   treat       one « petit plaisir » after the routine, or after a « Non »
@@ -182,18 +181,15 @@ export function anchorFor({ pageProductId = null, resolvedIds = [], advice = nul
 
 /**
  * After the advice, before the model: this turn's follow-up message (one at
- * most), in this order: the answer to « il m'en reste peu », the treat after a
- * « Non », the purchase question, the treat after the routine, the offer.
+ * most), in this order: the treat after a « Non », the cart question after a
+ * routine, the treat after the routine, the offer.
  *
  * @param {{
  *   flow: object, lang: string, builder: boolean, answer: 'yes' | 'no' | null,
  *   advice: object | null,           the engine's advice this turn
  *   showsProducts: boolean,          this reply will show product cards
  *   anchor: { id: string, source: string } | null,
- *   purchaseAsk: { product_id: string, name: string } | null,   purchase-turn's pick, builder only
- *   runningLow: { product_id: string, name: string } | null,    just answered « il m'en reste peu »
  *   treat: { product_id: string } | null,                        the engine's treat, when one is due
- *   purchaseChoices: (item) => { label: string, value: string }[],
  *   cartable: { product_id: string, variant_id: string | null, name: string }[],   what « add to cart » would add (one product, or a routine)
  *   cart: 'yes' | 'no' | null                                    this turn's answer to the cart question
  *   discount: boolean                                            a finished routine with the shop's routine discount
@@ -203,7 +199,7 @@ export function anchorFor({ pageProductId = null, resolvedIds = [], advice = nul
  * }} input
  * @returns {{ flow: object, followUp: { kind: string, text: string, choices: object[], productIds: string[] } | null }}
  */
-export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, purchaseAsk, runningLow, treat, purchaseChoices, cartable = [], cart = null, discount = false, concern = null, engineAsks = false, caution = false }) {
+export function followUpFor({ flow, lang, builder, answer, advice, showsProducts, anchor, treat, cartable = [], cart = null, discount = false, concern = null, engineAsks = false, caution = false }) {
   const next = cleanFlow(flow);
   const t = text(lang);
   const say = (kind, words, { choices = [], productIds = [] } = {}) => ({ flow: next, followUp: { kind, text: words, choices, productIds } });
@@ -222,12 +218,10 @@ export function followUpFor({ flow, lang, builder, answer, advice, showsProducts
   // propose a routine here »): no offer, no cart question, no treat.
   if (caution) return { flow: next, followUp: null };
 
-  if (runningLow) return say('running_low', t.runningLow(runningLow.name), { productIds: [runningLow.product_id] });
   if (answer === 'no' && treat && !next.treat_offered) {
     next.treat_offered = true;
     return say('treat', t.treatAfterNo, { productIds: [treat.product_id] });
   }
-  if (builder && purchaseAsk) return say('purchase', t.purchase(purchaseAsk.name), { choices: purchaseChoices(purchaseAsk) });
   // A routine is ready: « shall I add it to your cart? » first; the treat follows the answer.
   if (builder && advice?.status === 'recommended' && cartable.length && !cart) return askCart(cartable);
   if (cart && treat && !next.treat_offered) {

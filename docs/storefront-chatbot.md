@@ -1,14 +1,14 @@
 # Storefront advisor (« Conseiller Beauté »)
 
-A chat widget on the storefront, answered by one agent, `storefront_sales_agent`. **Dev store only.** It is not part of the production app and must not be activated on the production store.
+A chat widget on the storefront, answered by one agent, `storefront_sales_agent`. **Shipped with the support app since 2026-11-02** (`extensions/storefront-advisor`), on the live store's staging theme first: the app embed is per theme and off until switched on (DECISIONS.md § the advisor's app, reversed).
 
 ## Architecture
 
 ```
-Dev store theme ── App embed "Beauty advisor"       storefront-app/extensions/storefront-advisor
+Store theme ──── App embed "Beauty advisor"       extensions/storefront-advisor (support app)
    │  POST /apps/storefront-advisor/chat            same origin: no CORS, no backend URL in the theme
    ▼
-Shopify app proxy  ── signs the query (HMAC, advisor app's secret), adds ?shop=
+Shopify app proxy  ── signs the query (HMAC, support app's secret), adds ?shop=
    ▼
 web/app/api/storefront/chat/route.ts                signature → shop allow-list → body validation
    ▼
@@ -25,7 +25,7 @@ scripts/lib/storefront-chat/llm-agent.mjs           storefront_sales_agent: mode
 Supabase: storefront_chat_sessions / _messages      migration 76
 ```
 
-- **A separate Shopify app, in `storefront-app/`.** The root `shopify.app.toml` is the support app, installed on the production store, and anything deployed through it reaches production. The advisor has its own CLI project, its own `client_id` and no Admin scopes, and is installed on the dev store only. **Run every advisor `shopify app …` command from `storefront-app/`.**
+- **In the support app** (2026-11-02, was a separate dev-store app in `storefront-app/`): the extension is `extensions/storefront-advisor`, the `[app_proxy]` is in the root `shopify.app.toml`, and `shopify app deploy` runs from the repo root. `storefront-app/` keeps only the retired dev app's toml and tunnel config.
 - **The loader is small.** `advisor.js` (about 4 KB) draws the launcher. `advisor-panel.js` is fetched on first open (Theme Check caps app-embed JS at 10 KB).
 - **Plain HTTP request/response.** There are no WebSockets and no streaming.
 

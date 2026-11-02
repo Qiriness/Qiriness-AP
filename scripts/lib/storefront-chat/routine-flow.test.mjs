@@ -55,15 +55,6 @@ test('the treat: after a « Non », or after the routine in the builder; once', 
   assert.equal(followUpFor({ ...base, flow: afterRoutine.flow, builder: true, advice: { status: 'recommended' }, treat }).followUp, null);
 });
 
-test('in the builder the purchase question wins over the treat; « il m\'en reste peu » brings its card first', () => {
-  const purchaseAsk = { product_id: ID(7), name: 'Crème' };
-  const asked = followUpFor({ ...base, flow: emptyFlow(), builder: true, advice: { status: 'recommended' }, purchaseAsk, treat: { product_id: ID(11) }, purchaseChoices: () => [{ label: 'x', value: 'purchase:around:' + ID(7) }] });
-  assert.equal(asked.followUp.kind, 'purchase');
-  assert.equal(asked.flow.treat_offered, false);
-  const low = followUpFor({ ...base, flow: emptyFlow(), builder: true, runningLow: { product_id: ID(7), name: 'Crème' } });
-  assert.deepEqual([low.followUp.kind, low.followUp.productIds], ['running_low', [ID(7)]]);
-});
-
 test('flow state from the log is re-checked', () => {
   assert.deepEqual(cleanFlow({ offer: 'maybe', anchor: { id: 'x', source: 'page' }, treat_offered: 'yes' }), emptyFlow());
   assert.deepEqual(cleanFlow({ offer: 'declined', anchor: { id: ID(1), source: 'page' } }), { offer: 'declined', anchor: { id: ID(1), source: 'page' }, treat_offered: false, cart: { pending: [], asked: [] }, routine_ref: null });
@@ -222,7 +213,6 @@ test('a need shows our top choices as cards; « trop cher » just after a produc
   const top = await benchAgent(scripted(answer('Voici.'))).respond({ message: 'Que me conseillez-vous pour mon visage déshydraté ?', context: { locale: 'fr' } });
   assert.equal(top.products.length, 3);
 });
-
 
 test('« Oui, ajouter » after a routine: the code writes the turn and tells the widget what to add; no model call', async () => {
   const client = scripted();

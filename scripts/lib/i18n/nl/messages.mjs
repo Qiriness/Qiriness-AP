@@ -14,8 +14,6 @@ export default {
     offer: 'Zal ik een persoonlijke huidverzorgingsroutine voor u samenstellen?',
     yes: 'Ja, graag',
     no: 'Nee, dank u',
-    purchase: (name) => `Ik zie dat u ${name} al eerder hebt gekocht. Wilt u uw routine daaromheen opbouwen, is het bijna op, of richt u zich liever op uw huidprobleem?`,
-    runningLow: (name) => `Hier vindt u ${name} terug, of u voegt het meteen toe aan uw winkelmandje.`,
     // Their concern without an article (« ideaal bij rimpels »): right whatever its gender.
     treatAfterRoutine: (concern) => concern ? `En voor een moment van ontspanning, ideaal bij ${concern}, valt dit kleine verwenmoment misschien in de smaak:` : 'En voor een moment van ontspanning valt dit kleine verwenmoment misschien in de smaak:',
     treatAfterNo: 'Prima. Als u zin hebt in een klein verwenmoment, valt dit misschien in de smaak:',
@@ -32,8 +30,6 @@ export default {
     cartNoDone: 'Natuurlijk, neem gerust de tijd.',
     routineReady: 'Hier is uw persoonlijke routine, voor de ochtend en de avond.',
   },
-
-  purchase: { around: 'Routine eromheen opbouwen', running_low: 'Het is bijna op', focus: 'Richten op mijn huidprobleem' },
 
   repurchase: (name, days, promo) => `We zagen dat u eerder tevreden was over „${name}”. Uw laatste bestelling is nu **${days} dagen** geleden. Wilt u het opnieuw bestellen?${promo ? ` Er is op dit moment zelfs ${promo} korting op dit product.` : ''}`,
   percent: (n) => `${n}%`,

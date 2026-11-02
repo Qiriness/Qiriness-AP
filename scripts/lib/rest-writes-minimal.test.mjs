@@ -21,7 +21,7 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const FN = /\b(supabaseInsert|supabaseUpsert|supabaseUpdate|supabaseUpdateById|supabaseDelete)\(/g;
 
 function discardedWritesWithoutMinimal() {
-  const files = execSync('git ls-files agent scripts web storefront-app', { cwd: ROOT }).toString().trim().split('\n')
+  const files = execSync('git ls-files agent scripts web extensions storefront-app', { cwd: ROOT }).toString().trim().split('\n')
     .filter((f) => /\.(mjs|js|ts|tsx)$/.test(f) && !/\.test\.|supabase-rest-client\.mjs$/.test(f));
   const offenders = [];
   for (const file of files) {

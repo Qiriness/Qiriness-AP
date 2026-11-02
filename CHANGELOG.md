@@ -10,6 +10,13 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The advisor moves into the support app; the past-purchase question is removed (2026-11-02)
+
+- **The support app carries the advisor** (owner: « we are going to use the Qiriness Email agent app »). The theme app extension moved from `storefront-app/extensions/` to `extensions/storefront-advisor` (its old `uid` dropped: the CLI issues the support app's on deploy), and the root `shopify.app.toml` gained `[app_proxy]` → `https://qiriness-ap.vercel.app/api/storefront`. The dev store was retired first (`dev-store:remove`: its shop row, 109 products, 3 collections, 12 promotions, 221 chat sessions). `extensions/package.json` keeps `advisor-cart.js` CommonJS for the tests that import it. Reverses DECISIONS.md § the advisor's own app.
+- **No past-purchase question in the routine builder** (owner: « it does not really work the way I want it to »): « Construire ma routine autour / Il m'en reste peu / Me concentrer sur ma préoccupation » and the running-low card are gone, in all six languages. Purchase history stays for the repurchase message, `get_past_purchases` and the model's view of purchases.
+- **The playbook config's collections** (`data/advisor/qiriness.json`): six handles renamed in Shopify are remapped (22 dead references → 1, the « lotion » step, a catalogue gap); the sample catalogues follow. **Not loaded yet:** `npm run advisor:load`.
+- **Checked:** `npm test` 3948/3948 (the removed feature's 11 tests deleted), `tsc`. Not deployed: `shopify app deploy` from the repo root and the web deploy.
+
 ## The line under the chat's message bar: an AI, medical questions, the terms (2026-11-02)
 
 Owner: « Conversation avec un IA. Pour toutes questions médicales parler à un professionnel, Voir T&Cs ». Now « Conversation avec une IA. Pour toute question médicale, parlez-en à un professionnel de santé. Voir les CGV », in all six languages, replacing « Conseiller automatisé… ». « Voir les CGV » opens the shop's terms in a new tab: the embed's new setting « Terms page », default `/pages/conditions-generales-de-ventes` (Qiriness's CGV page; the Shopify `/policies/terms-of-service` page is the unedited template), a path on the shop only (`contactHref`'s rule); empty hides the link. **Checked:** locale tests, `node --check`, `npm test`. Not viewed in a browser; needs `shopify app deploy`.

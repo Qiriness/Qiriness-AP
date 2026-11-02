@@ -10,8 +10,6 @@ export default {
     offer: 'Would you like me to build you a personalised routine?',
     yes: 'Yes please',
     no: 'No thanks',
-    purchase: (name) => `I can see you've bought ${name} before. Would you like to build your routine around it, are you running low on it, or would you rather focus on your concern?`,
-    runningLow: (name) => `You'll find ${name} here, or you can add it straight to your cart.`,
     treatAfterRoutine: (concern) => concern ? `And for a little moment of pampering, perfect for easing your ${concern}, you might like this treat:` : 'And for a little moment of pampering, you might like this treat:',
     treatAfterNo: 'Of course. If you fancy a little treat, you might like this one:',
     cartOne: (name) => `Would you like me to add ${name} to your cart?`,
@@ -27,8 +25,6 @@ export default {
     cartNoDone: 'Of course, take your time.',
     routineReady: 'Here is your personalised routine, morning and evening.',
   },
-
-  purchase: { around: 'Build my routine around it', running_low: "I'm running low", focus: 'Focus on my concern' },
 
   repurchase: (name, days, promo) => `We noticed you have enjoyed ${name} before. It has now been **${days} days** since you last ordered it. Would you like to get it again?${promo ? ` We even have ${promo} off this product right now.` : ''}`,
   percent: (n) => `${n}%`,

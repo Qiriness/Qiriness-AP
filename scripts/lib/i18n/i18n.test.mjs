@@ -73,7 +73,7 @@ for (const pack of packs()) {
   });
 
   test(`${pack.code}: the widget has its locale, with every key of the ${SOURCE_LANGUAGE} one`, () => {
-    const dir = path.join(root, 'storefront-app', 'extensions', 'storefront-advisor', 'locales');
+    const dir = path.join(root, 'extensions', 'storefront-advisor', 'locales');
     const file = (code) => path.join(dir, code === SOURCE_LANGUAGE ? `${code}.default.json` : `${code}.json`);
     assert.ok(fs.existsSync(file(pack.code)), `no locales/${pack.code}.json`);
     const mine = JSON.parse(fs.readFileSync(file(pack.code), 'utf8'));
@@ -98,8 +98,8 @@ test('the widget\'s generated words are the language packs\' (npm run widget:wor
 });
 
 test('the widget block\'s Liquid passes every locale key it reads', () => {
-  const liquid = fs.readFileSync(path.join(root, 'storefront-app', 'extensions', 'storefront-advisor', 'blocks', 'advisor-embed.liquid'), 'utf8');
-  const fr = JSON.parse(fs.readFileSync(path.join(root, 'storefront-app', 'extensions', 'storefront-advisor', 'locales', 'fr.default.json'), 'utf8'));
+  const liquid = fs.readFileSync(path.join(root, 'extensions', 'storefront-advisor', 'blocks', 'advisor-embed.liquid'), 'utf8');
+  const fr = JSON.parse(fs.readFileSync(path.join(root, 'extensions', 'storefront-advisor', 'locales', 'fr.default.json'), 'utf8'));
   const missing = shape(fr.routine).filter((k) => !liquid.includes(`'routine.${k}' | t`));
   assert.deepEqual(missing, [], `advisor-embed.liquid does not pass routine.${missing.join(', routine.')}`);
 });

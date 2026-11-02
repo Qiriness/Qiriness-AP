@@ -52,9 +52,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |-- scripts/         # one sync per Shopify resource + sync-shopify-nightly (runs them all),
 |                    # Klaviyo/social syncs, embedders, importers, reports, migration runner;
 |                    # lib/ is shared by web and agent (REST client, records, rules)
-|-- storefront-app/  # SEPARATE Shopify app, DEV STORE ONLY (own toml, own client_id, no scopes,
-|                    # [app_proxy]); run its `shopify app ...` commands from here, never root.
-|                    # extensions/storefront-advisor/: the theme app extension (advisor embed)
+|-- extensions/storefront-advisor/  # the support app's theme app extension (advisor embed);
+|                    # [app_proxy] in the root shopify.app.toml. storefront-app/: the retired dev app
 |-- data/advisor/qiriness.json  # the brand's advisory playbooks + mappings + merchandising;
 |                    # npm run advisor:load loads it, npm run eval:advisory checks it
 |-- agent/           # always-on worker (own package.json; reuses scripts/lib/). src/: mail

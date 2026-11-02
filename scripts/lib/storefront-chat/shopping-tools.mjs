@@ -1,5 +1,5 @@
 import { cartDiscountTrace, evaluatePromotionsForCart, getActivePromotions, getCartContext, getStockContext, needsShoppingContext } from './shopping-evaluator.mjs';
-import cartContract from '../../../storefront-app/extensions/storefront-advisor/assets/advisor-cart.js';
+import cartContract from '../../../extensions/storefront-advisor/assets/advisor-cart.js';
 import { simulateOffers } from './offer-solver.mjs';
 import { countryAnswer } from './knowledge-topics.mjs';
 import { alternation, messages, wordsAt } from '../i18n/languages.mjs';

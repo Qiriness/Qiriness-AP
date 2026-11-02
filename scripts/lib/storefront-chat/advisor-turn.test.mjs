@@ -229,45 +229,6 @@ test('outside the builder purchases are read but never asked about: the reply is
 
 const builderTurn = (client, purchases, locale = 'fr') => agentWith(client).respond({ message: locale === 'fr' ? "J'ai la peau sèche et déshydratée" : 'My skin is dry and dehydrated', action: 'build_routine', context: { locale }, purchases });
 
-test('in the builder, once the concern is known, the purchase question is the whole turn: the code asks it, no model call', async () => {
-  const client = scripted(answer('never used'));
-  const reply = await builderTurn(client, loader());
-  assert.equal(client.calls.length, 0);
-  assert.equal(reply.text, 'Je vois que vous avez déjà acheté Crème Hydra - Caresse Aqua Riche. Souhaitez-vous construire votre routine autour, vous en reste-t-il peu, ou préférez-vous vous concentrer sur votre préoccupation ?');
-  assert.deepEqual(reply.choices.map((c) => c.value), [`purchase:around:${RICH}`, `purchase:running_low:${RICH}`, `purchase:focus:${RICH}`]);
-  assert.equal(reply.followUp, undefined);
-  assert.deepEqual(reply.advisor.purchases.asked, [RICH]);
-  assert.equal(reply.trace.follow_up, 'purchase');
-});
-
-const answeredState = async () => {
-  const first = await builderTurn(scripted(answer('…')), loader());
-  const state = advisorStateFromHistory([{ role: 'assistant', content: '…', context: { advisor: first.advisor } }]);
-  state.profile.routine_scope = { value: 'essential', source: 'quick_choice', confidence: 'high', turn: 1 };
-  // The builder's own questions answered: the next turn recommends.
-  state.asked = [...new Set([...state.asked, 'skin_type', 'sensitivity', 'current_routine', 'routine_scope', 'age_band'])];
-  return state;
-};
-
-test('« build around it »: their product fills its step, and they are not asked again', async () => {
-  const client = scripted(answer('Parfait, continuez avec votre Caresse Aqua Riche.'));
-  const reply = await agentWith(client).respond({ message: 'Construire ma routine autour', choice: `purchase:around:${RICH}`, context: { locale: 'fr' }, advisorState: await answeredState(), purchases: loader() });
-  const system = client.calls[0].system;
-  assert.match(system, /"just_answered":\{"name":"Crème Hydra - Caresse Aqua Riche","customer_said":"build_around"\}/);
-  assert.match(system, /"reason":"already_owned","customer_product":"Crème Hydra - Caresse Aqua Riche"/);
-  assert.ok(!reply.trace.advice.steps.some((s) => s.id === RICH));
-  assert.deepEqual(reply.advisor.purchases.around, [RICH]);
-  assert.ok(!JSON.stringify(reply.followUp ?? {}).includes('purchase:'));
-  assert.equal(reply.trace.purchases.answered, 'around');
-});
-
-test('« running low »: its card comes in the follow-up, and the routine includes it', async () => {
-  const reply = await agentWith(scripted(answer('Très bien.'))).respond({ message: "Il m'en reste peu", choice: `purchase:running_low:${RICH}`, context: { locale: 'fr' }, advisorState: await answeredState(), purchases: loader() });
-  assert.equal(reply.followUp.text, "Vous pouvez retrouver Crème Hydra - Caresse Aqua Riche ici, ou l'ajouter directement à votre panier.");
-  assert.deepEqual(reply.followUp.products.map((c) => c.id), [RICH]);
-  assert.ok(reply.trace.advice.steps.some((s) => s.id === RICH));
-});
-
 test('a turn that is not a consultation never reads the purchases', async () => {
   const purchases = loader();
   await agentWith(scripted(answer('Bonjour ! Comment puis-je vous aider ?'))).respond({ message: 'Bonjour', context: { locale: 'fr' }, purchases });
@@ -281,12 +242,6 @@ test('« what did I buy? » reads them without a consultation, and nothing is as
   assert.equal(purchases.calls, 1);
   assert.match(client.calls[0].system, /"free_gift":true/);
   assert.ok(!JSON.stringify(reply).includes('purchase:'));
-});
-
-test('English: the purchase question and its buttons in English', async () => {
-  const reply = await builderTurn(scripted(answer('Here is your routine.')), loader(), 'en');
-  assert.match(reply.text, /^I can see you've bought Crème Hydra - Caresse Aqua Riche before\./);
-  assert.deepEqual(reply.choices.map((c) => c.label), ['Build my routine around it', "I'm running low", 'Focus on my concern']);
 });
 
 test('anonymous (no loader) or a failed read: no purchases, no purchase question', async () => {

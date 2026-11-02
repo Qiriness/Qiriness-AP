@@ -14,8 +14,6 @@ export default {
     offer: 'Möchten Sie, dass ich Ihnen eine persönliche Pflegeroutine zusammenstelle?',
     yes: 'Ja, gerne',
     no: 'Nein, danke',
-    purchase: (name) => `Wie ich sehe, haben Sie bereits ${name} gekauft. Möchten Sie Ihre Routine darum herum aufbauen, geht es Ihnen bald aus, oder möchten Sie sich lieber auf Ihr Hautanliegen konzentrieren?`,
-    runningLow: (name) => `Hier finden Sie ${name} wieder, oder Sie legen es direkt in Ihren Warenkorb.`,
     // Their concern without an article (« ideal bei Falten »): right whatever its gender.
     treatAfterRoutine: (concern) => concern ? `Und für einen Moment der Entspannung, ideal bei ${concern}, könnte Ihnen diese kleine Verwöhnpflege gefallen:` : 'Und für einen Moment der Entspannung könnte Ihnen diese kleine Verwöhnpflege gefallen:',
     treatAfterNo: 'Sehr gerne. Falls Sie Lust auf eine kleine Verwöhnpflege haben, könnte Ihnen diese gefallen:',
@@ -32,8 +30,6 @@ export default {
     cartNoDone: 'Sehr gerne, lassen Sie sich Zeit.',
     routineReady: 'Hier ist Ihre persönliche Routine, morgens und abends.',
   },
-
-  purchase: { around: 'Routine darum aufbauen', running_low: 'Es geht mir bald aus', focus: 'Auf mein Hautanliegen konzentrieren' },
 
   repurchase: (name, days, promo) => `Wir haben bemerkt, dass Ihnen „${name}“ bereits gefallen hat. Ihre letzte Bestellung ist nun **${days} Tage** her. Möchten Sie es erneut bestellen?${promo ? ` Gerade gibt es sogar ${promo} Rabatt auf dieses Produkt.` : ''}`,
   percent: (n) => `${n} %`,

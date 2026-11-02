@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import contract from '../../../storefront-app/extensions/storefront-advisor/assets/advisor-cart.js';
+import contract from '../../../extensions/storefront-advisor/assets/advisor-cart.js';
 import { parseChatRequest } from './request-schema.mjs';
 import { createLlmAgent } from './llm-agent.mjs';
 import { getCartContext, getStockContext, evaluatePromotionsForCart } from './shopping-evaluator.mjs';

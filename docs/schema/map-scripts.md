@@ -372,12 +372,13 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 ## storefront-app/, docs/, data/
 
 ```text
-|-- storefront-app/              # SEPARATE Shopify app, DEV STORE ONLY (own toml,
-|   |                            # own client_id, no scopes, [app_proxy]). Run its
-|   |                            # `shopify app ...` commands from here, never root
-|   |-- backend/shopify.web.toml # lets `shopify app dev` start web/ behind its tunnel
-|   `-- extensions/storefront-advisor/  # theme app extension: blocks/advisor-embed.liquid
-|                                # (app embed, target body; settings + JSON config)
+|-- extensions/storefront-advisor/  # the support app's theme app extension (2026-11-02):
+|                                # blocks/advisor-embed.liquid (app embed, target body;
+|                                # settings + JSON config); its [app_proxy] is in the
+|                                # root shopify.app.toml. extensions/package.json: CommonJS
+|                                # for the tests that import assets/advisor-cart.js
+|-- storefront-app/              # the RETIRED dev-store app (toml, backend/shopify.web.toml
+|                                # tunnel); no extension any more
 |                                # · assets/advisor.js (loader: launcher + routine banner) ·
 |                                # advisor-panel.js (panel, fetched on first open;
 |                                # chips up to 8; card-click beacon to /event)

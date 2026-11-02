@@ -1,4 +1,4 @@
-import cartContract from '../../../storefront-app/extensions/storefront-advisor/assets/advisor-cart.js';
+import cartContract from '../../../extensions/storefront-advisor/assets/advisor-cart.js';
 import { promotionMechanic } from '../promotion-mechanic.mjs';
 import { combinable, evaluateOutcome } from '../../../agent/src/retrieval/promotion-outcome.mjs';
 import { isPublicPromotion } from './shopping-repository.mjs';

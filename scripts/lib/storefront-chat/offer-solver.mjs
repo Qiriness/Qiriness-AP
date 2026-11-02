@@ -27,7 +27,7 @@
  * The cart remains the authority: on a real cart, what Shopify applied is
  * what applies. A prediction that differs is flagged, never preferred.
  */
-import cartContract from '../../../storefront-app/extensions/storefront-advisor/assets/advisor-cart.js';
+import cartContract from '../../../extensions/storefront-advisor/assets/advisor-cart.js';
 import { promotionMechanic } from '../promotion-mechanic.mjs';
 import { combinable } from '../../../agent/src/retrieval/promotion-outcome.mjs';
 import { qualifyingIds, running } from './shopping-evaluator.mjs';

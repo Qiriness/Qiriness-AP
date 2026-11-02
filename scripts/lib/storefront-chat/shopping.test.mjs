@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import contract from '../../../storefront-app/extensions/storefront-advisor/assets/advisor-cart.js';
+import contract from '../../../extensions/storefront-advisor/assets/advisor-cart.js';
 import { evaluatePromotionsForCart, getActivePromotions, getCartContext, getStockContext, normalizeSnapshot } from './shopping-evaluator.mjs';
 import { createShoppingReader } from './shopping-repository.mjs';
 import { createShoppingTurn } from './shopping-tools.mjs';

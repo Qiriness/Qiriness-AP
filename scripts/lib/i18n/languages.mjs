@@ -7,7 +7,7 @@
  *   <code>/messages.mjs  every sentence the server writes itself (questions, buttons, cart answers)
  *
  * ADDING A LANGUAGE: copy the `en` folder, translate it, add one line to PACKS below, add the
- * widget's locale file (storefront-app/extensions/storefront-advisor/locales/<code>.json), then run
+ * widget's locale file (extensions/storefront-advisor/locales/<code>.json), then run
  * `node scripts/storefront/build-widget-words.mjs`. i18n.test.mjs fails until every file has every
  * key of the French one, with the same placeholders.
  *

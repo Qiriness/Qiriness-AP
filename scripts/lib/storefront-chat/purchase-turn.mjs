@@ -2,12 +2,11 @@
  * Purchase awareness in a chat turn (docs/storefront-advisor-plan.md § 5).
  *
  * A purchase is a fact to ASK about, never a profile: it does not prove the
- * customer likes it, uses it, still has it or bought it for themselves. Inside
- * the routine builder only (routine-flow.mjs), the consultant asks about ONE:
- * build the routine around it, « il m'en reste peu » (its card: view or add to
- * cart), or focus on the concern. Only the answer is recorded.
+ * customer likes it, uses it, still has it or bought it for themselves. The
+ * builder no longer asks about one (owner, 2026-11-02: it did not work as
+ * wanted); a session from before keeps the answers it recorded.
  *
- * READ ONLY WHEN IT SERVES THE TURN: a consultation turn, a purchase chip, or a
+ * READ ONLY WHEN IT SERVES THE TURN: a consultation turn, or a
  * message about past purchases (« ce que j'ai acheté », « reorder »). A policy
  * or product question never reads the customer's orders.
  *
@@ -23,13 +22,8 @@
  */
 
 import { replenishment } from '../advisory/replenishment.mjs';
-import { alternation, messages } from '../i18n/languages.mjs';
+import { alternation } from '../i18n/languages.mjs';
 
-/** Chip value: `purchase:<answer>:<catalogue product id>`. */
-export const PURCHASE_CHOICE = /^purchase:(around|running_low|focus):([0-9a-f-]{36})$/;
-export const ANSWERS = ['around', 'running_low', 'focus'];
-/** One purchase question per conversation, inside the builder. */
-export const MAX_PURCHASE_QUESTIONS = 1;
 /** Shown to the model: the most recent, enough to answer « what did I buy? ». */
 export const MAX_PROMPT_PURCHASES = 8;
 
@@ -50,21 +44,6 @@ const ID = /^[0-9a-f-]{36}$/;
 export function cleanPurchaseState(saved) {
   const list = (v) => (Array.isArray(v) ? [...new Set(v.filter((id) => typeof id === 'string' && ID.test(id)))].slice(0, 20) : []);
   return { asked: list(saved?.asked), around: list([...(Array.isArray(saved?.around) ? saved.around : []), ...(Array.isArray(saved?.using) ? saved.using : [])]), running_low: list(saved?.running_low), focus: list(saved?.focus) };
-}
-
-/** A purchase chip → { answer, productId }, or null. */
-export function parsePurchaseChoice(choice) {
-  const m = typeof choice === 'string' ? choice.match(PURCHASE_CHOICE) : null;
-  return m ? { answer: m[1], productId: m[2] } : null;
-}
-
-/** Record an answer: a product sits in exactly one answer list. */
-export function recordAnswer(state, { answer, productId }) {
-  const next = cleanPurchaseState(state);
-  for (const a of ANSWERS) next[a] = next[a].filter((id) => id !== productId);
-  next[answer] = [...next[answer], productId];
-  if (!next.asked.includes(productId)) next.asked = [...next.asked, productId];
-  return next;
 }
 
 /** The price the shop shows for it (its cheapest variant), or null. Ranking only, never shown. */
@@ -98,30 +77,6 @@ export function purchaseItems(summary, catalogue) {
   });
 }
 
-/**
- * The purchase worth asking about now: one the customer paid for and kept,
- * still in the catalogue, not yet asked. One probably running low first
- * (`isDue`, Phase 3); then the most recent; on the same day, the one bought
- * most often; then the more expensive. Null when there is none or the
- * conversation has asked enough.
- */
-export function purchaseToAsk(items, state, { isDue = () => false } = {}) {
-  const s = cleanPurchaseState(state);
-  if (s.asked.length >= MAX_PURCHASE_QUESTIONS) return null;
-  const candidates = items.filter((i) => i.in_catalogue && !i.free_gift && !i.returned && !s.asked.includes(i.product_id));
-  const due = new Set(candidates.filter((i) => isDue(i)));
-  return candidates.sort((a, b) =>
-    Number(due.has(b)) - Number(due.has(a))
-    || String(b.last_purchased_on ?? '').localeCompare(String(a.last_purchased_on ?? ''))
-    || (b.times_purchased ?? 0) - (a.times_purchased ?? 0)
-    || (b.price ?? 0) - (a.price ?? 0))[0] ?? null;
-}
-
-export function purchaseChoices(item, locale = 'fr') {
-  const labels = messages(locale).purchase;
-  return ANSWERS.map((a) => ({ label: labels[a], value: `purchase:${a}:${item.product_id}` }));
-}
-
 /** A daily product past its usual interval, unless they already answered about it (running low, or set aside). */
 export function mayBeRunningLow(item, state, { knowledge = null, measured = null, now = new Date() } = {}) {
   const s = cleanPurchaseState(state);
@@ -147,13 +102,13 @@ export function customerRanges(items, state, knowledge) {
 }
 
 /**
- * What the prompt shows: the purchases, what the customer said about them, and
- * the answer just given (if any). Products and days only: the question itself is the app's follow-up.
+ * What the prompt shows: the purchases, and what the customer said about them
+ * in a session from before 2026-11-02. Products and days only.
  * With product knowledge: `may_be_running_low` on a daily product whose usual
  * interval has passed (never once they answered about it),
  * and `bought_repeatedly` when they paid for it more than once.
  */
-export function describePurchases(items, state, { answered = null, knowledge = null, measured = null, now = new Date() } = {}) {
+export function describePurchases(items, state, { knowledge = null, measured = null, now = new Date() } = {}) {
   const s = cleanPurchaseState(state);
   const said = (id) => (s.around.includes(id) ? 'build_around' : s.running_low.includes(id) ? 'running_low' : s.focus.includes(id) ? 'set_aside' : null);
   const runningLow = (i) => mayBeRunningLow(i, s, { knowledge, measured, now });
@@ -169,6 +124,5 @@ export function describePurchases(items, state, { answered = null, knowledge = n
       ...(!i.free_gift && i.times_purchased >= 2 ? { bought_repeatedly: true } : {}),
       ...(runningLow(i) ? { may_be_running_low: true } : {}),
     })),
-    ...(answered ? { just_answered: { name: answered.name, customer_said: said(answered.product_id) } } : {}),
   };
 }

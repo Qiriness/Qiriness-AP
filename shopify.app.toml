@@ -59,3 +59,11 @@ uri = "https://qiriness-ap.vercel.app/api/webhooks/shopify"
 [[webhooks.subscriptions]]
 compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
 uri = "https://qiriness-ap.vercel.app/api/webhooks/shopify"
+
+# The storefront advisor (extensions/storefront-advisor): the storefront calls
+# /apps/storefront-advisor/chat on its own domain; Shopify signs the request with
+# this app's secret (STOREFRONT_APP_CLIENT_SECRET) and forwards it to url + "/chat".
+[app_proxy]
+url = "https://qiriness-ap.vercel.app/api/storefront"
+subpath = "storefront-advisor"
+prefix = "apps"

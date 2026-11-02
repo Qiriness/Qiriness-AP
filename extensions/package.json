@@ -1,0 +1,5 @@
+{
+  "//": "The widget scripts are browser scripts, CommonJS for the tests that import advisor-cart.js (the repo root is ES modules).",
+  "private": true,
+  "type": "commonjs"
+}

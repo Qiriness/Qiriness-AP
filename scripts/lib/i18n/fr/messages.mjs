@@ -10,7 +10,7 @@ const possessive = (concern) => (/[sx]$/i.test(concern.split(/\s+/)[0]) ? 'vos' 
 export default {
   code: 'fr',
 
-  /** routine-flow.mjs: the routine offer, the purchase question, the treat, the cart question. */
+  /** routine-flow.mjs: the routine offer, the treat, the cart question. */
   /** A label inside a sentence starts in lower case (« vos rides »); German keeps its nouns' capitals. */
   /** The language's English name, and its formal « you » (empty where the prompt says it itself), for the model's instructions. */
   languageName: 'French',
@@ -21,8 +21,6 @@ export default {
     offer: 'Souhaitez-vous que je vous construise une routine personnalisée ?',
     yes: 'Oui, avec plaisir',
     no: 'Non merci',
-    purchase: (name) => `Je vois que vous avez déjà acheté ${name}. Souhaitez-vous construire votre routine autour, vous en reste-t-il peu, ou préférez-vous vous concentrer sur votre préoccupation ?`,
-    runningLow: (name) => `Vous pouvez retrouver ${name} ici, ou l'ajouter directement à votre panier.`,
     // With their concern (owner, 2026-10-19): « parfait pour atténuer vos imperfections ».
     treatAfterRoutine: (concern) => concern ? `Et pour un moment de douceur, parfait pour atténuer ${possessive(concern)} ${concern}, ce petit plaisir pourrait vous plaire :` : 'Et pour un moment de douceur, ce petit plaisir pourrait vous plaire :',
     treatAfterNo: "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :",
@@ -39,9 +37,6 @@ export default {
     cartNoDone: 'Très bien, prenez votre temps.',
     routineReady: 'Voici votre routine personnalisée, matin et soir.',
   },
-
-  /** purchase-turn.mjs: the buttons under « Je vois que vous avez déjà acheté… ». */
-  purchase: { around: 'Construire ma routine autour', running_low: "Il m'en reste peu", focus: 'Me concentrer sur ma préoccupation' },
 
   /**
    * repurchase-opening.mjs: the owner's wording (2026-10-29). « en reprendre »: a product's name does
