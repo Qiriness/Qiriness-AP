@@ -51,7 +51,8 @@
       "button": {{ banner_button | json }},
       "close": {{ 'banner.close' | t | json }},
       "action": {{ 'actions.build_routine' | t | json }},
-      "hours": {{ block.settings.banner_hours | json }}
+      "hours": {{ block.settings.banner_hours | json }},
+      "lift": {{ block.settings.banner_lift | strip | json }}
     },
     "viewer": {% if customer %}{{ customer.id | append: '' | json }}{% else %}""{% endif %},
     "quickActions": [
@@ -232,7 +233,8 @@
     { "type": "textarea", "id": "greeting", "label": "Greeting", "info": "The advisor's first message. Leave empty for the default, in the visitor's language." },
     { "type": "text", "id": "banner_text", "label": "Banner text", "info": "Leave empty for the default text, in the visitor's language." },
     { "type": "text", "id": "banner_button", "label": "Banner button", "info": "Leave empty for the default label, in the visitor's language." },
-    { "type": "range", "id": "banner_hours", "label": "Hidden after closing for", "min": 1, "max": 72, "step": 1, "unit": "h", "default": 4 }
+    { "type": "range", "id": "banner_hours", "label": "Hidden after closing for", "min": 1, "max": 72, "step": 1, "unit": "h", "default": 4 },
+    { "type": "text", "id": "banner_lift", "label": "Lift above the banner", "info": "CSS selectors of other widgets pinned to the bottom of the screen, comma-separated. Default: Klaviyo's sign-up teaser. Empty: nothing is moved.", "default": "[class*=\"kl-teaser\"]" }
   ]
 }
 {% endschema %}

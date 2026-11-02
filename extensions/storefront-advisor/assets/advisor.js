@@ -109,7 +109,21 @@
     bar.appendChild(go);
     bar.appendChild(close);
 
+    // Other widgets pinned to the bottom (Klaviyo's teaser…): lifted above the bar while it shows (theme setting).
+    var lifted = [];
+    var watch = null;
+    function lift() {
+      if (!banner.lift) return;
+      var found;
+      try { found = document.querySelectorAll(banner.lift); } catch (error) { return; }
+      for (var i = 0; i < found.length; i++) {
+        if (!root.contains(found[i]) && lifted.indexOf(found[i]) < 0) lifted.push(found[i]);
+      }
+      lifted.forEach(function (el) { el.style.setProperty('margin-bottom', bar.offsetHeight + 'px', 'important'); });
+    }
     function hide(remember) {
+      if (watch) watch.disconnect();
+      lifted.forEach(function (el) { el.style.removeProperty('margin-bottom'); });
       if (remember) {
         try { window.localStorage.setItem(BANNER_KEY, String(Date.now())); } catch (error) { /* shown again next page */ }
       }
@@ -120,6 +134,7 @@
     }
     function measure() {
       root.style.setProperty('--sa-banner-h', bar.offsetHeight + 'px');
+      lift();
     }
     go.addEventListener('click', function () {
       hide(true);
@@ -132,6 +147,11 @@
       measure();
       root.classList.add('sa-root--banner');
       window.addEventListener('resize', measure);
+      // They often arrive after the page: lifted as they appear.
+      if (banner.lift && window.MutationObserver) {
+        watch = new MutationObserver(lift);
+        watch.observe(document.body, { childList: true, subtree: true });
+      }
       // Next frame: slide up from the bottom edge.
       window.requestAnimationFrame(function () { bar.classList.add('sa-banner--in'); });
     }, BANNER_DELAY_MS);

@@ -10,6 +10,10 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The routine banner: lifts Klaviyo's teaser, sans-serif text (2026-11-02)
+
+The banner across the bottom covered Klaviyo's sign-up teaser (bottom left) on the staging theme. While the banner shows, the widgets named by the embed's new setting « Lift above the banner » (CSS selectors, default `[class*="kl-teaser"]`; empty moves nothing) get a bottom margin of the banner's height, also when they arrive after the page (a MutationObserver, disconnected when the banner closes); closing it puts them back. The banner's text is in the body font (sans serif), no longer the heading serif. `advisor.js` 9.3 KB (Theme Check cap 10 KB). **Checked:** `node --check`, schema parses, `npm test`. Not viewed in a browser: Klaviyo's teaser class is from its usual markup, check it on the staging theme; needs `shopify app deploy`.
+
 ## Storefront chat switches: on in code, a variable only to turn one off (2026-11-02)
 
 Owner: « can these be switches in code rather than in the env file … dont want to have 1000 of variables ». `STOREFRONT_CHAT_AGENT=llm`, `STOREFRONT_CHAT_PURCHASE_HISTORY=on` and `STOREFRONT_CHAT_ORDER_STATUS=on` are no longer needed: the model answers whenever `OPENAI_API_KEY` is set (`STOREFRONT_CHAT_AGENT=mock` forces demo replies), and purchase history and order status are on unless set to `off`, like `STOREFRONT_CHAT_TOOLS` already was. The guard against spending is the door: `STOREFRONT_CHAT_ALLOWED_SHOPS` (empty allows nobody) and the theme's app embed. **Checked:** `npm test`, `tsc`.
