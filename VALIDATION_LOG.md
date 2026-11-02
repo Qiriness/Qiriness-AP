@@ -2155,3 +2155,10 @@ Built against the dev store's chat log, checked offline only: the migration, bac
 5. **Page:** open `/storefront-agent` as management: 7/30/90 days and a custom range change every section; visits, accuracy and incremental revenue read « Not yet tracked »; purchases too while the dev store has no synced orders. As contact the link is absent and the URL redirects.
 6. **Purchases (only once the advisor runs on a shop whose orders are synced):** an order placed from an advisor cart gets `orders.advisor_conversation_id` on the next order sync, and appears once in assisted orders/revenue.
 
+## 👍 / 👎 in the storefront chat (2026-11-02) — open
+
+After migration 08, the web deploy and `shopify app deploy`:
+1. On the dev store, ask for a product. The thumbs appear under the cards and not under a plain answer. A click shows the thanks line, and that turn's row gets `feedback` and `feedback_at`.
+2. Click the other thumb: the row changes. Reload the page: the choice is still shown.
+3. On the dashboard, Recommendation accuracy shows a percentage with « Ratings 1 » and is no longer « Not yet tracked ». The LLM or rule-based column shows it per route.
+

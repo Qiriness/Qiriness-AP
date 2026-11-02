@@ -169,7 +169,7 @@ export interface StorefrontContact {
 }
 
 export type StorefrontChatResult =
-  | { ok: true; sessionId: string; conversationId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[]; followUp?: StorefrontFollowUp; contact?: StorefrontContact; routineCart?: StorefrontCartItems; routineView?: StorefrontRoutineView; cart?: StorefrontCartItems; layout?: "routine" } }
+  | { ok: true; sessionId: string; conversationId: string; turnId: string; reply: { text: string; products: StorefrontProductCard[]; choices: StorefrontChoice[]; followUp?: StorefrontFollowUp; contact?: StorefrontContact; routineCart?: StorefrontCartItems; routineView?: StorefrontRoutineView; cart?: StorefrontCartItems; layout?: "routine" } }
   | { ok: false; status: 429; code: "session_limit" | "daily_limit" }
   | { ok: false; status: 503; code: "unavailable" };
 
@@ -439,6 +439,8 @@ export async function handleStorefrontChat(
   const cap = limits();
   // The turn's latency, as the customer waits it: from the request to the reply (storefront_agent_turns).
   const startedAt = Date.now();
+  // The turn's analytics row id, handed to the widget so the customer's 👍 / 👎 names it.
+  const turnId = crypto.randomUUID();
 
   // THE CUSTOMER IS WAITING, so nothing waits that need not. The agent (and on
   // a cold start, the catalogue) loads while the session is read; the count and
@@ -563,6 +565,7 @@ export async function handleStorefrontChat(
 
   recordAdvisoryEvents(db, shopDomain, "events" in reply && Array.isArray(reply.events) ? reply.events : []);
   recordTurn(db, turnRecord({
+    id: turnId,
     shopDomain,
     conversationId: session.id,
     userMessageId: messageIdOf(stored),
@@ -580,7 +583,7 @@ export async function handleStorefrontChat(
   const routineCart = ("routineCart" in reply && reply.routineCart ? reply.routineCart : null) as StorefrontCartItems | null;
   const cart = ("cart" in reply && reply.cart ? reply.cart : null) as StorefrontCartItems | null;
   const routineView = ("routineView" in reply && reply.routineView ? reply.routineView : null) as StorefrontRoutineView | null;
-  return { ok: true, sessionId: session.session_token, conversationId: session.id, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}), ...(routineCart ? { routineCart } : {}), ...(routineView ? { routineView } : {}), ...(cart ? { cart } : {}), ...("layout" in reply && reply.layout === "routine" ? { layout: "routine" as const } : {}) } };
+  return { ok: true, sessionId: session.session_token, conversationId: session.id, turnId, reply: { text: reply.text, products: reply.products, choices, ...(followUp ? { followUp } : {}), ...(contact ? { contact } : {}), ...(routineCart ? { routineCart } : {}), ...(routineView ? { routineView } : {}), ...(cart ? { cart } : {}), ...("layout" in reply && reply.layout === "routine" ? { layout: "routine" as const } : {}) } };
 }
 
 /**
@@ -686,6 +689,25 @@ export async function recordChatOpen(shopDomain: string, openId: string, session
     ? ((await supabaseSelect(db, STOREFRONT_CHAT_T.SESSIONS, { session_token: sessionToken, shop_domain: shopDomain }, "id", { limit: 1 })) as { id: string }[])
     : [];
   await supabaseUpsert(db, STOREFRONT_AGENT_T.OPENS, [{ id: openId, shop_domain: shopDomain, conversation_id: rows[0]?.id ?? null }], "id", { returning: "minimal" });
+}
+
+/**
+ * The customer's 👍 / 👎 on a reply (storefront_agent_turns.feedback), through
+ * the signed event route. Only a turn of the conversation this browser holds,
+ * on the signed shop, is rated; a second click replaces the first.
+ */
+export async function recordFeedback(shopDomain: string, sessionToken: string, turnId: string, rating: "up" | "down") {
+  const db = client();
+  const rows = (await supabaseSelect(db, STOREFRONT_CHAT_T.SESSIONS, { session_token: sessionToken, shop_domain: shopDomain }, "id", { limit: 1 })) as { id: string }[];
+  if (!rows[0]) return false;
+  await supabaseUpdate(
+    db,
+    STOREFRONT_AGENT_T.TURNS,
+    { id: turnId, conversation_id: rows[0].id, shop_domain: shopDomain },
+    { feedback: rating, feedback_at: new Date().toISOString() },
+    { returning: "minimal" }
+  );
+  return true;
 }
 
 /** A card click from the widget, through the signed event route. */

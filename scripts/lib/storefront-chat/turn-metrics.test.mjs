@@ -91,3 +91,9 @@ test('the products shown include follow-up and routine cards, once each', () => 
   });
   assert.deepEqual(ids, ['a', 'b', 'c']);
 });
+
+test('a turn the widget will rate carries the id the reply handed it; otherwise the database mints one', () => {
+  const id = '00000000-0000-4000-8000-0000000000ff';
+  assert.equal(turnRecord({ ...base, id, reply: { model: 'm', trace: { calls: [1] } } }).id, id);
+  assert.equal('id' in turnRecord({ ...base, reply: { model: 'm', trace: { calls: [1] } } }), false);
+});

@@ -2,7 +2,7 @@ import {
   parseAllowedShops,
   verifyAppProxySignature,
 } from "../../../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
-import { recordChatOpen, recordProductClick, recordRoutineAdded } from "@/lib/server/storefront-chat-service";
+import { recordChatOpen, recordFeedback, recordProductClick, recordRoutineAdded } from "@/lib/server/storefront-chat-service";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,7 +21,9 @@ const MAX_BODY_BYTES = 1024;
  * type: "routine_added_to_cart" }`: « Ajouter la routine au panier » marks that
  * routine (advisor_routines) of the signed shop. Or `{ openId, sessionId?,
  * type: "chat_opened" }`: the panel opened (storefront_agent_opens), `openId`
- * minted by the widget per opening. Always 204 for a well-formed
+ * minted by the widget per opening. Or `{ turnId, sessionId, rating: "up" |
+ * "down", type: "feedback" }`: the customer's 👍 / 👎 on a reply of their own
+ * conversation (storefront_agent_turns.feedback). Always 204 for a well-formed
  * request: a click beacon has nobody to show an error to.
  */
 export async function POST(request: Request) {
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
 
   const raw = await request.text();
   if (Buffer.byteLength(raw, "utf8") > MAX_BODY_BYTES) return new Response(null, { status: 413 });
-  let body: { sessionId?: unknown; productId?: unknown; routineRef?: unknown; openId?: unknown; type?: unknown };
+  let body: { sessionId?: unknown; productId?: unknown; routineRef?: unknown; openId?: unknown; turnId?: unknown; rating?: unknown; type?: unknown };
   try {
     body = JSON.parse(raw);
   } catch {
@@ -47,6 +49,18 @@ export async function POST(request: Request) {
       await recordChatOpen(proof.shop, body.openId.toLowerCase(), token);
     } catch (error) {
       console.warn("[storefront event] open not recorded", error instanceof Error ? error.message : error);
+    }
+    return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+  }
+  if (body.type === "feedback") {
+    const rating = body.rating === "up" || body.rating === "down" ? body.rating : null;
+    if (!rating || typeof body.turnId !== "string" || !UUID.test(body.turnId) || typeof body.sessionId !== "string" || !UUID.test(body.sessionId)) {
+      return new Response(null, { status: 400 });
+    }
+    try {
+      await recordFeedback(proof.shop, body.sessionId.toLowerCase(), body.turnId.toLowerCase(), rating);
+    } catch (error) {
+      console.warn("[storefront event] feedback not recorded", error instanceof Error ? error.message : error);
     }
     return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
   }

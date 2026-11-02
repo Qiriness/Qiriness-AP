@@ -57,7 +57,8 @@ export async function POST(request: Request) {
     const result = await handleStorefrontChat(proof.shop, parsed, identity);
     if (!result.ok) return fail(result.status, result.code);
     // conversationId: what the widget writes on the cart (`_advisor_conversation`), so an order names its chat.
-    return Response.json({ sessionId: result.sessionId, conversationId: result.conversationId, reply: result.reply }, { headers: NO_STORE });
+    // turnId: what the widget's 👍 / 👎 names (storefront_agent_turns.feedback).
+    return Response.json({ sessionId: result.sessionId, conversationId: result.conversationId, turnId: result.turnId, reply: result.reply }, { headers: NO_STORE });
   } catch (error) {
     console.error("[storefront chat] failed", error instanceof Error ? error.message : error);
     return fail(500, "unavailable");

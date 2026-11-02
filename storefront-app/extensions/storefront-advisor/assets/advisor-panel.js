@@ -65,6 +65,8 @@
     expand: ['M14 4h6v6', 'M20 4l-7 7', 'M10 20H4v-6', 'M4 20l7-7'],
     collapse: ['M20 10h-6V4', 'M14 10l7-7', 'M4 14h6v6', 'M10 14l-7 7'],
     newChat: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z'],
+    thumbUp: ['M7 11v9H4v-9z', 'M7 11l4-7a2 2 0 0 1 3 2l-1 4h5a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 16.8 20H7'],
+    thumbDown: ['M17 13V4h3v9z', 'M17 13l-4 7a2 2 0 0 1-3-2l1-4H6a2 2 0 0 1-2-2.3l1.2-6A2 2 0 0 1 7.2 4H17'],
     send: ['M3.5 12h16', 'M14.5 7l5 5-5 5'],
     search: ['M10.5 4a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13z', 'M20 20l-4.8-4.8'],
     check: ['M5 12.5l4 4L19 7'],
@@ -167,6 +169,19 @@
     } catch (e) { /* a lost data point, nothing more */ }
   }
 
+  /*
+   * The customer's 👍 / 👎 on a reply with cards: the turn the server named (turnId), the conversation's
+   * token, the rating. The recommendation accuracy on the dashboard (storefront_agent_turns.feedback).
+   */
+  function reportFeedback(endpoint, sessionId, turnId, rating) {
+    try {
+      var url = String(endpoint).replace(/\/chat$/, '/event');
+      var body = JSON.stringify({ type: 'feedback', sessionId: sessionId, turnId: turnId, rating: rating });
+      if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([body], { type: 'application/json' }))) return;
+      fetch(url, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: { 'Content-Type': 'application/json' }, body: body }).catch(function () {});
+    } catch (e) { /* a lost data point, nothing more */ }
+  }
+
   /* « Ajouter la routine au panier »: the routine's ref to the same /event route. */
   function reportRoutineAdded(endpoint, routineRef) {
     try {
@@ -252,6 +267,8 @@
   var onCardAdd = null;
   /* A routine added whole (advisor_routines): its ref only, never who added it. */
   var onRoutineAdd = null;
+  /* A 👍 / 👎 on a reply: set by the proxy transport only, so the demo replies draw no thumbs. */
+  var onFeedback = null;
   /*
    * The conversation the advisor's « Ajouter au panier » belongs to (the chat reply's conversationId), written on
    * the cart as `_advisor_conversation`: the order made from that cart names the conversation, so the dashboard
@@ -998,6 +1015,37 @@
     });
   }
 
+  /*
+   * « Ces conseils vous aident ? » 👍 👎 under a reply that recommended products. The choice is kept on
+   * the message (session storage), so it survives a page change; a second click changes it.
+   */
+  function Feedback(message, strings) {
+    var row = el('div', { className: 'sa-feedback', role: 'group', 'aria-label': strings.feedbackAsk || 'Ces conseils vous aident ?' });
+    var label = el('span', { className: 'sa-feedback__label', text: message.feedback ? (strings.feedbackThanks || 'Merci pour votre retour.') : (strings.feedbackAsk || 'Ces conseils vous aident ?') });
+    row.appendChild(label);
+    var buttons = {};
+    ['up', 'down'].forEach(function (rating) {
+      var button = el('button', {
+        type: 'button',
+        className: 'sa-feedback__button',
+        'aria-label': rating === 'up' ? (strings.feedbackUp || 'Utile') : (strings.feedbackDown || 'Pas utile'),
+        'aria-pressed': String(message.feedback === rating)
+      }, [icon(rating === 'up' ? ICONS.thumbUp : ICONS.thumbDown)]);
+      button.addEventListener('click', function () {
+        if (message.feedback === rating) return;
+        message.feedback = rating;
+        buttons.up.setAttribute('aria-pressed', String(rating === 'up'));
+        buttons.down.setAttribute('aria-pressed', String(rating === 'down'));
+        label.textContent = strings.feedbackThanks || 'Merci pour votre retour.';
+        persistState();
+        if (onFeedback) onFeedback(message.turnId, rating);
+      });
+      buttons[rating] = button;
+      row.appendChild(button);
+    });
+    return row;
+  }
+
   function Bubble(message, strings, onRetry, onChoice) {
     var isUser = message.role === 'user';
     var node = el('div', { className: 'sa-message sa-message--' + (isUser ? 'user' : 'assistant') }, [
@@ -1012,6 +1060,9 @@
     } else if (!isUser && Array.isArray(message.products) && message.products.length) {
       node.className += ' sa-message--products';
       node.appendChild(ProductList(message.products, strings));
+    }
+    if (!isUser && onFeedback && typeof message.turnId === 'string' && (routine || (Array.isArray(message.products) && message.products.length))) {
+      node.appendChild(Feedback(message, strings));
     }
     if (!isUser && typeof message.cartStatus === 'string') {
       node.appendChild(el('p', { className: 'sa-cart-status', role: 'status', text: message.cartStatus }));
@@ -1088,6 +1139,7 @@
       onCardClick = function (productId) { reportClick(config.endpoint, state.sessionId, productId); };
       onCardAdd = function (productId) { reportClick(config.endpoint, state.sessionId, productId, 'added_to_cart'); };
       onRoutineAdd = function (routineRef) { reportRoutineAdded(config.endpoint, routineRef); };
+      onFeedback = function (turnId, rating) { reportFeedback(config.endpoint, state.sessionId, turnId, rating); };
     }
     persistState = function () { saveState(state); };
     var mobile = window.matchMedia ? window.matchMedia(MOBILE_QUERY) : { matches: false };
@@ -1401,8 +1453,12 @@
           state.conversationId = body.conversationId;
           if (config.transport === 'proxy') cartConversation = body.conversationId;
         }
+        // The turn the 👍 / 👎 rates: on the bubble with the cards (the reply's, else its follow-up's).
+        var turnId = typeof body.turnId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.turnId) ? body.turnId : null;
+        var replyHasCards = (Array.isArray(body.reply.products) && body.reply.products.length > 0) || Boolean(body.reply.routineView);
         state.messages.push({
           role: 'assistant',
+          turnId: replyHasCards ? turnId : null,
           text: String(body.reply.text || ''),
           products: Array.isArray(body.reply.products) ? body.reply.products : [],
           choices: Array.isArray(body.reply.choices) ? body.reply.choices : [],
@@ -1445,6 +1501,7 @@
         if (followUp && typeof followUp.text === 'string' && followUp.text) {
           state.messages.push({
             role: 'assistant',
+            turnId: replyHasCards ? null : turnId,
             text: followUp.text,
             products: Array.isArray(followUp.products) ? followUp.products : [],
             choices: Array.isArray(followUp.choices) ? followUp.choices : []

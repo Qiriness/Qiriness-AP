@@ -24,6 +24,8 @@ export const TURN_ROUTES = ['llm', 'rules', 'mock'];
 export const TURN_STATUSES = ['answered', 'failed'];
 /** Mirrors `storefront_agent_turns_intent_check`, in priority order (`other` last). */
 export const TURN_INTENTS = ['routine_building', 'reordering', 'customer_service', 'faq', 'product_discovery', 'other'];
+/** Mirrors `storefront_agent_turns_feedback_check`: the customer's 👍 / 👎 on a reply. */
+export const TURN_FEEDBACK = ['up', 'down'];
 /** Mirrors `storefront_agent_turns_fallbacks_check`. */
 export const TURN_FALLBACKS = ['source_unavailable', 'forced_answer', 'lexicon_backup'];
 
@@ -95,13 +97,14 @@ export function intentOfTurn({ trace = null, action = null, mode = null, opening
  * The analytics row of one turn.
  *
  * @param {{
- *   shopDomain: string, conversationId: string, userMessageId?: string | null,
+ *   id?: string, shopDomain: string, conversationId: string, userMessageId?: string | null,
  *   startedAt: Date | string | number, latencyMs: number, action?: string | null, opening?: boolean,
  *   reply?: object | null, error?: { code: string } | null,
  *   productIds?: string[] | null, escalated?: boolean | null, backfilled?: boolean
  * }} input
  */
 export function turnRecord({
+  id = undefined,
   shopDomain,
   conversationId,
   userMessageId = null,
@@ -142,6 +145,8 @@ export function turnRecord({
         : 'mock';
 
   return {
+    // Minted by the caller when the reply hands it to the widget, so a 👍 / 👎 can name this row.
+    ...(id ? { id } : {}),
     shop_domain: shopDomain,
     conversation_id: conversationId,
     user_message_id: userMessageId,

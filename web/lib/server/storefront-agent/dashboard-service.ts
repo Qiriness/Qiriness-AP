@@ -54,7 +54,8 @@ interface RawCounts {
 }
 
 interface RawDashboard {
-  coverage: { turns_from: string | null; live_turns_from: string | null; opens_from: string | null; orders_synced: boolean };
+  coverage: { turns_from: string | null; live_turns_from: string | null; opens_from: string | null; feedback_from: string | null; routines_from: string | null; orders_synced: boolean };
+  routines: { provided: number; added: number; started: number; completed: number };
   conversations: RawCounts;
   opens: number;
   orders: { count: number; revenue: string | number };
@@ -72,13 +73,15 @@ interface RawDashboard {
     with_fallback: number;
     unanswered: number;
     escalated: number;
+    rated: number;
+    rated_up: number;
     input_tokens: number;
     output_tokens: number;
   };
   errors: { code: string | null; turns: number }[];
   fallbacks: { kind: string; turns: number }[];
   tokens: { route: AgentRoute; intent: AgentIntent; model: string; input: number; output: number }[];
-  routes: { route: AgentRoute; turns: number; failed: number; resolved: number; p50: number | null; p95: number | null; shown: number; clicked: number; carted: number }[];
+  routes: { route: AgentRoute; turns: number; failed: number; resolved: number; p50: number | null; p95: number | null; rated: number; rated_up: number; shown: number; clicked: number; carted: number }[];
   intents: { intent: AgentIntent; conversations: number; resolved: number; carted: number; purchased: number; revenue: string | number; p50: number | null; p95: number | null }[];
   series: { bucket: string; conversations: number; orders: number; revenue: string | number }[];
   products: { product_id: string; title: string | null; handle: string | null; shown: number; clicked: number; carted: number; units: string | number; sales: string | number }[];
@@ -172,6 +175,7 @@ export async function getStorefrontAgentDashboard(range: InsightsRange, shops: s
     clickRate: rate(r.clicked, r.shown),
     cartRate: rate(r.carted, r.shown),
     errorRate: rate(r.failed, r.turns),
+    accuracy: rate(r.rated_up, r.rated),
     // A route with no model call costs nothing by construction; one with calls but no rate is unknown.
     costUsd: r.route === "llm" ? priced.byRoute.llm ?? null : priced.byRoute[r.route] ?? 0,
   }));
@@ -197,6 +201,8 @@ export async function getStorefrontAgentDashboard(range: InsightsRange, shops: s
       turnsFrom,
       liveTurnsFrom: d.coverage.live_turns_from,
       opensFrom: d.coverage.opens_from,
+      feedbackFrom: d.coverage.feedback_from,
+      routinesFrom: d.coverage.routines_from,
       purchasesTracked,
       previousCovered: compare,
     },
@@ -207,6 +213,16 @@ export async function getStorefrontAgentDashboard(range: InsightsRange, shops: s
       conversion: figure(conversion(c), conversion(pc), compare),
       resolution: figure(rate(c.resolved, c.total), rate(pc.resolved, pc.total), compare),
       p95: figure(num(d.turns.p95), num(p.turns.p95), compare),
+    },
+    routines: {
+      // Compared only when the previous window lies after the first routine recorded.
+      provided: figure(
+        d.routines.provided,
+        p.routines.provided,
+        compare && Boolean(d.coverage.routines_from) && previousCovered(range, { from: d.coverage.routines_from, through: null })
+      ),
+      addedRate: rate(d.routines.added, d.routines.provided),
+      completionRate: rate(d.routines.completed, d.routines.started),
     },
     funnel,
     sales: {
@@ -231,6 +247,8 @@ export async function getStorefrontAgentDashboard(range: InsightsRange, shops: s
     },
     quality: {
       resolution: figure(rate(c.resolved, c.total), rate(pc.resolved, pc.total), compare),
+      accuracy: figure(rate(d.turns.rated_up, d.turns.rated), rate(p.turns.rated_up, p.turns.rated), compare),
+      ratings: d.turns.rated,
       escalation: figure(rate(c.escalated, c.total), rate(pc.escalated, pc.total), compare),
       unanswered: {
         turns: d.turns.unanswered,

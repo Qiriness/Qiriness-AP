@@ -44,6 +44,18 @@ test('the storefront agent dashboard counts conversations, clicks and assisted o
         [shop, A, type, [productId]]
       );
     }
+    // A rated A's recommendation up; a reply with no products is rated too, but is no recommendation.
+    await q(`update storefront_agent_turns set feedback = 'up', feedback_at = now() where conversation_id = $1 and cardinality(product_ids) > 0`, [A]);
+    await q(`update storefront_agent_turns set feedback = 'down', feedback_at = now() where conversation_id = $1 and status = 'answered'`, [B]);
+    // Two routines provided in the window, one added to the cart; one from before it.
+    await q(`insert into advisor_routines (ref, shop_domain, channel, routine_time, created_at, added_to_cart_at) values
+      (gen_random_uuid(), $1, 'storefront_chat', 'day', '2026-10-11T09:01:00Z', '2026-10-11T09:03:00Z'),
+      (gen_random_uuid(), $1, 'storefront_chat', 'both', '2026-10-12T09:01:00Z', null),
+      (gen_random_uuid(), $1, 'storefront_chat', 'night', '2026-09-01T09:01:00Z', null)`, [shop]);
+    await q(`insert into advisory_events (shop_domain, channel, conversation_ref, event_type, created_at) values
+      ($1, 'storefront_chat', $2, 'routine_builder_started', '2026-10-11T09:00:00Z'),
+      ($1, 'storefront_chat', $2, 'routine_builder_completed', '2026-10-11T09:01:00Z'),
+      ($1, 'storefront_chat', $3, 'routine_builder_started', '2026-10-12T09:00:00Z')`, [shop, B, A]);
     await q(`insert into storefront_agent_opens (id, shop_domain, created_at) values (gen_random_uuid(), $1, '2026-10-10T09:59:00Z')`, [shop]);
     const order = (name, conv, at, extra = {}) =>
       q(
@@ -74,6 +86,11 @@ test('the storefront agent dashboard counts conversations, clicks and assisted o
     assert.equal(d.turns.failed, 1);
     assert.deepEqual(d.errors, [{ code: 'timeout', turns: 1 }]);
     assert.equal(d.coverage.orders_synced, true);
+    assert.ok(d.coverage.feedback_from);
+    assert.equal(d.turns.rated, 1, 'only replies that showed products count for accuracy');
+    assert.equal(d.turns.rated_up, 1);
+    assert.deepEqual(d.routines, { provided: 2, added: 1, started: 2, completed: 1 });
+    assert.ok(d.coverage.routines_from);
 
     const llm = d.routes.find((r) => r.route === 'llm');
     const rules = d.routes.find((r) => r.route === 'rules');
@@ -81,6 +98,8 @@ test('the storefront agent dashboard counts conversations, clicks and assisted o
     assert.equal(llm.shown, 1);
     assert.equal(llm.clicked, 1);
     assert.equal(llm.carted, 1);
+    assert.equal(llm.rated, 1);
+    assert.equal(llm.rated_up, 1);
 
     const routine = d.intents.find((i) => i.intent === 'routine_building');
     assert.equal(routine.conversations, 1);

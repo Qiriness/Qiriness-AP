@@ -131,7 +131,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |-- storefront/event/route.ts    # PUBLIC (same guards as chat). POST a
 |   |       |                                  # card click -> advisory_events; a routine
 |   |       |                                  # added whole -> advisor_routines; a panel
-|   |       |                                  # opening -> storefront_agent_opens
+|   |       |                                  # opening -> storefront_agent_opens; a
+|   |       |                                  # 👍 / 👎 -> storefront_agent_turns.feedback
 |   |       |-- storefront/opening/route.ts  # PUBLIC (same guards as chat). POST when a
 |   |       |                                  # signed-in customer opens an empty chat ->
 |   |       |                                  # their repurchase message, or 204

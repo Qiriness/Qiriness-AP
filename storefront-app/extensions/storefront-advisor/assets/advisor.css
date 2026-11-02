@@ -1079,3 +1079,55 @@ html.sa-scroll-lock body { overflow: hidden; }
   .sa-banner { transition: none; }
   .sa-log { scroll-behavior: auto; }
 }
+
+/* « Ces conseils vous aident ? » 👍 👎 under a reply with cards: quiet, one line. */
+.sa-feedback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--sa-ink);
+}
+
+.sa-feedback__label {
+  margin-right: 4px;
+  opacity: 0.75;
+}
+
+.sa-feedback__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--sa-ink);
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.sa-feedback__button svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sa-feedback__button:hover,
+.sa-feedback__button:focus-visible {
+  opacity: 1;
+  border-color: currentColor;
+}
+
+.sa-feedback__button[aria-pressed="true"] {
+  opacity: 1;
+  border-color: currentColor;
+  background: rgba(0, 0, 0, 0.06);
+}

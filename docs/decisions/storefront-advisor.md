@@ -2,6 +2,16 @@
 
 ## Storefront advisor
 
+### Recommendation accuracy is the customer's thumbs (2026-11-02)
+
+Owner: « add a thumbs up/down in the chat for accuracy ». Migration 08.
+
+- **Where:** under a reply that showed product cards or a routine. If the reply has none, it goes under its follow-up when that has cards. Never under a greeting, a question or a demo reply: those recommend nothing.
+- **What it rates:** the turn. The chat reply carries `turnId`, the `storefront_agent_turns` row id minted by the service before the row is written. The widget sends `{ type: "feedback", turnId, sessionId, rating }` to the signed event route. A rating is written only to a turn of the conversation that this browser's token names, on the signed shop. A second click replaces the first (`feedback_at`). The choice stays on the message in session storage, so it survives a page change.
+- **Accuracy** = 👍 ÷ (👍 + 👎) over rated turns that showed products, shown with the number of ratings beside it. It is also given per route on Rule-based vs LLM. Until a first rating exists, it stays « Not yet tracked ».
+- **Routines provided** (same migration): counted from `advisor_routines`, one row per routine the builder finished. These rows start on 2026-10-17, so earlier windows show no comparison. The card also shows the share of routines added to the cart, and the builder's completion rate (conversations with `routine_builder_completed` ÷ those with `_started`).
+- **What it is not:** an expert judgement. Customers who rate are self-selected and few. Read the ratings count before the percentage.
+
 ### The dashboard reads turns, not the chat log (2026-10-30)
 
 The Storefront Agent dashboard (`/storefront-agent`) is read from `storefront_agent_turns`, one word-free row per turn, written by `turn-metrics.mjs` after each reply (migration 07).
@@ -12,7 +22,7 @@ The Storefront Agent dashboard (`/storefront-agent`) is read from `storefront_ag
 - **Intent is a rule over the trace, not a model call** (`intentOfTurn`): routine builder → reordering (repurchase opening, purchase question, past purchases) → customer service (order lookup, contact link) → FAQ (policy/FAQ/shopping lookups, offers or delivery chips) → product discovery (cards, product tools, buying answers) → other. A conversation takes the intent most of its turns had, `other` only when nothing else.
 - **Resolved** = the conversation's last turn was answered, no turn left a policy/FAQ question unanswered, and none sent the customer to customer service. So every customer-service conversation is unresolved **by the agent** by construction; that is the escalation rate's job to show, not a bug.
 - **Assisted, not incremental.** An order is assisted when its cart carries `_advisor_conversation` (set by the widget on every advisor « Ajouter au panier », lifted into `orders.advisor_conversation_id`) and it was placed after that conversation began; cancelled and deleted orders are out, revenue is net of refunds as on Sales. One order, one conversation, counted once. Whether the sale would have happened anyway needs a holdout group; the dashboard says « Not yet tracked » for incremental revenue rather than implying it.
-- **Not tracked, and said so:** storefront visits (no source for the advisor's store; ShopifyQL sessions are read with the support app's token on the production shop only); chat opens until the widget build that sends them is deployed; purchases while the advisor's shop has no synced orders (the dev store never syncs orders); recommendation accuracy (no ground truth).
+- **Not tracked, and said so:** storefront visits (no source for the advisor's store; ShopifyQL sessions are read with the support app's token on the production shop only); chat opens until the widget build that sends them is deployed; purchases while the advisor's shop has no synced orders (the dev store never syncs orders); recommendation accuracy until the first 👍 / 👎 (§ Recommendation accuracy is the customer's thumbs).
 - **The order sync writes the column only when the attribute is there**, so a sync deployed before migration 07 is applied writes exactly what it did.
 - **Contact role:** closed, like Sales, because the page leads with revenue. A judgement made with the build; revisit if the contact team should see quality figures.
 

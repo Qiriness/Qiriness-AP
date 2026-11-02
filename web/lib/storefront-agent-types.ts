@@ -46,6 +46,8 @@ export interface AgentRouteRow {
   clickRate: number | null;
   cartRate: number | null;
   errorRate: number | null;
+  /** 👍 share of the rated replies that showed products; null with no rating. */
+  accuracy: number | null;
   costUsd: number | null;
 }
 
@@ -71,6 +73,10 @@ export interface StorefrontAgentDashboard {
     /** First turn recorded live with exact latency, ISO. */
     liveTurnsFrom: string | null;
     opensFrom: string | null;
+    /** First personalised routine recorded (advisor_routines), ISO. */
+    routinesFrom: string | null;
+    /** First 👍 / 👎 received, ISO; null: no rating yet, accuracy « Not yet tracked ». */
+    feedbackFrom: string | null;
     /** The advisor's shop has its orders synced, so a purchase can be seen at all. */
     purchasesTracked: boolean;
     /** The previous window lies inside the recorded history. */
@@ -84,6 +90,14 @@ export interface StorefrontAgentDashboard {
     resolution: PeriodFigure;
     p95: PeriodFigure;
   };
+  /** Personalised routines the builder provided, and its own funnel. */
+  routines: {
+    provided: PeriodFigure;
+    /** Share of those routines added to the cart. */
+    addedRate: number | null;
+    /** Builder conversations that reached a routine, of those that started one. */
+    completionRate: number | null;
+  };
   funnel: FunnelStage[];
   sales: {
     revenue: SeriesPoint[];
@@ -94,6 +108,9 @@ export interface StorefrontAgentDashboard {
   };
   quality: {
     resolution: PeriodFigure;
+    /** 👍 / (👍 + 👎) on replies that recommended products, and how many were rated. */
+    accuracy: PeriodFigure;
+    ratings: number;
     escalation: PeriodFigure;
     unanswered: { turns: number; rate: number | null; previousRate: number | null };
     errorRate: PeriodFigure;

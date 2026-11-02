@@ -66,6 +66,22 @@ export function StorefrontAgentView({ data }: { data: StorefrontAgentDashboard }
         )}
         <KpiCard label={t("storefrontAgent.kpi.resolution")} value={pct(kpis.resolution.current)} delta={delta(kpis.resolution, "up", true)} />
         <KpiCard label={t("storefrontAgent.kpi.p95")} value={secs(kpis.p95.current)} delta={delta(kpis.p95, "down")} />
+        <KpiCard
+          label={t("storefrontAgent.kpi.routines")}
+          value={f.integer(data.routines.provided.current ?? 0)}
+          delta={
+            <DeltaChip
+              current={data.routines.provided.current}
+              previous={data.routines.provided.previous}
+              polarity="up"
+              compareLabel={data.routines.provided.previous === null ? t("storefrontAgent.noComparison") : compareLabel}
+            />
+          }
+          sub={[
+            { label: t("storefrontAgent.kpi.routinesAdded"), value: pct(data.routines.addedRate) },
+            { label: t("storefrontAgent.kpi.routinesCompleted"), value: pct(data.routines.completionRate) },
+          ]}
+        />
       </Grid>
       <Caption>{t("storefrontAgent.kpi.assistedHint")}</Caption>
 
@@ -166,7 +182,16 @@ export function StorefrontAgentView({ data }: { data: StorefrontAgentDashboard }
           delta={delta(quality.resolution, "up", true)}
           sub={[{ label: t("storefrontAgent.kpi.conversations"), value: f.integer(kpis.conversations.current ?? 0) }]}
         />
-        <BlockedCard label={t("storefrontAgent.q.accuracy")} reason="storefrontAgent.notTracked.accuracy" />
+        {data.coverage.feedbackFrom ? (
+          <KpiCard
+            label={t("storefrontAgent.q.accuracy")}
+            value={pct(quality.accuracy.current)}
+            delta={delta(quality.accuracy, "up", true)}
+            sub={[{ label: t("storefrontAgent.q.ratings"), value: f.integer(quality.ratings) }]}
+          />
+        ) : (
+          <BlockedCard label={t("storefrontAgent.q.accuracy")} reason="storefrontAgent.notTracked.accuracy" />
+        )}
         <KpiCard label={t("storefrontAgent.q.escalation")} value={pct(quality.escalation.current)} delta={delta(quality.escalation, "down", true)} />
         <KpiCard
           label={t("storefrontAgent.q.unanswered")}
@@ -177,7 +202,7 @@ export function StorefrontAgentView({ data }: { data: StorefrontAgentDashboard }
         <KpiCard label={t("storefrontAgent.q.errorRate")} value={pct(quality.errorRate.current, 1)} delta={delta(quality.errorRate, "down", true)} tone={(quality.errorRate.current ?? 0) > 0.05 ? "warn" : undefined} />
       </Grid>
       <Caption>
-        {t("storefrontAgent.q.resolutionHint")} {t("storefrontAgent.q.escalationHint")} {t("storefrontAgent.q.unansweredHint")} {t("storefrontAgent.q.errorHint")}
+        {t("storefrontAgent.q.resolutionHint")} {t("storefrontAgent.q.accuracyHint")} {t("storefrontAgent.q.escalationHint")} {t("storefrontAgent.q.unansweredHint")} {t("storefrontAgent.q.errorHint")}
       </Caption>
 
       {/* 5. Technical performance */}
@@ -266,6 +291,7 @@ export function StorefrontAgentView({ data }: { data: StorefrontAgentDashboard }
                   <RouteRow label={t("storefrontAgent.r.resolution")} cells={data.routes.map((r) => pct(r.resolution))} />
                   <RouteRow label={t("storefrontAgent.r.clickRate")} cells={data.routes.map((r) => pct(r.clickRate, 1))} />
                   <RouteRow label={t("storefrontAgent.r.cartRate")} cells={data.routes.map((r) => pct(r.cartRate, 1))} />
+                  <RouteRow label={t("storefrontAgent.r.accuracy")} cells={data.routes.map((r) => pct(r.accuracy))} />
                   <RouteRow label={t("storefrontAgent.r.errorRate")} cells={data.routes.map((r) => pct(r.errorRate, 1))} />
                   <RouteRow label={t("storefrontAgent.r.cost")} cells={data.routes.map((r) => f.usd(r.costUsd))} />
                 </tbody>

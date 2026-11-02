@@ -10,6 +10,13 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## 👍 / 👎 in the storefront chat: recommendation accuracy (2026-11-02)
+
+The widget asks « Ces conseils vous aident ? » under every reply that recommended products, in all six languages. The rating is stored on the turn (`storefront_agent_turns.feedback`, migration 08) through the signed event route. The dashboard's Recommendation accuracy is now 👍 ÷ ratings, with the count beside it, and is also shown per route. Rule: DECISIONS.md § « Recommendation accuracy is the customer's thumbs ».
+
+- **Routines provided** (asked the same day): a new Overview card with the personalised routines the builder finished in the period (`advisor_routines`), compared with the previous period, plus the share added to the cart and the builder's completion rate (`routine_builder_started` / `_completed` conversations). On the dev store: 41 routines since 2026-10-17, 13 added to the cart.
+- **Checked:** PGlite behaviour test (only replies with products count; per route; routines in the window only), turn-id test, the widget locales in six languages, `tsc`. **Not viewed in a browser.** It needs migration 08, the web deploy and `shopify app deploy`.
+
 ## Storefront Agent → Dashboard, and the tracking behind it (2026-10-30)
 
 A new sidebar section, « Storefront Agent », with one page, `/storefront-agent`: Overview KPIs, the visit → purchase funnel, sales, quality, technical performance, rule-based vs LLM and performance by intent, over 7/30/90 days or a custom range, each figure against the period before. Rules and reasons: DECISIONS.md § « The dashboard reads turns, not the chat log ».
