@@ -15,6 +15,8 @@
     "wait_longer": "Noch einen Moment…",
     "error": "Die Nachricht konnte nicht gesendet werden.",
     "retry": "Erneut versuchen",
+    "error_session_limit": "Dieses Gespräch hat die maximale Anzahl an Nachrichten erreicht. Beginnen Sie ein neues Gespräch, um fortzufahren.",
+    "error_daily_limit": "Unser Berater ist gerade sehr gefragt. Bitte versuchen Sie es etwas später noch einmal.",
     "discover": "Entdecken",
     "add_to_cart": "In den Warenkorb",
     "added_to_cart": "Im Warenkorb",

@@ -1040,7 +1040,7 @@
     return row;
   }
 
-  function Bubble(message, strings, onRetry, onChoice) {
+  function Bubble(message, strings, onRetry, onChoice, onNewChat) {
     var isUser = message.role === 'user';
     var node = el('div', { className: 'sa-message sa-message--' + (isUser ? 'user' : 'assistant') }, [
       el('span', { className: 'sa-visually-hidden', text: (isUser ? strings.you : strings.advisor) + ' : ' }),
@@ -1078,12 +1078,26 @@
       if (chips) node.appendChild(chips);
     }
     if (message.failed) {
-      node.appendChild(ErrorNotice(strings, onRetry));
+      node.appendChild(ErrorNotice(strings, onRetry, message.failure, onNewChat));
     }
     return node;
   }
 
-  function ErrorNotice(strings, onRetry) {
+  /*
+   * A caught message: the server's cap codes say what to do instead of « Réessayer »,
+   * which would only fail again. The conversation's cap: start a new one. The shop's
+   * daily cap: come back later. Anything else: try again.
+   */
+  function ErrorNotice(strings, onRetry, failure, onNewChat) {
+    if (failure === 'session_limit' && onNewChat) {
+      return el('div', { className: 'sa-error', role: 'alert' }, [
+        el('span', { text: strings.errorSessionLimit || strings.error }),
+        el('button', { type: 'button', className: 'sa-error__retry', text: strings.newChat || strings.retry, onClick: onNewChat })
+      ]);
+    }
+    if (failure === 'daily_limit') {
+      return el('div', { className: 'sa-error', role: 'alert' }, [el('span', { text: strings.errorDailyLimit || strings.error })]);
+    }
     return el('div', { className: 'sa-error', role: 'alert' }, [
       el('span', { text: strings.error }),
       el('button', { type: 'button', className: 'sa-error__retry', text: strings.retry, onClick: onRetry })
@@ -1422,6 +1436,7 @@
 
     function deliver(userMessage) {
       userMessage.failed = false;
+      userMessage.failure = null;
       state.pending = true;
       state.waitingFor = userMessage.text;
       render();
@@ -1505,8 +1520,10 @@
             choices: Array.isArray(followUp.choices) ? followUp.choices : []
           });
         }
-      }).catch(function () {
+      }).catch(function (error) {
         userMessage.failed = true;
+        var code = error && error.message;
+        userMessage.failure = code === 'session_limit' || code === 'daily_limit' ? code : null;
       }).then(function () {
         state.pending = false;
         stopWaiting();
@@ -1536,7 +1553,7 @@
         var onChoice = message === last && !state.pending
           ? function (choice) { ask(choice.label, null, choice.value); }
           : null;
-        var node = Bubble(message, strings, function () { deliver(message); }, onChoice);
+        var node = Bubble(message, strings, function () { deliver(message); }, onChoice, startOver);
         if (!withCards && i > lastUser && message.role !== 'user' && node.querySelector('.sa-card')) withCards = node;
         log.appendChild(node);
       });

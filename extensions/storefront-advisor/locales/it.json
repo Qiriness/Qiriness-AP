@@ -15,6 +15,8 @@
     "wait_longer": "Ancora un istante…",
     "error": "Non è stato possibile inviare il messaggio.",
     "retry": "Riprova",
+    "error_session_limit": "Questa conversazione ha raggiunto il limite di messaggi. Inizi una nuova conversazione per continuare.",
+    "error_daily_limit": "Il nostro consulente è molto richiesto in questo momento. Riprovi un po' più tardi.",
     "discover": "Scopri",
     "add_to_cart": "Aggiungi al carrello",
     "added_to_cart": "Aggiunto al carrello",

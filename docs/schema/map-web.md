@@ -17,7 +17,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |   |-- tickets/page.tsx              # Server Component: the agent's queue --
 |   |   |                                 # EVERY ticket, staff-sent included
 |   |   |-- storefront-agent/page.tsx     # Server Component: Storefront Agent -> Dashboard
-|   |   |                                 # (?range=7d|30d|90d or ?from=&to=); not contact
+|   |   |                                 # (?range=7d|30d|90d or ?from=&to=); not contact;
+|   |   |                                 # « Chat limits » at its foot (the chat's caps)
 |   |   |-- orders/page.tsx               # Server Component: every Shopify order, paged
 |   |   |                                 # in SQL; reads ?status= ?country= ?vip= ?page=
 |   |   |-- orders/[id]/page.tsx          # Server Component: one order on cards
@@ -66,6 +67,9 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |-- tickets/[id]/reply/route.ts   # POST a reply a person wrote (« Create
 |   |       |                                # draft »): queues a `manual` outbound
 |   |       |                                # action + job; sends nothing itself
+|   |       |-- storefront-agent/caps/route.ts # PUT { shop, daily, session }: the storefront
+|   |       |                                 # chat's caps for an advisor shop (chat-caps.mjs);
+|   |       |                                 # not contact
 |   |       |-- company-policies/route.ts     # GET the library · POST a new policy
 |   |       |-- company-policies/[key]/route.ts  # PUT save (text change raises the
 |   |       |                                # version; stale save refused)
@@ -158,7 +162,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |-- components/
 |   |   |-- storefront-agent/        # AgentFilters (7/30/90 days + custom, URL state) ·
 |   |   |                            # StorefrontAgentView (the sections, Insights kit) ·
-|   |   |                            # RoutineDonut (one routine answer: donut + legend)
+|   |   |                            # RoutineDonut (one routine answer: donut + legend) ·
+|   |   |                            # ChatCapsCard (the two caps, a number each)
 |   |   |-- icons.tsx                # inline SVG icon set
 |   |   |-- app-shell/               # AppShell (top bar + drawer; fetches /api/auth/me
 |   |   |                            # once for both; runs sidebar navigation in a
@@ -297,6 +302,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |                    # storefront-chat-service (the storefront
 |   |       |                    # advisor: session, caps, history, log; picks
 |   |       |                    # mock or llm by STOREFRONT_CHAT_AGENT) ·
+|   |       |                    # storefront-agent/chat-caps-service (each
+|   |       |                    # advisor shop's caps + its last-24 h count) ·
 |   |       |                    # storefront-agent/dashboard-service (the
 |   |       |                    # advisor's shops, its range, the dashboard RPC
 |   |       |                    # for the window and the one before, priced) ·

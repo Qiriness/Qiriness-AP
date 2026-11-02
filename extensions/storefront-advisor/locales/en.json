@@ -15,6 +15,8 @@
     "wait_longer": "Just a moment more…",
     "error": "Your message could not be sent.",
     "retry": "Try again",
+    "error_session_limit": "This conversation has reached its message limit. Start a new conversation to carry on.",
+    "error_daily_limit": "Our advisor is very busy right now. Please try again a little later.",
     "discover": "Discover",
     "add_to_cart": "Add to cart",
     "added_to_cart": "Added to cart",

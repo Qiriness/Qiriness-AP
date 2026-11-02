@@ -2,6 +2,16 @@
 
 ## Storefront advisor
 
+### The caps are numbers on the dashboard, not variables (2026-11-02)
+
+Owner: « make these internal switches not vars (not really switches but a number that can be changed) ».
+- **Two numbers on the shop's row** (`storefront_chat_daily_cap`, `storefront_chat_session_cap`), edited on Storefront Agent → Dashboard → « Chat limits », the page that already shows what the chat costs and how busy it is. `STOREFRONT_CHAT_SHOP_DAILY_CAP` and `STOREFRONT_CHAT_SESSION_TURN_CAP` are no longer read.
+- **Empty is the default, never zero** (`CHAT_CAP_DEFAULTS`: 500 a day, 40 a conversation, unchanged). Bounds 1–100,000 and 1–500, in code and as check constraints; a stored value out of bounds is ignored, not trusted.
+- **Read at most once a minute per server instance**, alongside the session lookup, so a message waits for no extra query and a change applies within the minute. A failed read keeps the last value, else the defaults: a cap read never takes the chat down, and the code is safe to deploy before its migration.
+- **Next to the cap, its use:** the card shows the last 24 hours' customer messages against the daily cap, the same count the chat checks.
+- **Per shop, not per deployment:** each shop the advisor answers has its own pair (`keep-it-reusable-across-companies`).
+- **The customer is told which cap, and what to do** (owner: « is he told that he should start a new conversation in the error message »). Before, both caps showed the generic « Le message n'a pas pu être envoyé » with « Réessayer », which only failed again. Now the conversation's cap says it reached its limit, with a « Nouvelle conversation » button (the header's own reset); the shop's daily cap says the advisor is very busy, try again later, with no button. Any other failure keeps « Réessayer ». Six languages, formal register.
+
 ### The widget always answers from the server; the dev setup is gone (2026-11-02)
 
 Owner, before go-live: « theres defo dev cleanup to do … so it doesnt pollute the code and the database ».

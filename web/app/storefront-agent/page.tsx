@@ -3,11 +3,13 @@ import { redirect } from "next/navigation";
 import { canAccessPath, fallbackPath } from "../../../scripts/lib/dashboard-auth.mjs";
 import { AppShell } from "@/components/app-shell/AppShell";
 import { InsightsFrame } from "@/components/insights/InsightsFrame";
-import { EmptyState, PanelError } from "@/components/insights/InsightsKit";
+import { Card, EmptyState, PanelError, SectionLabel } from "@/components/insights/InsightsKit";
 import { LiveRefresh } from "@/components/insights/LiveRefresh";
 import headerStyles from "@/components/insights/InsightsHeader.module.css";
 import { AgentFilters } from "@/components/storefront-agent/AgentFilters";
 import { StorefrontAgentView } from "@/components/storefront-agent/StorefrontAgentView";
+import { ChatCapsCard } from "@/components/storefront-agent/ChatCapsCard";
+import { getChatCaps, type ChatCapsView } from "@/lib/server/storefront-agent/chat-caps-service";
 import { getSession } from "@/lib/server/auth";
 import { navBadgeCounts } from "@/lib/server/conversation-badge";
 import { timed } from "@/lib/server/timing";
@@ -29,6 +31,9 @@ export const metadata = { title: "Storefront Agent · Dashboard" };
  * Reads `storefront_agent_dashboard` (migration 07) through
  * dashboard-service.ts; the tracking that feeds it lives with the chat service
  * (turn-metrics.mjs, the event route, the widget), never here.
+ *
+ * THE CHAT'S CAPS are edited at the foot of the page (chat-caps.mjs), read on
+ * their own so a failed dashboard still leaves them reachable.
  */
 export default async function StorefrontAgentPage({ searchParams }: { searchParams: SearchParams }) {
   const session = await getSession();
@@ -46,6 +51,10 @@ export default async function StorefrontAgentPage({ searchParams }: { searchPara
   if (!shops.length) {
     body = <EmptyState>{t("storefrontAgent.notConfigured")}</EmptyState>;
   } else {
+    const capsRead: Promise<ChatCapsView[] | null> = getChatCaps(shops).catch((error: unknown) => {
+      console.error("[storefront agent] caps failed", error instanceof Error ? error.message : error);
+      return null;
+    });
     try {
       const resolved = await resolveAgentRange(searchParams, shops);
       range = { ...resolved, label: rangeLabel(resolved, t, locale), compareLabel: compareLabel(resolved, t, locale) };
@@ -56,6 +65,20 @@ export default async function StorefrontAgentPage({ searchParams }: { searchPara
       console.error("[storefront agent] dashboard failed", error instanceof Error ? error.message : error);
       body = <PanelError message={t("storefrontAgent.loadFailed")} />;
     }
+    const caps = await capsRead;
+    body = (
+      <>
+        {body}
+        <SectionLabel>{t("storefrontAgent.s.caps")}</SectionLabel>
+        <Card title={t("storefrontAgent.caps.title")}>
+          {caps ? (
+            caps.map((c) => <ChatCapsCard key={c.shopDomain} caps={c} showShop={caps.length > 1} />)
+          ) : (
+            <PanelError message={t("storefrontAgent.caps.loadFailed")} />
+          )}
+        </Card>
+      </>
+    );
   }
 
   const header = (

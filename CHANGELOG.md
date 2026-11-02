@@ -10,6 +10,15 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Storefront chat caps: numbers on the dashboard (2026-11-02)
+
+- **`scripts/lib/storefront-chat/chat-caps.mjs`:** the daily (shop, rolling 24 h) and per-conversation caps, read from the shop's row with a one-minute cache; defaults 500 / 40 when empty; bounds 1–100,000 / 1–500.
+- **Chat service:** reads them per shop alongside the session (no added wait); the two env vars are gone.
+- **Storefront Agent → Dashboard → « Chat limits »:** a number each, the last 24 hours' messages against the daily cap; `PUT /api/storefront-agent/caps`, closed to the contact team.
+- **Migration `01_storefront_chat_caps.sql`:** two nullable columns + checks on `shops`; passes `db:check:baseline` on PGlite. **Not applied to production yet** (needs the owner's go-ahead): until it is, the chat applies the defaults and the card says the caps are unreadable.
+- **Widget:** a capped message now says which cap: « Cette conversation a atteint sa limite de messages… » with a « Nouvelle conversation » button, or « Notre conseiller est très demandé… réessayer un peu plus tard »; six languages; `advisor-strings.js` regenerated. Needs `shopify app deploy`.
+- **Checked:** `npm test` 3966/3966, `tsc` clean. Not opened in a browser.
+
 ## Storefront advisor: dev setup removed before go-live (2026-11-02)
 
 - **Widget:** the embed's « Replies » setting (Demo by default) is gone, with the browser mock transport and the `mock.*` strings in the six locales; `advisor-strings.js` regenerated. The widget always answers through the app proxy.

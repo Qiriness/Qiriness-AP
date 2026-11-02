@@ -122,7 +122,9 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # answer; what the model sees of a result; history
 |       |-- chat-system-prompt.mjs       # the rules + the data's known limits
 |       |-- storefront-chat/             # the storefront advisor: app-proxy-signature
-|       |                                # (verify + allow-list) · request-schema (what
+|       |                                # (verify + allow-list) · chat-caps (the two
+|       |                                # message caps on the shop row, defaults, bounds,
+|       |                                # a one-minute cache) · request-schema (what
 |       |                                # the widget may send) · agent (the contract +
 |       |                                # the mock) · llm-agent (storefront_sales_agent
 |       |                                # on OpenAI: tool loop <= 2 rounds, bounded wait,

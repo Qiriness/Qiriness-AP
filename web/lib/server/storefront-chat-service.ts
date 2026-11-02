@@ -25,7 +25,9 @@
  *
  * CAPS BEFORE SPEND. Per-session turns and per-shop daily customer messages are
  * checked before the agent runs, so the model sits behind a door that already
- * has a limit.
+ * has a limit. Both are numbers on the shop's row, set on Storefront Agent →
+ * Dashboard (chat-caps.mjs), read at most once a minute and alongside the
+ * session, so they add no wait to a message.
  *
  * WHICH AGENT ANSWERS: the model, unless `STOREFRONT_CHAT_AGENT=mock` or there
  * is no OPENAI_API_KEY (owner, 2026-11-02: switches in code, not variables).
@@ -61,6 +63,7 @@ import {
 } from "../../../scripts/lib/storefront-chat/llm-agent.mjs";
 import { failureCode, turnRecord } from "../../../scripts/lib/storefront-chat/turn-metrics.mjs";
 import { ADVISOR_T, STOREFRONT_AGENT_T, STOREFRONT_CHAT_RPC, STOREFRONT_CHAT_T } from "../../../scripts/lib/tables.mjs";
+import { createChatCapsCache, readChatCaps } from "../../../scripts/lib/storefront-chat/chat-caps.mjs";
 import { loadConfig } from "../../../scripts/lib/sync-config.mjs";
 import {
   createSupabaseClient,
@@ -193,13 +196,14 @@ function positiveInt(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function limits() {
-  return {
-    sessionTurns: positiveInt(process.env.STOREFRONT_CHAT_SESSION_TURN_CAP, 40),
-    shopDaily: positiveInt(process.env.STOREFRONT_CHAT_SHOP_DAILY_CAP, 500),
-    retentionDays: positiveInt(process.env.STOREFRONT_CHAT_RETENTION_DAYS, 30),
-  };
+function retentionDays() {
+  return positiveInt(process.env.STOREFRONT_CHAT_RETENTION_DAYS, 30);
 }
+
+/** The shop's two caps (chat-caps.mjs): its own numbers, else the defaults; never a reason to fail a message. */
+const chatCaps = createChatCapsCache((shopDomain: string) => readChatCaps(client(), shopDomain), {
+  onError: (error: unknown) => console.warn("[storefront chat] caps unreadable, last known or defaults apply", error instanceof Error ? error.message : error),
+});
 
 function client() {
   return createSupabaseClient(loadConfig(process.env as Record<string, string | undefined>));
@@ -226,7 +230,7 @@ async function currentAgent(db: ReturnType<typeof client>): Promise<Agent> {
   if (process.env.STOREFRONT_CHAT_AGENT === "mock" || !process.env.OPENAI_API_KEY) return createMockAgent();
 
   const model = process.env.STOREFRONT_CHAT_MODEL || DEFAULT_STOREFRONT_MODEL;
-  const key = `${model}|${process.env.STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN || ""}`;
+  const key = model;
   if (remembered && remembered.key === key) {
     // STALE WHILE IT REFRESHES. Loading the catalogue takes about a second; the
     // customer who happens to arrive as the copy expires is answered from it
@@ -338,7 +342,8 @@ export async function handleStorefrontChat(
   identity: StorefrontIdentity = ANONYMOUS
 ): Promise<StorefrontChatResult> {
   const db = client();
-  const cap = limits();
+  const retention = retentionDays();
+  const capsRead = chatCaps(shopDomain);
   // The turn's latency, as the customer waits it: from the request to the reply (storefront_agent_turns).
   const startedAt = Date.now();
   // The turn's analytics row id, handed to the widget so the customer's 👍 / 👎 names it.
@@ -351,8 +356,9 @@ export async function handleStorefrontChat(
   const agentReady = currentAgent(db);
   agentReady.catch(() => {}); // awaited below; never an unhandled rejection meanwhile
 
-  let session = await findOrOpenSession(db, shopDomain, request, cap.retentionDays);
-  if (session.turn_count >= cap.sessionTurns) return { ok: false, status: 429, code: "session_limit" };
+  let session = await findOrOpenSession(db, shopDomain, request, retention);
+  const caps = await capsRead;
+  if (session.turn_count >= caps.session) return { ok: false, status: 429, code: "session_limit" };
 
   const since = new Date(Date.now() - DAY_MS).toISOString();
   const [today, recent] = await Promise.all([
@@ -362,7 +368,7 @@ export async function handleStorefrontChat(
       limit: HISTORY_MESSAGES,
     }) as Promise<{ role: "user" | "assistant"; content: string; context: Record<string, unknown> | null }[]>,
   ]);
-  if (Number(today) >= cap.shopDaily) return { ok: false, status: 429, code: "daily_limit" };
+  if (Number(today) >= caps.daily) return { ok: false, status: 429, code: "daily_limit" };
   // A follow-up message (routine-flow.mjs) is stored with its reply: the model
   // sees both, so it knows what the app asked.
   let history = recent.reverse().map((row) => {
@@ -371,7 +377,7 @@ export async function handleStorefrontChat(
   });
   if (!mayContinue(identityOfHistory(history), identity)) {
     // Someone else's conversation: theirs stays untouched, this one starts afresh.
-    session = await openSession(db, shopDomain, request, cap.retentionDays);
+    session = await openSession(db, shopDomain, request, retention);
     history = [];
   }
   // The repurchase message answered (owner, 2026-10-29): stored as the new conversation's first row.

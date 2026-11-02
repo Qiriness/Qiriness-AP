@@ -356,7 +356,8 @@ The plan agreed on 2026-10-12 (routine foundations, sizes, treats, product knowl
 
 The advisor runs on the live store (`qiriness.myshopify.com`) through the support app. The dev store and its app (`storefront-app/`, `scripts/dev-store/`) were removed on 2026-11-02.
 
-1. **Env** (Vercel production, and `.env.local` for local runs): `STOREFRONT_APP_CLIENT_SECRET` (the support app's client secret: it signs the proxy), `STOREFRONT_CHAT_ALLOWED_SHOPS=qiriness.myshopify.com`, `OPENAI_API_KEY`. Caps: `STOREFRONT_CHAT_SHOP_DAILY_CAP` (customer messages per shop over the last 24 hours) and `STOREFRONT_CHAT_SESSION_TURN_CAP`.
+1. **Env** (Vercel production, and `.env.local` for local runs): `STOREFRONT_APP_CLIENT_SECRET` (the support app's client secret: it signs the proxy), `STOREFRONT_CHAT_ALLOWED_SHOPS=qiriness.myshopify.com`, `OPENAI_API_KEY`.
 2. **Deploy:** `shopify app deploy` from the repo root releases the support app: its config and every extension.
 3. **Turn it on, per theme:** Online Store → Themes → Customize → App embeds → *Beauty advisor*. The embed is off in a theme until switched on there.
-4. **Without a store:** `npm run storefront:chat -- --message "Bonjour"` signs a request exactly as the proxy does. `--unsigned` expects 401, and `--shop other.myshopify.com` expects 403.
+4. **Caps** (2026-11-02, were env vars): Storefront Agent → Dashboard → « Chat limits », a number each, stored on the shop's row (`storefront_chat_daily_cap`, `storefront_chat_session_cap`; empty = `CHAT_CAP_DEFAULTS` in `chat-caps.mjs`, 500 and 40). Daily: customer messages the shop receives over the last 24 hours, rolling; past it nobody is answered. Per conversation: past it that conversation stops. The chat re-reads them at most once a minute.
+5. **Without a store:** `npm run storefront:chat -- --message "Bonjour"` signs a request exactly as the proxy does. `--unsigned` expects 401, and `--shop other.myshopify.com` expects 403.

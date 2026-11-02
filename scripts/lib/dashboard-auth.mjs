@@ -75,7 +75,9 @@ const DENIED = Object.freeze({
     '/api/settings/integrations/mail',
     '/api/settings/agents',
     // The Storefront Agent dashboard leads with assisted revenue (2026-10-30).
-    '/storefront-agent'
+    '/storefront-agent',
+    // …and carries the chat's caps (2026-11-02).
+    '/api/storefront-agent'
   ]
 });
 

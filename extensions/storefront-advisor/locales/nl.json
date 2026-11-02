@@ -15,6 +15,8 @@
     "wait_longer": "Nog even geduld…",
     "error": "Het bericht kon niet worden verstuurd.",
     "retry": "Opnieuw proberen",
+    "error_session_limit": "Dit gesprek heeft het maximale aantal berichten bereikt. Begin een nieuw gesprek om verder te gaan.",
+    "error_daily_limit": "Onze adviseur is op dit moment erg gevraagd. Probeer het iets later opnieuw.",
     "discover": "Ontdekken",
     "add_to_cart": "In winkelmandje",
     "added_to_cart": "In winkelmandje",
