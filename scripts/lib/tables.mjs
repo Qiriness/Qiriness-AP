@@ -179,7 +179,8 @@ export const STOREFRONT_AGENT_T = {
 };
 
 export const STOREFRONT_AGENT_RPC = {
-  DASHBOARD: 'storefront_agent_dashboard'
+  DASHBOARD: 'storefront_agent_dashboard',
+  ROUTINE_PROFILE: 'storefront_agent_routine_profile'
 };
 
 /**

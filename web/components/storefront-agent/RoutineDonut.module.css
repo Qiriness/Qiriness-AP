@@ -1,0 +1,100 @@
+/* One builder answer: a donut and its legend, side by side, stacked when narrow. */
+.figure {
+  margin: 0;
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+}
+
+.body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.donut {
+  width: 112px;
+  height: 112px;
+  flex: none;
+}
+
+.track {
+  fill: none;
+  stroke: var(--surface-sunken);
+  stroke-width: 6;
+}
+
+.slice {
+  fill: none;
+  stroke-width: 6;
+}
+
+.slice:hover {
+  stroke-width: 7;
+}
+
+.total {
+  font-size: 8px;
+  font-weight: 600;
+  fill: currentColor;
+  text-anchor: middle;
+}
+
+.unit {
+  font-size: 3.6px;
+  fill: var(--text-muted);
+  text-anchor: middle;
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+  flex: 1 1 140px;
+  min-width: 0;
+  font-size: var(--text-sm);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.value {
+  font-variant-numeric: tabular-nums;
+}
+
+.share {
+  color: var(--text-muted);
+  margin-inline-start: var(--space-1);
+}
+
+.empty {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}

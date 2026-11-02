@@ -156,7 +156,8 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |                                      # Screens pick keys; services return codes, not sentences
 |   |-- components/
 |   |   |-- storefront-agent/        # AgentFilters (7/30/90 days + custom, URL state) ·
-|   |   |                            # StorefrontAgentView (the seven sections, Insights kit)
+|   |   |                            # StorefrontAgentView (the sections, Insights kit) ·
+|   |   |                            # RoutineDonut (one routine answer: donut + legend)
 |   |   |-- icons.tsx                # inline SVG icon set
 |   |   |-- app-shell/               # AppShell (top bar + drawer; fetches /api/auth/me
 |   |   |                            # once for both; runs sidebar navigation in a

@@ -8,8 +8,7 @@
  * the support desk's shop has no advisor. Days are cut in that shop's timezone
  * when it is synced as a shop, else the desk shop's, else UTC.
  *
- * WHAT IS NOT TRACKED SAYS SO. Storefront visits have no source for the
- * advisor's store; chat opens start with the widget build that sends them;
+ * WHAT IS NOT TRACKED SAYS SO. Chat opens start with the widget build that sends them;
  * purchases need the advisor's shop to have its orders synced; recommendation
  * accuracy has no ground truth. Each is null with a reason, never 0.
  *
@@ -19,7 +18,7 @@
 
 import { unstable_cache } from "next/cache";
 import { parseAllowedShops } from "../../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
-import { num, priceTokens, rate } from "../../../../scripts/lib/storefront-chat/agent-dashboard.mjs";
+import { num, priceTokens, rate, routineProfile } from "../../../../scripts/lib/storefront-chat/agent-dashboard.mjs";
 import { isValidTimeZone, resolveRange } from "../../../../scripts/lib/insights-range.mjs";
 import { STOREFRONT_AGENT_RPC } from "../../../../scripts/lib/tables.mjs";
 import { supabaseRpc } from "../../../../scripts/lib/supabase-rest-client.mjs";
@@ -102,6 +101,14 @@ const readDashboard = unstable_cache(
   { revalidate: INSIGHTS_TTL_SECONDS, tags: [CACHE_TAGS.insights] }
 );
 
+/** The window's routine answers and the shop's labels for them (migration 09). */
+const readRoutineProfile = unstable_cache(
+  async (shops: string[], from: string, to: string, tz: string) =>
+    supabaseRpc(getSupabaseClient(), STOREFRONT_AGENT_RPC.ROUTINE_PROFILE, { p_shops: shops, p_from: from, p_to: to, p_tz: tz }),
+  ["storefront-agent-routine-profile"],
+  { revalidate: INSIGHTS_TTL_SECONDS, tags: [CACHE_TAGS.insights] }
+);
+
 /** The advisor's shops, from the same allow-list its routes check. */
 export function advisorShops(): string[] {
   return [...parseAllowedShops(process.env.STOREFRONT_CHAT_ALLOWED_SHOPS)] as string[];
@@ -135,10 +142,11 @@ const figure = (current: number | null, previous: number | null, compare: boolea
   previous: compare ? previous : null,
 });
 
-export async function getStorefrontAgentDashboard(range: InsightsRange, shops: string[]): Promise<StorefrontAgentDashboard> {
-  const [d, p] = await Promise.all([
+export async function getStorefrontAgentDashboard(range: InsightsRange, shops: string[], lang: string): Promise<StorefrontAgentDashboard> {
+  const [d, p, profile] = await Promise.all([
     readDashboard(shops, range.from, range.to, range.tz, range.grain),
     readDashboard(shops, range.previous.from, range.previous.to, range.tz, range.grain),
+    readRoutineProfile(shops, range.from, range.to, range.tz),
   ]);
 
   const turnsFrom = d.coverage.turns_from;
@@ -157,7 +165,6 @@ export async function getStorefrontAgentDashboard(range: InsightsRange, shops: s
   const costPerConversation = (cost: number | null, raw: RawDashboard) => (cost === null ? null : rate(cost, raw.turns.conversations));
 
   const funnel: FunnelStage[] = [
-    { key: "visits", value: null, reason: "storefrontAgent.notTracked.visits" },
     opensTracked ? { key: "opens", value: d.opens } : { key: "opens", value: null, reason: "storefrontAgent.notTracked.opens" },
     { key: "conversations", value: c.total },
     { key: "shown", value: c.shown },
@@ -224,6 +231,7 @@ export async function getStorefrontAgentDashboard(range: InsightsRange, shops: s
       addedRate: rate(d.routines.added, d.routines.provided),
       completionRate: rate(d.routines.completed, d.routines.started),
     },
+    routineProfile: routineProfile(profile, lang) as StorefrontAgentDashboard["routineProfile"],
     funnel,
     sales: {
       revenue: toSeries(range, seriesRows, (row) => (purchasesTracked ? num(row?.revenue) ?? 0 : null), purchasesTracked ? coverage : { from: null, through: null }),

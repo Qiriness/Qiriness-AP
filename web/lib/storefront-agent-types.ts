@@ -17,7 +17,7 @@ export interface PeriodFigure {
 }
 
 export interface FunnelStage {
-  key: "visits" | "opens" | "conversations" | "shown" | "clicked" | "carted" | "purchased";
+  key: "opens" | "conversations" | "shown" | "clicked" | "carted" | "purchased";
   /** Null: not tracked (see `reason`). */
   value: number | null;
   /** An i18n key saying why a stage is not tracked. */
@@ -63,6 +63,9 @@ export interface AgentIntentRow {
   p95: number | null;
 }
 
+/** The routine builder's answers the dashboard charts (agent-dashboard.mjs ROUTINE_FIELDS). */
+export type RoutineField = "main_concern" | "skin_type" | "age_band" | "routine_time";
+
 export interface StorefrontAgentDashboard {
   /** The advisor's shops (STOREFRONT_CHAT_ALLOWED_SHOPS). Empty: the advisor is not set up here. */
   shops: string[];
@@ -97,6 +100,16 @@ export interface StorefrontAgentDashboard {
     addedRate: number | null;
     /** Builder conversations that reached a routine, of those that started one. */
     completionRate: number | null;
+  };
+  /** Who the period's routines were built for: one chart per builder answer. */
+  routineProfile: {
+    /** Routines provided in the period (the charts' whole). */
+    total: number;
+    charts: {
+      field: RoutineField;
+      /** Most answered first. `code` null: not asked; `label` null: the shop gave the code no name. */
+      slices: { code: string | null; label: string | null; routines: number }[];
+    }[];
   };
   funnel: FunnelStage[];
   sales: {

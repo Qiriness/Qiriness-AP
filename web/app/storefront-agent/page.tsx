@@ -49,7 +49,7 @@ export default async function StorefrontAgentPage({ searchParams }: { searchPara
     try {
       const resolved = await resolveAgentRange(searchParams, shops);
       range = { ...resolved, label: rangeLabel(resolved, t, locale), compareLabel: compareLabel(resolved, t, locale) };
-      const data = await timed(`storefront agent dashboard (${range.preset})`, getStorefrontAgentDashboard(range, shops));
+      const data = await timed(`storefront agent dashboard (${range.preset})`, getStorefrontAgentDashboard(range, shops, locale));
       renderedAt = new Date().toISOString();
       body = <StorefrontAgentView data={data} />;
     } catch (error) {

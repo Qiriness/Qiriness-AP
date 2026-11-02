@@ -5,6 +5,7 @@ import { BarList, BlockedCard, Card, Caption, DeltaChip, EmptyState, Grid, KpiCa
 import { TimeSeriesChart } from "@/components/insights/TimeSeriesChart";
 import kit from "@/components/insights/InsightsKit.module.css";
 import tables from "@/components/insights/tables.module.css";
+import { RoutineDonut } from "./RoutineDonut";
 import styles from "./StorefrontAgentView.module.css";
 
 /**
@@ -54,6 +55,18 @@ export function StorefrontAgentView({ data }: { data: StorefrontAgentDashboard }
         ) : (
           <BlockedCard label={t("storefrontAgent.kpi.revenue")} reason="storefrontAgent.notTracked.purchases" />
         )}
+        {/* Beside assisted revenue, in dollars as the model is billed: no exchange rate is implied. */}
+        <KpiCard
+          label={t("storefrontAgent.kpi.cost")}
+          value={f.usd(technical.costUsd.current)}
+          delta={delta(technical.costUsd, "down")}
+          sub={[
+            { label: t("storefrontAgent.t.costPerConversation"), value: f.usd(technical.costPerConversation.current) },
+            ...(tracked
+              ? [{ label: t("storefrontAgent.kpi.costPerOrder"), value: f.usd(technical.costUsd.current !== null && kpis.orders.current ? technical.costUsd.current / kpis.orders.current : null) }]
+              : []),
+          ]}
+        />
         {tracked ? (
           <KpiCard label={t("storefrontAgent.kpi.orders")} value={f.integer(kpis.orders.current ?? 0)} delta={delta(kpis.orders, "up")} />
         ) : (
@@ -84,6 +97,17 @@ export function StorefrontAgentView({ data }: { data: StorefrontAgentDashboard }
         />
       </Grid>
       <Caption>{t("storefrontAgent.kpi.assistedHint")}</Caption>
+
+      {/* Routines: who the period's routines were built for, one donut per builder answer */}
+      <SectionLabel>{t("storefrontAgent.s.routines")}</SectionLabel>
+      <Grid min={18} pin="routine-profile" label={t("storefrontAgent.s.routines")}>
+        {data.routineProfile.charts.map((chart) => (
+          <Card key={chart.field}>
+            <RoutineDonut title={t(`storefrontAgent.profile.${chart.field}`)} slices={chart.slices} />
+          </Card>
+        ))}
+      </Grid>
+      <Caption>{t("storefrontAgent.profile.note", { n: f.integer(data.routineProfile.total) })}</Caption>
 
       {/* 2. Engagement & conversion */}
       <SectionLabel>{t("storefrontAgent.s.engagement")}</SectionLabel>

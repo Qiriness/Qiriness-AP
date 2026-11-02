@@ -10,6 +10,17 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Storefront Agent → Routines: who the routines were built for (2026-11-02)
+
+A new section after the Overview, « Routines », with one donut per answer of the routine builder over the period's routines: main concern, skin type, age and routine wanted (day / night / both). The four most given answers in colour, the rest as « Autres », « Non demandé » in grey (the eye routine asks no skin type); the legend names each answer with its count and share. Answers are named by the shop's own labels (its Rules tab, from the active advisor knowledge), a code it never labelled shown as the code. The funnel no longer shows « Visites de la boutique » (no source for it).
+
+- **Read by:** `storefront_agent_routine_profile` (migration 09, applied to production 2026-11-02, baseline regenerated), named by `routineProfile` in `agent-dashboard.mjs`.
+- **Checked:** PGlite behaviour test (window and shop bounds, a null answer its own row, labels from the active knowledge version only), the labels unit test, `tsc`, `db:check:baseline` identical, `npm test` 3959/3959. **Not viewed in a browser; web not deployed.**
+
+## Storefront Agent → the chatbot's cost beside assisted revenue (2026-11-02)
+
+A new Overview card, « Coût du chatbot (LLM) », right after « CA assisté »: the period's LLM cost against the period before, cost per conversation and, once purchases are tracked, cost per assisted order. In dollars, as the model is billed; no exchange rate is applied, so it is not divided into the euro revenue. Same figure as the Technical section's LLM cost (tokens × `llm-rates.mjs`, an estimate, not the invoice). **Checked:** `tsc`. Not viewed in a browser.
+
 ## 👍 / 👎 in the storefront chat: recommendation accuracy (2026-11-02)
 
 The widget asks « Ces conseils vous aident ? » under every reply that recommended products, in all six languages. The rating is stored on the turn (`storefront_agent_turns.feedback`, migration 08) through the signed event route. The dashboard's Recommendation accuracy is now 👍 ÷ ratings, with the count beside it, and is also shown per route. Rule: DECISIONS.md § « Recommendation accuracy is the customer's thumbs ».

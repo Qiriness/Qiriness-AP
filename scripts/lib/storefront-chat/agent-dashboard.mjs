@@ -6,6 +6,7 @@
  * was no conversation » are different statements, and only the first is a zero.
  */
 
+import { localized } from '../i18n/languages.mjs';
 import { estimateCost } from '../llm-rates.mjs';
 
 /** part / whole, or null when there is no whole. */
@@ -47,4 +48,41 @@ export function priceTokens(rows, rates) {
     add(out.byIntent, row.intent, cost.totalUsd);
   }
   return out;
+}
+
+/** The routine answers the dashboard charts, in the page's order. */
+export const ROUTINE_FIELDS = ['main_concern', 'skin_type', 'age_band', 'routine_time'];
+
+/**
+ * `storefront_agent_routine_profile`'s document, each answer named in `lang`
+ * from the shop's own labels (its Rules tab). A code the shop never labelled
+ * keeps a null label (the page shows the code); a null code is an answer not
+ * given (the eye routine asks no skin type), its label null too.
+ *
+ * @param {object | null} raw
+ * @param {string} lang
+ * @returns {{ total: number, charts: { field: string, slices: { code: string | null, label: string | null, routines: number }[] }[] }}
+ */
+export function routineProfile(raw, lang) {
+  const labels = raw?.labels ?? {};
+  const byKey = (rows) => new Map((Array.isArray(rows) ? rows : []).map((row) => [row?.key, row]));
+  const ages = byKey(labels.age_ranges);
+  const times = byKey(labels.routine_times);
+  const name = {
+    main_concern: (code) => localized(labels.main?.[code], lang),
+    skin_type: (code) => localized(labels.skin?.[code], lang),
+    age_band: (code) => localized(ages.get(code), lang, { prefix: 'label_' }),
+    routine_time: (code) => localized(times.get(code), lang, { prefix: 'label_' }),
+  };
+  return {
+    total: num(raw?.total) ?? 0,
+    charts: ROUTINE_FIELDS.map((field) => ({
+      field,
+      slices: (Array.isArray(raw?.[field]) ? raw[field] : []).map((row) => ({
+        code: row.code ?? null,
+        label: row.code === null || row.code === undefined ? null : name[field](row.code),
+        routines: num(row.routines) ?? 0,
+      })),
+    })),
+  };
 }

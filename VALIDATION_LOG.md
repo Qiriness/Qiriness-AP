@@ -2162,3 +2162,10 @@ After migration 08, the web deploy and `shopify app deploy`:
 2. Click the other thumb: the row changes. Reload the page: the choice is still shown.
 3. On the dashboard, Recommendation accuracy shows a percentage with « Ratings 1 » and is no longer « Not yet tracked ». The LLM or rule-based column shows it per route.
 
+## Storefront Agent → Routines donuts and the chatbot cost card (2026-11-02) — open
+
+After the web deploy, open `/storefront-agent` as management:
+1. The Overview shows « Coût du chatbot (LLM) » right after « CA assisté », with the cost per conversation; the same figure as the Technical section's LLM cost.
+2. « Routines » shows four donuts. Over 30 days on the dev store the totals equal « Routines proposées »; each answer reads as the Rules tab names it (« Hydratation », « Peau mixte », « 25 à 34 ans », « Jour et nuit »), not a code. Hover a slice: its name, count and share.
+3. Switch to English: the answers follow (« Hydration », « Day and night »).
+4. The funnel starts at chat opens; « Visites de la boutique » is gone.

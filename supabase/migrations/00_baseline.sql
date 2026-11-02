@@ -2676,6 +2676,57 @@ select jsonb_build_object(
 );
 $function$;
 
+CREATE OR REPLACE FUNCTION public.storefront_agent_routine_profile(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE
+ SET search_path TO 'public'
+AS $function$
+with bounds as (
+  select (p_from at time zone p_tz) as t0, (p_to at time zone p_tz) as t1
+),
+routines as (
+  select r.*
+  from advisor_routines r, bounds b
+  where r.shop_domain = any(p_shops) and r.created_at >= b.t0 and r.created_at < b.t1
+),
+answers as (
+  select 'main_concern' as field, main_concern as code from routines
+  union all select 'skin_type', skin_type from routines
+  union all select 'age_band', age_band from routines
+  union all select 'routine_time', routine_time from routines
+),
+counted as (
+  select field, jsonb_agg(jsonb_build_object('code', code, 'routines', n) order by n desc, code nulls last) as rows
+  from (select field, code, count(*) as n from answers group by field, code) c
+  group by field
+),
+knowledge as (
+  select k.routines
+  from advisor_knowledge k
+  join shops s on s.id = k.shop_id
+  where s.shop_domain = any(p_shops) and k.status = 'active'
+  order by k.version desc
+  limit 1
+)
+select jsonb_build_object(
+  'total', (select count(*) from routines),
+  'main_concern', coalesce((select rows from counted where field = 'main_concern'), '[]'::jsonb),
+  'skin_type', coalesce((select rows from counted where field = 'skin_type'), '[]'::jsonb),
+  'age_band', coalesce((select rows from counted where field = 'age_band'), '[]'::jsonb),
+  'routine_time', coalesce((select rows from counted where field = 'routine_time'), '[]'::jsonb),
+  'labels', coalesce((
+    select jsonb_build_object(
+      'main', coalesce(routines -> 'labels' -> 'main', '{}'::jsonb),
+      'skin', coalesce(routines -> 'labels' -> 'skin', '{}'::jsonb),
+      'age_ranges', coalesce(routines -> 'age_ranges', '[]'::jsonb),
+      'routine_times', coalesce(routines -> 'routine_times', '[]'::jsonb)
+    )
+    from knowledge
+  ), '{}'::jsonb)
+);
+$function$;
+
 CREATE OR REPLACE FUNCTION public.storefront_chat_purge(p_before timestamp with time zone)
  RETURNS integer
  LANGUAGE sql
@@ -6438,6 +6489,8 @@ revoke all on function public.social_save_token(p_shop uuid, p_provider text, p_
 grant execute on function public.social_save_token(p_shop uuid, p_provider text, p_token text, p_expires_at timestamp with time zone, p_scopes text[], p_connected_by uuid) to service_role;
 revoke all on function public.storefront_agent_dashboard(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text, p_grain text) from public, anon, authenticated, service_role, mgmt_chat_ro;
 grant execute on function public.storefront_agent_dashboard(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text, p_grain text) to service_role;
+revoke all on function public.storefront_agent_routine_profile(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text) from public, anon, authenticated, service_role, mgmt_chat_ro;
+grant execute on function public.storefront_agent_routine_profile(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text) to service_role;
 revoke all on function public.storefront_chat_purge(p_before timestamp with time zone) from public, anon, authenticated, service_role, mgmt_chat_ro;
 grant execute on function public.storefront_chat_purge(p_before timestamp with time zone) to service_role;
 revoke all on function public.storefront_chat_record_turn(p_session uuid) from public, anon, authenticated, service_role, mgmt_chat_ro;
@@ -6857,6 +6910,7 @@ comment on function public.social_read_token(p_shop uuid, p_provider text) is 'T
 comment on function public.social_refresh_token(p_shop uuid, p_provider text, p_token text, p_expires_at timestamp with time zone) is 'Rotates a shop OAuth bundle in Vault without changing the connecting user or connection date. Service role only.';
 comment on function public.social_save_token(p_shop uuid, p_provider text, p_token text, p_expires_at timestamp with time zone, p_scopes text[], p_connected_by uuid) is 'Stores (or replaces) a provider''s OAuth token for the shop in Vault and records the connection. Service role only.';
 comment on function public.storefront_agent_dashboard(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text, p_grain text) is 'The Storefront Agent dashboard over [p_from, p_to) as wall-clock time in p_tz, for the advisor''s shops (shop domains): conversations started in it, turns and chat opens in it, assisted orders placed in it (orders.advisor_conversation_id, net of refunds, cancelled excluded), series by p_grain, top products, tokens by route/intent/model (priced by the dashboard). One jsonb document.';
+comment on function public.storefront_agent_routine_profile(p_shops text[], p_from timestamp without time zone, p_to timestamp without time zone, p_tz text) is 'The answers of the personalised routines provided over [p_from, p_to) as wall-clock time in p_tz, for the advisor''s shops: counts per main concern, skin type, age range and routine time (a null answer is its own row), with the labels of the shop''s active advisor knowledge. One jsonb document.';
 comment on function public.vip_customers(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_customer_ids uuid[]) is 'THE VIP RULE: customers whose net spend AND order count inside the last p_window_months are both strictly greater than the minimums, uncancelled orders only, marketplace channels excluded. With their windowed orders and spend. Pass p_customer_ids to ask about specific customers.';
 comment on function public.vip_summary(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[]) is 'How many customers vip_customers() admits, and how many ordered at all in the same window.';
 comment on function public.vip_tickets(p_shop uuid, p_min_spend numeric, p_min_orders integer, p_window_months integer, p_not_channels text[], p_ticket_ids uuid[]) is 'Live tickets whose linked customer is a VIP under vip_customers(). One call marks a whole queue.';

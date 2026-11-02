@@ -120,3 +120,42 @@ test('the storefront agent dashboard counts conversations, clicks and assisted o
     await db.close();
   }
 });
+
+/**
+ * `storefront_agent_routine_profile`: the window's routines counted per answer,
+ * a null answer its own row, other shops and other windows out, and the labels
+ * of the shop's active knowledge version only.
+ */
+test('the routine profile counts the window\'s answers and carries the active knowledge\'s labels', async () => {
+  const db = await buildFresh();
+  const q = async (text, params) => (await db.query(text, params)).rows;
+  try {
+    const shop = 'advisor.test';
+    const [{ id: shopId }] = await q(`insert into shops (shop_domain) values ($1) returning id`, [shop]);
+    const labels = (name) => JSON.stringify({ labels: { main: { A: { fr: name } }, skin: {} }, age_ranges: [{ key: '25_34', label_fr: '25 à 34 ans' }], routine_times: [] });
+    await q(`insert into advisor_knowledge (shop_id, version, status, source, products, routines) values
+      ($1, 1, 'archived', 'test', '[]', $2::jsonb), ($1, 2, 'active', 'test', '[]', $3::jsonb)`, [shopId, labels('Ancienne'), labels('Hydratation')]);
+    await q(`insert into advisor_routines (ref, shop_domain, channel, main_concern, skin_type, age_band, routine_time, created_at) values
+      (gen_random_uuid(), $1, 'storefront_chat', 'A', 'dry', '25_34', 'day', '2026-10-11T09:00:00Z'),
+      (gen_random_uuid(), $1, 'storefront_chat', 'A', 'oily', '25_34', 'both', '2026-10-12T09:00:00Z'),
+      (gen_random_uuid(), $1, 'storefront_chat', 'Y', null, '45_plus', 'both', '2026-10-13T09:00:00Z'),
+      (gen_random_uuid(), $1, 'storefront_chat', 'B', 'dry', '25_34', 'night', '2026-09-01T09:00:00Z'),
+      (gen_random_uuid(), 'other.test', 'storefront_chat', 'B', 'dry', '25_34', 'night', '2026-10-12T09:00:00Z')`, [shop]);
+
+    const [{ doc }] = await q(
+      `select storefront_agent_routine_profile(array[$1], '2026-10-01 00:00', '2026-11-01 00:00', 'Europe/Paris') as doc`,
+      [shop]
+    );
+    assert.equal(doc.total, 3);
+    assert.deepEqual(doc.main_concern, [{ code: 'A', routines: 2 }, { code: 'Y', routines: 1 }]);
+    assert.deepEqual(doc.skin_type, [{ code: 'dry', routines: 1 }, { code: 'oily', routines: 1 }, { code: null, routines: 1 }]);
+    assert.deepEqual(doc.routine_time, [{ code: 'both', routines: 2 }, { code: 'day', routines: 1 }]);
+    assert.equal(doc.labels.main.A.fr, 'Hydratation');
+    assert.equal(doc.labels.age_ranges[0].label_fr, '25 à 34 ans');
+
+    const [{ doc: empty }] = await q(`select storefront_agent_routine_profile(array['nobody.test'], '2026-10-01 00:00', '2026-11-01 00:00', 'UTC') as doc`);
+    assert.deepEqual(empty, { total: 0, main_concern: [], skin_type: [], age_band: [], routine_time: [], labels: {} });
+  } finally {
+    await db.close();
+  }
+});
