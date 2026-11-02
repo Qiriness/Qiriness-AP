@@ -232,7 +232,7 @@ export async function processOrderWebhook({
   }
 }
 
-async function findShop(supabase, shopDomain) {
+export async function findShop(supabase, shopDomain) {
   if (!shopDomain) {
     return null;
   }
@@ -257,7 +257,7 @@ async function loadCustomerId(supabase, shopId, shopifyCustomerId) {
   return new Map(rows.map((row) => [row.shopify_customer_id, row.id]));
 }
 
-function headerValue(headers, name) {
+export function headerValue(headers, name) {
   if (!headers) return null;
   if (typeof headers.get === 'function') return headers.get(name);
   const lower = name.toLowerCase();

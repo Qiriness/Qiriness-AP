@@ -11,13 +11,18 @@ import {
   ORDER_TOPICS,
   processOrderWebhook,
 } from "../../../../../scripts/lib/shopify-order-webhooks.mjs";
+import {
+  DISCOUNT_TOPICS,
+  processDiscountWebhook,
+} from "../../../../../scripts/lib/shopify-discount-webhooks.mjs";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
  * THE DOOR SHOPIFY KNOCKS ON. One URL for every topic, dispatched by
- * `x-shopify-topic`: order changes go to the order handler, the three mandatory
+ * `x-shopify-topic`: order and discount changes go to their handlers (each
+ * re-reads the record from the shop that sent it), the three mandatory
  * privacy topics to the compliance handler that has existed since March with no
  * way to be reached.
  *
@@ -52,8 +57,10 @@ export async function POST(request: Request) {
 
   const supabase = createSupabaseClient(config);
 
-  if (topic && ORDER_TOPICS.has(topic)) {
-    // THE ORDER IS RE-READ FROM THE SHOP THAT SENT IT. One app serves every shop
+  const isOrder = Boolean(topic && ORDER_TOPICS.has(topic));
+  const isDiscount = Boolean(topic && DISCOUNT_TOPICS.has(topic));
+  if (isOrder || isDiscount) {
+    // THE RECORD IS RE-READ FROM THE SHOP THAT SENT IT. One app serves every shop
     // (DASHBOARD_SHOPS), and its token is minted per store domain. The header is
     // not yet verified here, so only a shop on that list gets a client; any other
     // is answered without being read anywhere, never re-read from the desk's shop.
@@ -62,7 +69,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: "unknown_shop" }, { status: 200 });
     }
     const shopify = await createShopifyClient({ ...config, shopDomain: sender.domain });
-    const result = await processOrderWebhook({
+    const handler = isOrder ? processOrderWebhook : processDiscountWebhook;
+    const result = await handler({
       rawBody: Buffer.from(raw, "utf8"),
       headers: request.headers,
       config,

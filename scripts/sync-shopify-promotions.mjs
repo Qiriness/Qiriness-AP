@@ -139,7 +139,7 @@ async function upsertPromotionPage({ supabase, promotionRows }) {
   );
 }
 
-async function expandDiscountCodePages(shopify, discountNodes) {
+export async function expandDiscountCodePages(shopify, discountNodes) {
   const expanded = [];
 
   for (const discountNode of discountNodes) {

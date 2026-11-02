@@ -706,15 +706,9 @@ const CUSTOMER_SELECTION_FIELDS = `#graphql
               }
 `;
 
-const DISCOUNTS_QUERY = `#graphql
-  query DiscountSyncPage($first: Int!, $after: String, $codeFirst: Int!) {
-    discountNodes(first: $first, after: $after) {
-      pageInfo {
-        hasNextPage
-        endCursor
-      }
-      nodes {
-        id
+// The whole discount, as both the paged sync and the single-discount webhook
+// read it: one selection, so the two can never map different shapes.
+const DISCOUNT_NODE_FIELDS = `
         discount {
           __typename
           ... on DiscountCodeBasic {
@@ -997,6 +991,18 @@ const DISCOUNTS_QUERY = `#graphql
             }
           }
         }
+`;
+
+const DISCOUNTS_QUERY = `#graphql
+  query DiscountSyncPage($first: Int!, $after: String, $codeFirst: Int!) {
+    discountNodes(first: $first, after: $after) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      nodes {
+        id
+        ${DISCOUNT_NODE_FIELDS}
       }
     }
   }
@@ -1416,6 +1422,29 @@ export async function fetchDiscountPage(shopify, args, cursor) {
     after: cursor,
     codeFirst: DISCOUNT_CODE_PAGE_SIZE
   });
+}
+
+const DISCOUNT_NODE_QUERY = `#graphql
+  query DiscountNode($id: ID!, $codeFirst: Int!) {
+    discountNode(id: $id) {
+      id
+      ${DISCOUNT_NODE_FIELDS}
+    }
+  }
+`;
+
+/**
+ * One discount, by node id, in the same shape `fetchDiscountPage` returns per
+ * node, or null when Shopify no longer has it. The discount webhook re-reads
+ * through this rather than trusting its payload, which carries only the title,
+ * status and timestamps.
+ */
+export async function fetchDiscountNode(shopify, discountNodeId) {
+  const data = await shopifyGraphql(shopify, DISCOUNT_NODE_QUERY, {
+    id: discountNodeId,
+    codeFirst: DISCOUNT_CODE_PAGE_SIZE
+  });
+  return data.discountNode?.discount ? data.discountNode : null;
 }
 
 export async function fetchDiscountRedeemCodePage(shopify, discountNodeId, cursor) {

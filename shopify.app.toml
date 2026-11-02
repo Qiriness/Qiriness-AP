@@ -47,6 +47,15 @@ topics = [
 ]
 uri = "https://qiriness-ap.vercel.app/api/webhooks/shopify"
 
+# DISCOUNTS, SO A NEW CODE OR OFFER REACHES THE DESK IN SECONDS, NOT OVERNIGHT.
+# Event-driven on purpose: nothing polls, so a day without discount edits costs
+# nothing. The handler re-reads the one discount (shopify-discount-webhooks.mjs);
+# the nightly stays as the reconciliation pass and still owns usage counts.
+# Needs `read_discounts`, already granted above.
+[[webhooks.subscriptions]]
+topics = [ "discounts/create", "discounts/update", "discounts/delete" ]
+uri = "https://qiriness-ap.vercel.app/api/webhooks/shopify"
+
 # MANDATORY FOR ANY APP THAT TOUCHES CUSTOMER DATA, and the handler for these has
 # existed since the compliance work without a URL to be reached at. Same endpoint:
 # the route dispatches on the topic header.

@@ -739,6 +739,16 @@ Orders were only ever written by the nightly, so between runs the desk read a ta
 
 **None of this replaces the nightly.** Deliveries are dropped, and one that arrives mid-deploy is simply gone. The nightly remains the reconciliation pass; this is the fast path, not the record.
 
+### Discounts are webhooked too, and nothing polls (2026-11-02)
+
+`promotions` was written only by the nightly, so a code or automatic offer created in the morning did not exist for the desk or the storefront advisor until the next night. Polling every few minutes was rejected: it pays in requests and logs whether anything changed or not (see the October egress work). `discounts/create`, `discounts/update` and `discounts/delete` now go to the same `/api/webhooks/shopify`, and `shopify-discount-webhooks.mjs` follows the order handler's rules above: HMAC first, re-read rather than believe, the same status-code policy, the replay guard and the `updatedAt` guard.
+
+**One query, shared as a fragment.** Unlike `fetchOrderByLegacyId`, the single read is `discountNode(id:)` over `DISCOUNT_NODE_FIELDS`, the selection `DISCOUNTS_QUERY` now also uses, and it runs the nightly's code-page and item-page expansion. A webhook-written row is the row the nightly would write.
+
+**A delete is believed without a read**, since there is nothing to read; an update whose discount Shopify no longer returns is treated as a delete.
+
+**Left to the nightly on purpose.** `discounts/redeemcode_added`/`_removed` are not subscribed: generating 600 unique codes would mean 600 deliveries each re-reading a 600-code discount. Usage counts move on redemption without a promised webhook, and `status` changes on its own clock; readers compare `starts_at`/`ends_at` with now, so only edits need to arrive. The nightly remains the reconciliation pass.
+
 ### Klaviyo: the key in Vault, counts per day, clicked rows only (2026-09-25)
 
 **The key is typed on /settings and lives in Supabase Vault, not in `.env.local`.** The nightly sync runs on GitHub Actions, which reads repository secrets and not a local file; a key in the environment would have needed a repository secret *and* a local copy, and nobody on the team could change it without a developer. Vault encrypts it at rest, and the three functions that touch it (`klaviyo_save_key` / `_read_key` / `_clear_key`) are security definer with an empty `search_path`, executable by `service_role` only — `anon` and `authenticated` were checked to have no execute right. The table holds the secret's id and the last four characters; nothing returns the key to a browser. Setting it is closed to the contact team, because it unlocks revenue data, for the same reason Marketing is.

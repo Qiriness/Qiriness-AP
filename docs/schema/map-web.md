@@ -42,6 +42,7 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |       |-- webhooks/shopify/route.ts     # PUBLIC (HMAC, not a session). One URL
 |   |       |                                # for every topic, dispatched on
 |   |       |                                # x-shopify-topic: orders -> order
+|   |       |                                # webhooks, discounts -> discount
 |   |       |                                # webhooks, the three privacy topics ->
 |   |       |                                # compliance. Reads request.text(), never
 |   |       |                                # .json() — the HMAC is over raw bytes

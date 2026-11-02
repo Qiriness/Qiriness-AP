@@ -259,6 +259,10 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |                                # through the nightly's own query and
 |       |                                # mapper, with a replay guard and an
 |       |                                # out-of-order guard; then the snooze wake
+|       |-- shopify-discount-webhooks.mjs # discounts/create|update|delete -> re-read
+|       |                                # that one discount (DISCOUNT_NODE_FIELDS,
+|       |                                # same as the nightly) and upsert/delete its
+|       |                                # promotions row; same two guards
 |       |-- dashboard-shops.mjs          # DASHBOARD_SHOPS: the shops Insights serves (store
 |       |                                # domains); SHOPIFY_STORE_DOMAIN = the support desk's;
 |       |                                # slug = subdomain (?shop=); the nightly loops over it;
@@ -369,7 +373,7 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |                                        # template-extractors/
 ```
 
-## storefront-app/, docs/, data/
+## extensions/, docs/, data/
 
 ```text
 |-- extensions/storefront-advisor/  # the support app's theme app extension (2026-11-02):
@@ -377,8 +381,6 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |                                # settings + JSON config); its [app_proxy] is in the
 |                                # root shopify.app.toml. extensions/package.json: CommonJS
 |                                # for the tests that import assets/advisor-cart.js
-|-- storefront-app/              # the RETIRED dev-store app (toml, backend/shopify.web.toml
-|                                # tunnel); no extension any more
 |                                # · assets/advisor.js (loader: launcher + routine banner) ·
 |                                # advisor-panel.js (panel, fetched on first open;
 |                                # chips up to 8; card-click beacon to /event)
