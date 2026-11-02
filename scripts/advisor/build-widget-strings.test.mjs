@@ -21,7 +21,10 @@ const config = (custom = {}) => ({
 });
 
 test('advisor-strings.js is up to date with the embed and the locale files (npm run advisor:widget-strings)', () => {
-  assert.equal(fs.readFileSync(OUTPUT, 'utf8'), buildWidgetStrings());
+  // Line endings aside: Git may check the file out with CRLF on Windows.
+  assert.equal(fs.readFileSync(OUTPUT, 'utf8').replace(/
+/g, '
+'), buildWidgetStrings());
 });
 
 test('the language comes from Weglot, else the URL, else the page; only one the widget has', () => {
