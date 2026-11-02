@@ -126,6 +126,7 @@ export default {
     eye_care: /\b(een|de|mijn) (oogcreme|oogcontour\w*|oogserum)\b/,
     cleanser: /\b(een|de|mijn) (reiniger|reinigingsgel|reinigingsmelk|make ?up remover)\b/,
     exfoliant: /\b(scrub\w*|exfolia\w*|peeling\w*)\b/,
+    sheet_mask: /\b(sheet ?maskers?|doekmaskers?|tissuemaskers?)\b/,
     mask: /\b(een|het|mijn) \w*masker\b/,
     moisturiser: /\b(een|de|mijn) (creme|dagcreme|gezichtscreme|vochtinbrengende creme)\b/
   },

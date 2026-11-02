@@ -1,7 +1,7 @@
 {
   "advisor": {
     "title": "{{ shop }} Beauty-Beratung",
-    "eyebrow": "Persönliche Beratung",
+    "eyebrow": "{{ shop }} ist für Sie da",
     "launcher": "Beauty-Beratung",
     "open": "Beauty-Beratung öffnen",
     "close": "Beratung schließen",
@@ -84,7 +84,7 @@
     "complete_note": "Ihre Produkte dienen bereits dieser Routine. Es fehlen {count} Produkt(e), um sie zu vervollständigen.",
     "complete_none": "Ihre Produkte reichen für diese Routine schon aus, ohne weiteren Kauf.",
     "total": "Komplette Routine — {count} Produkt(e)",
-    "saving": "Sie sparen {amount}",
+    "saving": "−{percent} % · Sie sparen {amount}",
     "min_note": "Der Routine-Rabatt gilt ab {min} Produkten.",
     "banner_eyebrow": "Ihr Routine-Vorteil",
     "banner_title": "−{percent} % auf Ihre Routine",

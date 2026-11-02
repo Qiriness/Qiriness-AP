@@ -10,6 +10,31 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The panel's eyebrow: « Qiriness à votre service » (2026-11-02)
+
+Owner: replace « Conseil personnalisé » with « Qiriness à votre service ». Written as `{{ shop }} à votre service` (the shop's name from Shopify, as the title already is), in all six languages: « at your service », « al Suo servizio », « ist für Sie da », « tot uw dienst », « a su servicio ». Needs `shopify app deploy`.
+
+Seen the same day: on a German page the greeting and quick-action buttons stayed French. The German on screen was not the widget's own (« Individuelle Beratung », « Gespräch mit einer KI », « Siehe AGB » are in no locale file): Shopify served the page in French and a translator (the browser's or a translation app) rewrote the text present at load, not the greeting and buttons drawn when the chat opens. The widget's languages follow Shopify's `request.locale`.
+
+## « Masque monodose » is a sheet mask (2026-11-02)
+
+Owner: « masque monodose refers to the tissue masks — that's how we refer to them on our website ». « je cherche un masque monodose » was read as a plain mask, so the engine answered with a cream mask (dehydration: the Sleeping Mask), and « monodose » was ignored. A sheet mask is now a type a customer can ask for: `sheet_mask` in the lexicon's requested types, before `mask` (« masque monodose / tissu / en tissu », "sheet mask", « maschera in tessuto », « Tuchmaske », « sheet masker », « mascarilla de tela »), filled by the sheet's « Masque tissu » products, allowed only when the shop sells one. On the live catalogue: monodose + dehydration → Hyal-Aqua, Wrap Éclat, Wrap Apaisant; monodose + wrinkles → Wrap d'Or; « un masque » unchanged. **Checked:** a lexicon test in six languages, `npm test` 3950/3950. Needs the web deploy.
+
+## Advisor: « beauté » is no product, no « je ne peux pas vous en dire davantage », cards to the edge (2026-11-02)
+
+- **« C'est quoi la beauté énergétique » found the lip balm « Lip Beauty »** (staging chat): the resolver corrected « beaute » to the title word « beauty », a strong match, so the reply was followed by « Souhaitez-vous que j'ajoute Baume Lèvres … Lip Beauty à votre panier ? ». A word the shop itself writes (descriptions, benefits, usage, ingredients, FAQs: `index.written`) is no longer corrected into a name unless the message names a product type (any product's head noun, `index.heads`): « le déodorant orange » still finds « Fleur d'Oranger ». `eval:resolution` on the live catalogue 122/123 as before (« the Hyal-Aqua mask » was already missing); a resolver test that fails on the old code.
+- **The model no longer says it cannot say more** (owner: « we dont want to make it seem like we cant answer the questions »): « je ne peux pas vous en dire davantage ici » after the beauté énergétique and Hanbang answers came from two prompt rules telling it to say so. It now says what it knows and stops, never mentions a limit, and with nothing at all offers what it can help with (ranges, a product, a routine).
+- **Product cards fill the chat's width** (owner): a reply with cards was capped at 88 % and its row at 340 px, leaving a gap on the right. Now the reply with cards spans the chat, its text keeping the bubble's width; the same on a phone.
+- **Checked:** `npm test`, the resolution eval, the probe on the live catalogue. Prompt and layout not seen live; needs the web deploy and `shopify app deploy`.
+
+## « Formulaire de contact » looks like a link (2026-11-02)
+
+Owner: make it look nicer and like a link, with a little chat icon. It was small uppercase text with a bottom border, read as a button. Now a chat-bubble icon, the words in sentence case and underlined in the advisor's accent colour, and a small arrow that moves on hover (`ICONS.chat`, `ICONS.arrow`, `.sa-contact`). **Checked:** `node --check`, `npm test`. Not viewed in a browser; needs `shopify app deploy`.
+
+## The routine's checkout strip says the percentage (2026-11-02)
+
+Owner: show the original price struck through and the « % off » once two or more products are selected. The strip already showed the struck-through total, the discounted total and the discounted « Ajouter » amount, but only when the routine code's percentage is known, which it reads from the synced `promotions` by code. `MAROUTINE20`, created on the live store today, was not synced yet (no row; the nightly or `npm run sync:shopify:promotions` brings it), so the strip showed a plain total; the code was still applied in the cart. The saving line now leads with the percentage: « −20 % · Économie 12,00 € », in all six languages. **Checked:** `node --check`, `npm test`. Not viewed in a browser; needs `shopify app deploy` and the promotions sync.
+
 ## The routine banner: lifts Klaviyo's teaser, sans-serif text (2026-11-02)
 
 The banner across the bottom covered Klaviyo's sign-up teaser (bottom left) on the staging theme. While the banner shows, the widgets named by the embed's new setting « Lift above the banner » (CSS selectors, default `[class*="kl-teaser"]`; empty moves nothing) get a bottom margin of the banner's height, also when they arrive after the page (a MutationObserver, disconnected when the banner closes); closing it puts them back. The banner's text is in the body font (sans serif), no longer the heading serif. `advisor.js` 9.3 KB (Theme Check cap 10 KB). **Checked:** `node --check`, schema parses, `npm test`. Not viewed in a browser: Klaviyo's teaser class is from its usual markup, check it on the staging theme; needs `shopify app deploy`.

@@ -348,11 +348,14 @@
 }
 
 /* ---------- product cards ---------- */
+/* A reply with cards takes the chat's full width (owner, 2026-11-02: the 88 % and 340 px caps left a gap
+   on the right); its text keeps the bubble's width. */
+.sa-message--products { max-width: 100%; align-self: stretch; }
+.sa-message--products > .sa-bubble { align-self: flex-start; max-width: 88%; }
 .sa-products {
   display: flex;
   gap: 12px;
   width: 100%;
-  max-width: 340px;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   padding-bottom: 4px;
@@ -441,17 +444,26 @@
   opacity: 0.8;
 }
 
+/* A link, not a button: a chat bubble, the words underlined, an arrow that moves on hover. */
 .sa-contact {
-  display: inline-block;
-  margin-top: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--sa-ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--sa-accent);
   text-decoration: none;
-  border-bottom: 1px solid currentColor;
 }
+.sa-contact span {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.sa-contact svg { width: 18px; height: 18px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.sa-contact svg:last-child { width: 14px; height: 14px; transition: transform 0.2s var(--sa-ease); }
+.sa-contact:hover span { text-decoration-thickness: 2px; }
+.sa-contact:hover svg:last-child { transform: translateX(2px); }
 
 .sa-card__add {
   align-self: flex-start;
@@ -1039,7 +1051,7 @@ a.sa-pick__title:hover { text-decoration: underline; text-underline-offset: 3px;
   .sa-banner { flex-direction: column; align-items: stretch; gap: 10px; padding: 14px 52px 14px 16px; text-align: left; }
   .sa-banner__text { font-size: 17px; }
   .sa-banner__close { top: 10px; right: 8px; margin-top: 0; }
-  .sa-panel--wide .sa-message:not(.sa-message--routine) { max-width: 88%; }
+  .sa-panel--wide .sa-message:not(.sa-message--routine):not(.sa-message--products) { max-width: 88%; }
   /* The routine on a phone: one column, the steps folded, the checkout full width. */
   .sa-panel--wide .sa-routine__layout { grid-template-columns: 1fr; }
   .sa-panel--wide .sa-picks__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

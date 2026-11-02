@@ -1,7 +1,7 @@
 {
   "advisor": {
     "title": "Conseiller Beauté {{ shop }}",
-    "eyebrow": "Conseil personnalisé",
+    "eyebrow": "{{ shop }} à votre service",
     "launcher": "Conseil beauté",
     "open": "Ouvrir le conseiller beauté",
     "close": "Fermer le conseiller",
@@ -84,7 +84,7 @@
     "complete_note": "Vos soins servent déjà à cette routine. Il manque {count} soin(s) pour la compléter.",
     "complete_none": "Vos soins suffisent déjà à cette routine, sans rien acheter de plus.",
     "total": "Routine complète — {count} soin(s)",
-    "saving": "Économie {amount}",
+    "saving": "−{percent} % · Économie {amount}",
     "min_note": "La remise routine s’applique dès {min} soins.",
     "banner_eyebrow": "Votre avantage routine",
     "banner_title": "−{percent} % sur votre routine",

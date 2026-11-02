@@ -132,6 +132,8 @@ export default {
     cleanser: /\b(un|une|le|la) (nettoyant|demaquillant)\b/,
     // « je cherche une masque exfoliant pour ma peau grasse » (owner, 2026-10-29) was read as nothing.
     exfoliant: /\b(exfoliants?|exfoliation|exfolier|gommages?|gommant|peeling)\b/,
+    // « masque monodose » is how Qiriness's website names its sheet masks (owner, 2026-11-02).
+    sheet_mask: /\bmasques? (monodoses?|tissus?|en tissu|feuilles?)\b/,
     mask: /\b(un|une|le|la|des|mon|ma) masques?\b/,
     // « un creme » typed: still a cream. « ma crème visage » too, as « mon sérum » is a serum.
     moisturiser: /\b(une|un|la|ma|mon) (creme|creme de jour|creme hydratante)\b/

@@ -1,7 +1,7 @@
 {
   "advisor": {
     "title": "{{ shop }} Beautyadvies",
-    "eyebrow": "Persoonlijk advies",
+    "eyebrow": "{{ shop }} tot uw dienst",
     "launcher": "Beautyadvies",
     "open": "Beautyadvies openen",
     "close": "Advies sluiten",
@@ -84,7 +84,7 @@
     "complete_note": "Uw producten dienen al voor deze routine. Er ontbreken nog {count} product(en) om haar aan te vullen.",
     "complete_none": "Uw producten volstaan al voor deze routine, u hoeft niets bij te kopen.",
     "total": "Volledige routine — {count} product(en)",
-    "saving": "U bespaart {amount}",
+    "saving": "−{percent}% · U bespaart {amount}",
     "min_note": "De routinekorting geldt vanaf {min} producten.",
     "banner_eyebrow": "Uw routinevoordeel",
     "banner_title": "−{percent}% op uw routine",

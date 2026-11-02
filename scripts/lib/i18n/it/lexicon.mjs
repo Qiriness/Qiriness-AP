@@ -123,6 +123,7 @@ export default {
     eye_care: /\b((un|il|mio) contorno (occhi|degli occhi)|(una|la) crema (per gli )?occhi)\b/,
     cleanser: /\b(un|il|uno|lo) (detergente|struccante)\b/,
     exfoliant: /\b(esfoliant\w*|esfoliazione|peeling|gommage)\b/,
+    sheet_mask: /\bmascher[ae] (in tessuto|monodose|monouso)\b/,
     mask: /\b((una|la|delle|mia) maschera|maschere)\b/,
     moisturiser: /\b(una|la|mia) (crema|crema da giorno|crema idratante)\b/
   },

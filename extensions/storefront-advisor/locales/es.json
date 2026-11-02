@@ -1,7 +1,7 @@
 {
   "advisor": {
     "title": "Asesora de belleza {{ shop }}",
-    "eyebrow": "Consejo personalizado",
+    "eyebrow": "{{ shop }} a su servicio",
     "launcher": "Consejo de belleza",
     "open": "Abrir la asesora de belleza",
     "close": "Cerrar la asesora",
@@ -84,7 +84,7 @@
     "complete_note": "Sus productos ya sirven para esta rutina. Falta(n) {count} producto(s) para completarla.",
     "complete_none": "Sus productos ya bastan para esta rutina, sin comprar nada más.",
     "total": "Rutina completa — {count} producto(s)",
-    "saving": "Ahorro de {amount}",
+    "saving": "−{percent} % · Ahorro de {amount}",
     "min_note": "El descuento de rutina se aplica a partir de {min} productos.",
     "banner_eyebrow": "Su ventaja rutina",
     "banner_title": "−{percent} % en su rutina",

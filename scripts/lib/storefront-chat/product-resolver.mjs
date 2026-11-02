@@ -171,6 +171,15 @@ export function buildResolutionIndex(catalogue, { aliases = new Map(), ranges: p
     }
   }
 
+  // WORDS THE SHOP ITSELF WRITES (its descriptions, benefits, usage, ingredients, FAQs): a real word,
+  // not a typo to correct into a name, unless the customer names a product type (analyse). « la beauté énergétique » became the « Lip Beauty » balm
+  // (beaute→beauty) and drew a cart question (owner, 2026-11-02).
+  const written = new Set();
+  for (const p of catalogue.products) {
+    const texts = [p.short, p.description, p.benefits, p.usage, p.keyIngredients, ...(p.faqs ?? []).flatMap((f) => [f.canonical_question, f.answer])];
+    for (const text of texts) if (typeof text === 'string') for (const t of foldedTokens(text)) written.add(t);
+  }
+
   return {
     products,
     byId: new Map(products.map((e) => [e.product.id, e])),
@@ -178,6 +187,9 @@ export function buildResolutionIndex(catalogue, { aliases = new Map(), ranges: p
     synonyms,
     identity,
     vocabulary: new Set(inTitles.keys()),
+    written,
+    // Every product's head noun, even one product's (« déodorant »): enough to say the customer named a type.
+    heads: new Set([...headCount.keys()].filter(Boolean)),
     skus,
     ranges,
     aliases,
@@ -298,8 +310,11 @@ function analyse(chunkText, index) {
   chunkText = catalogueWords(chunkText, index);
   const raw = foldedTokens(chunkText);
   const corrections = [];
+  // A word the shop writes stays itself unless the chunk names a product type: « le déodorant
+  // orange blossom » may still mean the « oranger » one; « la beauté énergétique » is no product.
+  const namesType = raw.some((t) => index.careTypes.has(t) || index.synonyms.has(t) || index.heads?.has(t));
   const tokens = raw.map((t) => {
-    if (index.vocabulary.has(t) || t.length < 4 || GRAMMAR_WORDS.has(t) || COMMON_WORDS.has(t)) return t;
+    if (index.vocabulary.has(t) || (!namesType && index.written?.has(t)) || t.length < 4 || GRAMMAR_WORDS.has(t) || COMMON_WORDS.has(t)) return t;
     const fixed = closest(t, index);
     if (fixed) corrections.push(`${t}→${fixed}`);
     return fixed ?? t;

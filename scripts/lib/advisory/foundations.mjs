@@ -76,7 +76,7 @@ const MAX_BUILDER_QUESTIONS = 4;
 /** Profile current_routine kinds → product types. */
 const OWNED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'cream', serum: 'serum', lotion: 'lotion', mask: 'mask', eye_care: 'eye', booster: 'serum' };
 /** The engine's desired care types → product types. */
-const DESIRED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'cream', serum: 'serum', lotion: 'lotion', exfoliant: 'exfoliant', mask: 'mask', eye_care: 'eye', booster: 'serum' };
+const DESIRED_TYPE = { cleanser: 'cleanser', moisturiser: 'cream', night_cream: 'cream', serum: 'serum', lotion: 'lotion', exfoliant: 'exfoliant', mask: 'mask', sheet_mask: 'sheet_mask', eye_care: 'eye', booster: 'serum' };
 /** The engine's step kinds per product type, for the conversation layer (Phase 2's « already owned » and its prompts). */
 const KIND = { cleanser: 'cleanser', makeup_remover: 'cleanser', lotion: 'lotion', exfoliant: 'lotion', serum: 'serum', cream: 'moisturiser', spf: 'spf', eye: 'eye_care', mask: 'mask', sheet_mask: 'mask', kit: 'kit' };
 const QUESTION_FIELDS = { concern: 'primary_concern', skin_type: 'skin_type', eye_concern: 'eye_concern', sensitivity: 'sensitivity', current_routine: 'current_routine', size: 'routine_scope', age: 'age_band', routine_time: 'routine_time' };

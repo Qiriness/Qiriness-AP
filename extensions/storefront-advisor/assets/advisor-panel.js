@@ -73,7 +73,9 @@
     plus: ['M12 5v14', 'M5 12h14'],
     chevron: ['M7 10l5 5 5-5'],
     sun: ['M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z', 'M12 2v2', 'M12 20v2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4', 'M2 12h2', 'M20 12h2', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4'],
-    moon: ['M20 15.7A8 8 0 0 1 8.3 4a8.3 8.3 0 1 0 11.7 11.7z']
+    moon: ['M20 15.7A8 8 0 0 1 8.3 4a8.3 8.3 0 1 0 11.7 11.7z'],
+    chat: ['M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.3-4.6A7.5 7.5 0 1 1 20 11.5z', 'M9 11.5h.01', 'M12.5 11.5h.01', 'M16 11.5h.01'],
+    arrow: ['M5 12h13', 'M13 7l5 5-5 5']
   };
 
   function newSessionId() {
@@ -719,7 +721,7 @@
       was.textContent = pct ? money(total) : '';
       was.hidden = !pct;
       now.textContent = money(pct ? after : total);
-      saving.textContent = pct ? fill(rs.saving || 'Économie {amount}', { amount: money(total - after) }) : '';
+      saving.textContent = pct ? fill(rs.saving || 'Économie {amount}', { amount: money(total - after), percent: String(pct).replace('.', decimal) }) : '';
       saving.hidden = !pct;
       minNote.textContent = discount && !qualifies ? fill(rs.min_note || '', { min: discount.min_products }) : '';
       minNote.hidden = !minNote.textContent;
@@ -1083,7 +1085,11 @@
     }
     var contact = !isUser ? contactHref(message.contact) : null;
     if (contact) {
-      node.appendChild(el('a', { className: 'sa-contact', href: contact, text: strings.contactForm || 'Formulaire de contact' }));
+      node.appendChild(el('a', { className: 'sa-contact', href: contact }, [
+        icon(ICONS.chat),
+        el('span', { text: strings.contactForm || 'Formulaire de contact' }),
+        icon(ICONS.arrow)
+      ]));
     }
     if (!isUser && onChoice) {
       var chips = Choices(message.choices, onChoice);

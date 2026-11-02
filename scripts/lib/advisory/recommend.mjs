@@ -340,7 +340,10 @@ export function createAdvisor(rawConfig, catalogue, { knowledge = null, routines
   };
   if (!routines || !knowledge) return playbookAdvisor;
   // The brand's own age ranges (its Rules tab) are the age values a chip or the reader may set.
-  const brandAllowed = routines.age_ranges?.length ? { ...allowed, age_band: [...routines.age_ranges.map((a) => a.key), 'unknown'] } : allowed;
+  const ages = routines.age_ranges?.length ? { ...allowed, age_band: [...routines.age_ranges.map((a) => a.key), 'unknown'] } : allowed;
+  // A sheet mask can be asked for by type when the shop sells one (« un masque monodose », owner 2026-11-02).
+  const sheetMasks = [...(knowledge?.values?.() ?? [])].some((k) => k?.functional_type === 'sheet_mask');
+  const brandAllowed = sheetMasks ? { ...ages, desired_care_type: [...new Set([...(ages.desired_care_type ?? []), 'sheet_mask'])] } : ages;
   const foundation = createFoundationAdvisor({ routines, catalogue, knowledge, allowed: brandAllowed, question });
   return { ...playbookAdvisor, allowed: brandAllowed, engine: 'foundations', advise: foundation.advise, treat: foundation.treat, routineDiscount: routines.routine_discount?.code ?? null, routineDiscountRule: routines.routine_discount ?? null, routineLabels: routines.labels ?? {}, variantChoice: routines.variant_choice ? { ...routines.variant_choice, skin_texture: routines.skin_type_texture ?? {} } : null };
 }

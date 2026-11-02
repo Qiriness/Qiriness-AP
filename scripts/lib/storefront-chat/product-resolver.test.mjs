@@ -245,3 +245,18 @@ test('« moins » and « plus » are words, not typos of « mains »: « Moins d
   // The real word still resolves.
   assert.deepEqual(ids(resolve('la crème mains')), ['p9']);
 });
+
+test('a word the shop writes is not corrected into a name, unless a product type is named', () => {
+  // « beauté » is in the shop's own descriptions: « la beauté énergétique » is no typo of « Lip Beauty »
+  // (owner, 2026-11-02). « orange » is too, but « le déodorant orange » still finds the « Oranger » one.
+  const rows = [
+    row('b1', 'Baume Lèvres Hydratant - Lip Beauty', 'B1', { description: 'Une beauté naturelle, un parfum d’orange douce.' }),
+    row('b2', 'Déodorant Bille - Fleur d’Oranger', 'D1'),
+    row('b3', 'Crème Riche - Voile Brume', 'C1')
+  ];
+  const index = buildResolutionIndex(buildCatalogue(rows, []));
+  const r = (m) => resolveProducts(m, { index });
+  assert.equal(r('C’est quoi la beauté énergétique ?').status, 'unresolved');
+  assert.deepEqual(r('le baume lip beauty').products.map((p) => p.id), ['b1']);
+  assert.deepEqual(r('le déodorant orange').products.map((p) => p.id), ['b2']);
+});

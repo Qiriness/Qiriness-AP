@@ -63,7 +63,8 @@ const SKIN_TYPE_ORDER = ['very_dry', 'dry', 'normal', 'combination', 'oily'];
 const SENSITIVITY_ORDER = ['none', 'reactive', 'sensitive'];
 const ROUTINE_STEP_ORDER = ['night_cream', 'eye_care', 'cleanser', 'serum', 'lotion', 'mask', 'moisturiser'];
 // The exfoliant before the mask: « un masque exfoliant » is an exfoliant (owner, 2026-10-29).
-const DESIRED_ORDER = ['serum', 'night_cream', 'eye_care', 'cleanser', 'exfoliant', 'mask', 'moisturiser'];
+// The sheet mask before the mask: « un masque monodose » is a sheet mask, the website's word (owner, 2026-11-02).
+const DESIRED_ORDER = ['serum', 'night_cream', 'eye_care', 'cleanser', 'exfoliant', 'sheet_mask', 'mask', 'moisturiser'];
 const SCOPE_ORDER = ['complete', 'complete_existing', 'essential', 'targeted'];
 const REQUEST_ORDER = ['basic_routine', 'gift', 'spa'];
 const ROUTINE_TIME_ORDER = ['both', 'day', 'night'];

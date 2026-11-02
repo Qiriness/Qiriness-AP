@@ -356,3 +356,13 @@ test('slotList: scopes and routes', () => {
   assert.deepEqual(slotList({}, route, 'targeted').map((s) => s.key), ['cream']);
   assert.deepEqual(slotList({}, route, 'complete').map((s) => [s.key, s.optional]), [['cleanser', false], ['cream', false], ['x', true]]);
 });
+
+test('« un masque monodose » asks for a sheet mask, in every language; « un masque » stays a mask', () => {
+  // « masque monodose » is how Qiriness's website names its sheet masks (owner, 2026-11-02).
+  const desired = (m) => extractProfile(m).updates.find((u) => u.field === 'desired_care_type')?.value ?? null;
+  for (const m of ['je cherche un masque monodose', 'avez-vous des masques monodoses ?', 'je cherche un masque tissu', 'I want a sheet mask', 'cerco una maschera in tessuto', 'ich suche eine Tuchmaske', 'ik zoek een sheet masker', 'busco una mascarilla de tela']) {
+    assert.equal(desired(m), 'sheet_mask', m);
+  }
+  assert.equal(desired('je cherche un masque hydratant'), 'mask');
+  assert.equal(desired('je cherche un masque exfoliant'), 'exfoliant');
+});

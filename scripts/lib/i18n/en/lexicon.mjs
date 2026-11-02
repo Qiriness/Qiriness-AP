@@ -131,6 +131,7 @@ export default {
     cleanser: /\b(a|the|my) (cleanser|face wash|make ?up remover)\b/,
     // Not "peel": "my skin peels" is dryness.
     exfoliant: /\b(exfoliants?|exfoliators?|exfoliating|exfoliation|scrubs?)\b/,
+    sheet_mask: /\b(sheet|tissue|single use|single dose) masks?\b/,
     mask: /\b(a|the|my) (face )?mask\b/,
     moisturiser: /\b(a|the|my) (moisturi[sz]er|cream|day cream|face cream)\b/
   },
