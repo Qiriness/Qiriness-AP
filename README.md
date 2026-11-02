@@ -139,7 +139,7 @@ below. `llm_usage` holds 2174 calls.
 
 ## Next Steps
 
-**Storefront Agent dashboard (2026-10-30):** migration 07 is applied and the history backfilled; deploy the web app and `shopify app deploy` the widget from `storefront-app/`; then VALIDATION_LOG → Storefront Agent dashboard.
+**Storefront Agent dashboard (2026-10-30):** migration 07 is applied and the history backfilled; deploy the web app and `shopify app deploy` the widget from the repo root; then VALIDATION_LOG → Storefront Agent dashboard.
 
 **Barbara Gould in Insights (2026-10-26):** app installed (`gurkk8-er.myshopify.com`); set `DASHBOARD_SHOPS` on Vercel and as a GitHub variable. Run the nightly once, then work through VALIDATION_LOG → Barbara Gould in Insights.
 

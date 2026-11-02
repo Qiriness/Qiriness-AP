@@ -2,6 +2,14 @@
 
 ## Storefront advisor
 
+### The widget always answers from the server; the dev setup is gone (2026-11-02)
+
+Owner, before go-live: « theres defo dev cleanup to do … so it doesnt pollute the code and the database ».
+- **No Demo mode in the embed.** The « Replies » setting defaulted to Demo, so switching the embed on in a theme it had never been configured in (the published one, not staging) would have shown customers canned demo replies. The setting, the browser-side mock transport and the `mock.*` strings in all six locales are removed; the widget always posts to the app proxy. The server-side mock agent stays for local runs.
+- **No dev catalogue.** `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN` (catalogue, FAQs and collections borrowed by handle) and `STOREFRONT_CHAT_PRODUCT_BASE_URL` (cards linking to another storefront) are removed with `scripts/dev-store/` and `storefront-app/`. Cards always link to the widget's own store.
+- **Dev rows deleted, staging rows kept.** The advisor's analytics tables are keyed by `shop_domain`, so `dev-store:remove` (which cascades from `shops`) left 722 turns, 1,434 advisory events, 42 routines and 3 opens; deleted. The owner's staging tests on `qiriness.myshopify.com` (8 conversations on 2026-11-02) are kept for now (owner: « keep the staging rows for now »).
+- **Caps, sized from measurements.** A model reply costs about $0.0013 (12.6k input, 130 output tokens on `gpt-6-luna`); 228 conversations average 3.4 customer messages, p99 16, max 19. Against ~6,000 shop sessions a day, the advice was a daily cap of 5,000 and a session cap of 30: the daily cap is shop-wide, and once hit nobody is answered, so it is sized at about 3x the expected busiest day, not at cost. Re-size from the first week's real peak.
+
 ### Recommendation accuracy is the customer's thumbs (2026-11-02)
 
 Owner: « add a thumbs up/down in the chat for accuracy ». Migration 08.

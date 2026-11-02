@@ -92,7 +92,6 @@ message (+ chip value, + quick action)
 - **Mappings:** `families`, `slots`, `concerns`, `skin_types`, `textures`, `areas`, `targets` and `labels` map everything to collections, tags, care types and name words. No product id appears anywhere.
 - **Load:** `npm run advisor:load -- --dry-run` validates the file and checks every reference against the live catalogue. `npm run advisor:load` then replaces the shop's config in `advisor_playbooks` / `advisor_mappings` / `advisor_merchandising`. The advisor reads them at its next five-minute refresh. When no playbook is loaded, the advisor advises from search, as before.
 - **Merchandising:** `merchandising.entries` takes `{ target_kind: product | collection | family, target, tier: neutral | preferred | hero | strategic_launch, concern?, slot?, starts_at?, ends_at? }`. The boosts per tier are config, at most 0.2, and apply only within `tie_window` of the best fit.
-- **Dev catalogue:** the dev products sit in no curated collection, so the engine reads each dev product with the collections of the dashboard product that has the same handle. Ids, stock and cards stay the dev store's.
 
 ### Evaluation
 
@@ -226,8 +225,8 @@ review is tracked in `VALIDATION_LOG.md` item 45.
 
 ## Phase 1 (still in place)
 
-- **Widget:** launcher, panel, customer and advisor bubbles, typing state, error with retry, 5 quick actions, product card component (demo card on « Trouver mon soin »), phone full-screen sheet, history kept per browser tab (`sessionStorage`).
-- **Embed setting « Replies »:** `Demo` answers in the browser with no backend. `Server` goes through the app proxy to the mock agent.
+- **Widget:** launcher, panel, customer and advisor bubbles, typing state, error with retry, 5 quick actions, product card component phone full-screen sheet, history kept per browser tab (`sessionStorage`).
+- **Always the server** (2026-11-02): the embed's « Replies » setting (Demo, answered in the browser, and the default) is removed with its `mock.*` strings, so switching the embed on in a theme can never show demo replies. The server-side mock agent stays (`STOREFRONT_CHAT_AGENT=mock`, or no `OPENAI_API_KEY`).
 - **Sent with each message:** message, quick action, page type, product handle, collection handle, locale, country/market/currency, selected variant, logged-in boolean and path (query string dropped). Shopping turns additionally send a whitelisted cart snapshot; no token, notes, properties, customer identity or order data. Cart payloads are ephemeral and are not stored in session/message context.
 
 ## Agent tools
@@ -338,7 +337,6 @@ Sessions idle for longer than `STOREFRONT_CHAT_RETENTION_DAYS` (30) are purged, 
 - **The contact form** (`reply.contact = { url }`): the parameter `contact_form_path` (default `/pages/contact`), shown under every order answer and every « contact us » (the model's `contact_link`, forced by the code); the widget links it in the visitor's language.
 - **The routine builder flow** (`routine-flow.mjs`, state `context.advisor.flow`): the reply can carry `followUp: { text, products, choices }`, a second message written by the code: the routine offer (`flow:routine:yes|no`, or typed oui / non), the card of what they are running low on, or one treat (config `treats`, or knowledge `treat`). The purchase question (`purchase:<around|running_low|focus>:<product id>`) is a turn of its own, with no model call. The service stores the follow-up in `context.follow_up` and appends its text to that row's content in the history. Cards carry `variantId` when one size can be bought: the widget's « Ajouter au panier » posts to the shop's `/cart/add.js`, and `/event` records `added_to_cart`. `npm run advisor:try-flow` runs the flow with the live model on the sample set.
 - **Phases 2–3:** a product the customer builds around fills its routine step (`already_owned` in `skipped_steps`, with `customer_product`); a kit, what it contains. With product knowledge, PURCHASES also carries `may_be_running_low` (daily care past its interval) and `bought_repeatedly`, and the ranges they use nudge the ranking. `createLlmAgent` takes `productKnowledge` and `repurchaseIntervals`; the service passes neither yet (the knowledge is not imported), so live behaviour is Phase 1 plus the step filling by catalogue rules.
-- **Dev store:** `dev-store:sync` copies products only, so a dev-store test customer's orders are not in the database yet. Testing needs those orders synced under the dev shop (not built).
 - **Test from the CLI:** `npm run storefront:chat -- --customer 7001 --message "…"` signs the request as customer 7001; repeat with `--session <uuid>` and another `--customer` to see a new session open.
 
 ## Remaining phases
@@ -354,29 +352,11 @@ Sessions idle for longer than `STOREFRONT_CHAT_RETENTION_DAYS` (30) are purged, 
 
 The plan agreed on 2026-10-12 (routine foundations, sizes, treats, product knowledge, purchase history) is in `docs/storefront-advisor-plan.md`.
 
-## Run and test on the dev store
+## Run and test
 
-1. **Link the app (once):** `cd storefront-app && shopify app config link`, choose *Create new app*, and pick the dev store's organisation. Keep the `[app_proxy]` block if the CLI rewrites the toml.
-2. **Env** (repo-root `.env.local`; on Vercel only for a preview deploy): `STOREFRONT_APP_CLIENT_SECRET` (the advisor app's client secret) and `STOREFRONT_CHAT_ALLOWED_SHOPS=<dev-store>.myshopify.com`.
-3. **Migration 76:** applied 2026-10-05.
-4. **Run:** add `STOREFRONT_CHAT_AGENT=llm` to `.env.local` for AI replies, plus `STOREFRONT_CHAT_PRODUCT_BASE_URL=https://qiriness.com` (the dev store holds only a few of the catalogue's products, so cards link to the real product page in a new tab; leave it unset in production), then `cd storefront-app && shopify app dev`. That one command starts the dashboard's dev server (`backend/shopify.web.toml`), opens an HTTPS tunnel to it, points the app proxy at the tunnel, and serves the extension to the dev store.
-5. **Turn it on:** Online Store → Themes → Customize → App embeds → *Beauty advisor*. Replies = Demo needs no backend; Replies = Server goes through the proxy.
-6. **Without a store:** `npm run storefront:chat -- --message "Bonjour"` signs a request exactly as the proxy does. `--unsigned` expects 401, and `--shop other.myshopify.com` expects 403.
+The advisor runs on the live store (`qiriness.myshopify.com`) through the support app. The dev store and its app (`storefront-app/`, `scripts/dev-store/`) were removed on 2026-11-02.
 
-## Dev store: setup and removal
-
-The dev store has its own products and discounts, so cart eligibility, stock and promotions can only be evaluated once they are copied into Supabase. **Everything here is dev-only and is listed below for removal.**
-
-**Setup**
-1. `storefront-app/shopify.app.toml` has read-only scopes (`read_products, read_inventory, read_discounts, read_metaobjects, read_metaobject_definitions`). Run `shopify app deploy` from `storefront-app/`, then approve the new permissions in the dev store admin.
-2. Run `npm run dev-store:sync -- --dry-run`, then `npm run dev-store:sync`. This runs the production sync scripts against the dev store, with the advisor app's credentials, as a `development` shop row: products, stock, collections (all switched on, so collection-scoped discounts have a membership) and discounts. It never touches orders, customers or the production rows. Re-run it after changing the dev store, since nothing refreshes it automatically.
-3. Set `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN=<dev store>` in `.env.local` and unset `STOREFRONT_CHAT_PRODUCT_BASE_URL` (the products now exist on the dev store). Then restart `shopify app dev`.
-   - Product FAQs stay the dashboard shop's. A dev product's FAQ lookup goes to the dashboard product **with the same handle** (`productPolicyReader` in `storefront-chat-service.ts`, dev only). A dev product whose handle exists only on the dev store has no FAQ.
-4. The cart, stock and promotion tools read the widget's own shop, so they now find the dev shop. Brand, policies and FAQ stay the production shop's.
-
-**Removal (when the advisor goes to production)**
-1. `npm run dev-store:remove` (counts only), then `npm run dev-store:remove -- --yes`. This deletes the dev `shops` row; its products, collections and promotions cascade, and the dev chat sessions go too.
-2. Delete `scripts/dev-store/` and the `dev-store:*` npm scripts.
-3. In `.env.local`, unset `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN`, `STOREFRONT_CHAT_PRODUCT_BASE_URL`, `STOREFRONT_DEV_STORE_DOMAIN` and `STOREFRONT_APP_CLIENT_ID`.
-4. In the service, `devCatalogueShopId` (`web/lib/server/storefront-chat-service.ts`) returns null when its env is unset. It can stay, or be deleted along with its two call sites.
-5. Set `storefront-app/shopify.app.toml` scopes back to `""`, or retire the dev app entirely.
+1. **Env** (Vercel production, and `.env.local` for local runs): `STOREFRONT_APP_CLIENT_SECRET` (the support app's client secret: it signs the proxy), `STOREFRONT_CHAT_ALLOWED_SHOPS=qiriness.myshopify.com`, `OPENAI_API_KEY`. Caps: `STOREFRONT_CHAT_SHOP_DAILY_CAP` (customer messages per shop over the last 24 hours) and `STOREFRONT_CHAT_SESSION_TURN_CAP`.
+2. **Deploy:** `shopify app deploy` from the repo root releases the support app: its config and every extension.
+3. **Turn it on, per theme:** Online Store → Themes → Customize → App embeds → *Beauty advisor*. The embed is off in a theme until switched on there.
+4. **Without a store:** `npm run storefront:chat -- --message "Bonjour"` signs a request exactly as the proxy does. `--unsigned` expects 401, and `--shop other.myshopify.com` expects 403.

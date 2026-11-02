@@ -252,75 +252,6 @@ async function currentAgent(db: ReturnType<typeof client>): Promise<Agent> {
 }
 
 /**
- * DEV ONLY — `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN`. The dev store holds its
- * own small set of products; once `npm run dev-store:sync` has copied them into
- * Supabase under their own shop row, this points the advisor's CATALOGUE
- * (products, collections, product cards) at them, so a dev cart and the
- * advisor talk about the same products. Brand, policies and FAQ stay the
- * dashboard shop's. Unset — production — this returns null and nothing changes.
- * Removing the dev setup: unset it (docs/storefront-chatbot.md § Dev store).
- */
-async function devCatalogueShopId(db: ReturnType<typeof client>): Promise<string | null> {
-  const domain = process.env.STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN;
-  if (!domain) return null;
-  const rows = (await supabaseSelect(db, "shops", { shop_domain: domain, environment: "development" }, "id", { limit: 1 })) as { id: string }[];
-  if (!rows[0]) console.warn(`[storefront chat] ${domain} is not synced as a development shop; using the dashboard catalogue`);
-  return rows[0]?.id ?? null;
-}
-
-/**
- * DEV ONLY — product FAQs belong to the dashboard shop's products, and a dev
- * catalogue's products have their own ids, so « comment utiliser le masque LED
- * avec la télécommande ? » found no FAQ on the dev store although one exists
- * (2026-10-07). Under a dev catalogue a dev product's FAQ lookup goes to the
- * dashboard product with the same handle. Without a dev catalogue — production
- * — the reader is the plain one.
- */
-async function productPolicyReader(
-  reader: { selectAll: (table: string, filters: object, columns: string) => Promise<unknown> },
-  shopId: string,
-  devCatalogue: string | null,
-  catalogue: unknown,
-) {
-  const read = createProductPolicyReader(reader, shopId);
-  const devProducts = (catalogue as { products?: { id: string; handle?: string }[] } | null)?.products ?? [];
-  if (!devCatalogue || !devProducts.length) return read;
-  const rows = (await reader.selectAll("products", { shop_id: shopId }, "id,handle").catch(() => [])) as { id: string; handle: string }[];
-  const byHandle = new Map(rows.map((r) => [r.handle, r.id]));
-  const toDashboard = new Map<string, string>();
-  for (const p of devProducts) {
-    const id = p.handle ? byHandle.get(p.handle) : undefined;
-    if (id) toDashboard.set(p.id, id);
-  }
-  // The records are re-labelled with the dev id too: get_product_policy keeps
-  // only records whose product_ids include the product it was asked about.
-  return async (productId: string) => {
-    const dashboardId = toDashboard.get(productId);
-    if (!dashboardId) return read(productId);
-    const records = (await read(dashboardId)) as { product_ids: string[] }[];
-    return records.map((r) => ({ ...r, product_ids: [...r.product_ids, productId] }));
-  };
-}
-
-/**
- * DEV ONLY — a product's Shopify FAQ is a metafield on the dashboard shop's
- * product, and the dev store's copies carry almost none (3 of 109): « combien
- * de fois par semaine » on the Regard d'Or patches found no FAQ although one
- * answers it (2026-10-29). Each dev product takes the FAQ of the dashboard
- * product with the same handle, in place, as its collections in buildAdvisor.
- */
-function withDashboardFaqs(
-  catalogue: { products: { handle: string; faqs?: unknown[] }[] },
-  dashboard: { products: { handle: string; faqs?: unknown[] }[] },
-) {
-  const faqsOf = new Map(dashboard.products.map((p) => [p.handle, p.faqs ?? []]));
-  for (const p of catalogue.products) {
-    const faqs = faqsOf.get(p.handle);
-    if (faqs?.length) p.faqs = faqs;
-  }
-}
-
-/**
  * The beauty consultation engine: the brand's playbooks (advisor_* tables,
  * loaded by `npm run advisor:load`) over the advisor's catalogue. No playbook
  * loaded, or a config that does not validate: null, and the advisor advises
@@ -330,37 +261,22 @@ function withDashboardFaqs(
  * products and the routines assembled from it; owner made it live on
  * 2026-10-16), the foundation engine runs instead, and the agent gets the same
  * product knowledge. No knowledge, or a failed read: the playbooks, as before.
- *
- * DEV ONLY — under a dev catalogue the dev products sit in no curated
- * collection, so a playbook's slots and families (« serums-visage », the
- * « Temps Sublime » range) would match nothing. The engine reads each dev
- * product with the dashboard product's collections (same handle); ids, stock
- * and cards stay the dev store's.
  */
 async function buildAdvisor(
   reader: { selectAll: (table: string, filters: object, columns: string) => Promise<unknown> },
   shopId: string,
   catalogue: { products: { handle: string; collections: string[] }[]; collections: unknown[] } | null,
-  dashboard: { products: { handle: string; collections: string[] }[]; collections: unknown[] } | null,
 ) {
   if (!catalogue) return null;
   try {
     const raw = await loadAdvisoryConfig(reader as never, shopId);
     if (!raw) return null;
-    let advisorCatalogue = catalogue;
-    if (dashboard) {
-      const collectionsOf = new Map(dashboard.products.map((p) => [p.handle, p.collections]));
-      advisorCatalogue = {
-        products: catalogue.products.map((p) => ({ ...p, collections: collectionsOf.get(p.handle) ?? p.collections })),
-        collections: dashboard.collections,
-      };
-    }
     const loaded = await loadAdvisorKnowledge(reader as never, shopId).catch((error: unknown) => {
       console.warn("[storefront chat] knowledge unavailable, playbooks run", error instanceof Error ? error.message : error);
       return null;
     });
     return {
-      advisor: createAdvisor(raw, advisorCatalogue, loaded ? { knowledge: loaded.knowledge, routines: loaded.routines } : {}),
+      advisor: createAdvisor(raw, catalogue, loaded ? { knowledge: loaded.knowledge, routines: loaded.routines } : {}),
       productKnowledge: loaded?.knowledge ?? null,
       repurchaseOpening: (loaded?.routines as { repurchase_opening?: object } | undefined)?.repurchase_opening ?? null,
     };
@@ -371,31 +287,19 @@ async function buildAdvisor(
 }
 
 async function buildAgent(db: ReturnType<typeof client>, model: string, key: string): Promise<Agent> {
-  // The brand the advisor speaks for is the catalogue's shop — the one this
-  // dashboard syncs — not the dev store hosting the widget.
+  // The brand the advisor speaks for is the shop this dashboard syncs.
   const shop = await getShop();
-  const devCatalogue = await devCatalogueShopId(db);
   const toolsOn = process.env.STOREFRONT_CHAT_TOOLS !== "off";
   const reader = { selectAll: (table: string, filters: object, columns: string) => supabaseSelectAll(db, table, filters, columns) };
   const [company, catalogue, knowledge] = shop
     ? await Promise.all([
         loadCompany(db, shop.id),
-        toolsOn
-          ? loadCatalogue(
-              reader,
-              devCatalogue ?? shop.id
-            )
-          : null,
+        toolsOn ? loadCatalogue(reader, shop.id) : null,
         // Policy/FAQ failures degrade to explicit unavailable results, not guessed facts.
         toolsOn ? loadKnowledge(reader, shop.id).catch(() => { console.warn("[storefront chat] knowledge load failed"); return null; }) : null,
       ])
     : [{}, null, null];
-  // DEV ONLY — the dashboard shop's own catalogue, which the dev products borrow from by handle.
-  const dashboard = devCatalogue && catalogue && shop
-    ? ((await loadCatalogue(reader as never, shop.id).catch(() => null)) as { products: { handle: string; collections: string[]; faqs?: unknown[] }[]; collections: unknown[] } | null)
-    : null;
-  if (dashboard) withDashboardFaqs(catalogue as never, dashboard);
-  const consultation = toolsOn && shop ? await buildAdvisor(reader, shop.id, catalogue as never, dashboard) : null;
+  const consultation = toolsOn && shop ? await buildAdvisor(reader, shop.id, catalogue as never) : null;
   const llm = createOpenAIClient({
     apiKey: process.env.OPENAI_API_KEY,
     fetchImpl: storefrontFetch(positiveInt(process.env.STOREFRONT_CHAT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)),
@@ -407,20 +311,15 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
     company,
     catalogue,
     knowledge,
-    readProductPolicies: toolsOn && shop ? await productPolicyReader(reader, shop.id, devCatalogue, catalogue) : null,
+    readProductPolicies: toolsOn && shop ? createProductPolicyReader(reader, shop.id) : null,
     readShopping: toolsOn ? createShoppingReader(reader) : null,
     readNamedCodes: toolsOn ? createNamedCodeReader(reader) : null,
     readRoutineCode: toolsOn ? createRoutineCodeReader(reader) : null,
     readPublicPromotions: toolsOn && shop ? createPublicPromotionReader(reader, { shopId: shop.id, catalogueShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain, allowedShops: parseAllowedShops(process.env.STOREFRONT_CHAT_ALLOWED_SHOPS) }) : null,
     // The shop whose prices the catalogue holds, so its currency is known:
-    // Buy X Get Y spend thresholds carry none of their own. Left at the
-    // dashboard shop under a dev catalogue, every such offer was « unknown »
-    // (threshold_currency_unknown_or_different, dev store, 2026-10-06).
-    catalogueShopDomain: devCatalogue ? process.env.STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN || null : loadConfig(process.env as Record<string, string | undefined>).shopDomain,
+    // Buy X Get Y spend thresholds carry none of their own.
+    catalogueShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain,
     currency: process.env.STOREFRONT_CHAT_CURRENCY || "EUR",
-    // Dev only: the dev store lacks the catalogue, so cards link to the store
-    // that has it. Unset in production, where links stay on the widget's store.
-    productBaseUrl: process.env.STOREFRONT_CHAT_PRODUCT_BASE_URL || null,
     advisor: consultation?.advisor ?? null,
     productKnowledge: consultation?.productKnowledge ?? null,
     repurchaseOpening: consultation?.repurchaseOpening ?? null,

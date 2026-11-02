@@ -11,7 +11,6 @@ import {
   newCardsOnly,
   noRetryWait,
   parseReply,
-  productLinkBase,
   storefrontFetch
 } from './llm-agent.mjs';
 import { buildCatalogue } from './product-repository.mjs';
@@ -234,19 +233,6 @@ test('a model that never answers is cut at the turn deadline', async () => {
   const started = Date.now();
   await assert.rejects(createLlmAgent({ client: hanging, deadlineMs: 50 }).respond({ message: 'x' }), /no reply within 50 ms/);
   assert.ok(Date.now() - started < 1000);
-});
-
-test('card links stay on the store unless a product base URL is set, and only https counts', async () => {
-  const client = scripted(answer('Voici.', [{ handle: 'creme-nuit', rationale: 'ok' }]));
-  const reply = await createLlmAgent({ client, catalogue: CATALOGUE, productBaseUrl: 'https://shop.example/some/path' }).respond({
-    message: 'x',
-    context: { pageType: 'product', productHandle: 'creme-nuit' }
-  });
-  assert.equal(reply.products[0].url, 'https://shop.example/products/creme-nuit');
-  assert.equal(productLinkBase(''), '');
-  assert.equal(productLinkBase('http://shop.example'), '');
-  assert.equal(productLinkBase('javascript:alert(1)'), '');
-  assert.equal(productLinkBase('not a url'), '');
 });
 
 test('a named product is resolved before the call: its facts in the prompt, its id in the memory', async () => {

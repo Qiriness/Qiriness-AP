@@ -45,16 +45,6 @@
     "delivery_returns": "Delivery & returns",
     "offers": "Current offers"
   },
-  "mock": {
-    "default": "Thank you for your message. This is a demo reply: the advisor is not connected yet.",
-    "find_product": "With pleasure. To guide you, tell me a little about your skin: dry, combination, oily or sensitive? (Demo reply.)",
-    "build_routine": "Let's build your routine together. Would you like a morning routine, an evening routine, or both? (Demo reply.)",
-    "compare": "Tell me which products you are hesitating between and I will help you compare them. (Demo reply.)",
-    "delivery_returns": "Delivery and returns information will be available here soon. (Demo reply.)",
-    "offers": "Current offers will be available here soon. (Demo reply.)",
-    "product_name": "Sample product",
-    "product_rationale": "Demo card: real suggestions will come with the catalogue."
-  },
   "routine": {
     "expand": "Expand",
     "collapse": "Collapse",

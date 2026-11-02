@@ -200,7 +200,7 @@
       if (!parser || typeof value !== 'string' || value.indexOf('&') < 0) return value;
       return parser.parseFromString('<!doctype html><body>' + value, 'text/html').body.textContent || '';
     }
-    [config.strings, config.mock, config.banner].forEach(function (group) {
+    [config.strings, config.banner].forEach(function (group) {
       if (!group) return;
       Object.keys(group).forEach(function (key) { group[key] = decode(group[key]); });
     });

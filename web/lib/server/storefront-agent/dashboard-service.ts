@@ -4,8 +4,8 @@
  * contract (storefront-agent-types.ts). Server-only.
  *
  * WHICH SHOP. The advisor's own: STOREFRONT_CHAT_ALLOWED_SHOPS, the shops its
- * app proxy may answer (the dev store today). Not the Insights shop switcher:
- * the support desk's shop has no advisor. Days are cut in that shop's timezone
+ * app proxy may answer. Not the Insights shop switcher, which lists shops
+ * that may run no advisor. Days are cut in that shop's timezone
  * when it is synced as a shop, else the desk shop's, else UTC.
  *
  * WHAT IS NOT TRACKED SAYS SO. Chat opens start with the widget build that sends them;

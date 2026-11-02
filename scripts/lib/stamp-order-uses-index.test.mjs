@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 
 test('no updated_at read orders by desc.nullslast', () => {
-  const files = execSync('git ls-files agent scripts web extensions storefront-app', { cwd: ROOT }).toString().trim().split('\n')
+  const files = execSync('git ls-files agent scripts web extensions', { cwd: ROOT }).toString().trim().split('\n')
     .filter((f) => /\.(mjs|js|ts|tsx)$/.test(f) && !/\.test\./.test(f));
   const offenders = files.filter((f) => /updated_at\.desc\.nullslast/.test(readFileSync(`${ROOT}${f}`, 'utf8')));
   assert.deepEqual(offenders, []);

@@ -21,7 +21,6 @@
   var MAX_STORED_MESSAGES = 40;
   var MAX_MESSAGE_CHARS = 1000;
   var REQUEST_TIMEOUT_MS = 30000;
-  var MOCK_DELAY_MS = 700;
   var MOBILE_QUERY = '(max-width: 640px)';
   /** Chips under one reply: a skin-type question has five, a concern question up to eight. */
   var MAX_CHOICES = 8;
@@ -255,23 +254,6 @@
     };
   }
 
-  function createMockTransport(config) {
-    var mock = config.mock || {};
-    return function send(payload) {
-      return new Promise(function (resolve) {
-        setTimeout(function () {
-          var products = payload.action === 'find_product'
-            ? [{ title: mock.productName, rationale: mock.productRationale, price: null, image: null, url: '/collections/all' }]
-            : [];
-          resolve({
-            sessionId: payload.sessionId,
-            reply: { text: (payload.action && mock[payload.action]) || mock.default || '', products: products }
-          });
-        }, MOCK_DELAY_MS);
-      });
-    };
-  }
-
   /* ---------- components ---------- */
 
   /* A card click, reported to the advisor (advisory_events): set by the proxy transport only. */
@@ -279,7 +261,7 @@
   var onCardAdd = null;
   /* A routine added whole (advisor_routines): its ref only, never who added it. */
   var onRoutineAdd = null;
-  /* A 👍 / 👎 on a reply: set by the proxy transport only, so the demo replies draw no thumbs. */
+  /* A 👍 / 👎 on a reply: reported to the proxy's /event route. */
   var onFeedback = null;
   /*
    * The conversation the advisor's « Ajouter au panier » belongs to (the chat reply's conversationId), written on
@@ -1150,8 +1132,8 @@
   function createAdvisor(root, config, launcher, openNow, startAction) {
     var strings = config.strings || {};
     var actions = Array.isArray(config.quickActions) ? config.quickActions.filter(function (a) { return a && a.id && a.label; }) : [];
-    var send = config.transport === 'proxy' && config.endpoint ? createProxyTransport(config) : createMockTransport(config);
-    if (config.transport === 'proxy' && config.endpoint) {
+    var send = createProxyTransport(config);
+    if (config.endpoint) {
       onCardClick = function (productId) { reportClick(config.endpoint, state.sessionId, productId); };
       onCardAdd = function (productId) { reportClick(config.endpoint, state.sessionId, productId, 'added_to_cart'); };
       onRoutineAdd = function (routineRef) { reportRoutineAdded(config.endpoint, routineRef); };
@@ -1180,7 +1162,7 @@
       waitStage: 0
     };
     // The conversation this tab already had: a product added from it before any new reply is tagged too.
-    if (config.transport === 'proxy' && config.endpoint) cartConversation = state.conversationId;
+    if (config.endpoint) cartConversation = state.conversationId;
     var waitTimers = [];
 
     function startWaiting(message) {
@@ -1329,7 +1311,7 @@
       root.classList.toggle('sa-root--open', open);
       syncScrollLock();
       saveState(state);
-      if (open && !silent && config.transport === 'proxy' && config.endpoint) reportOpen(config.endpoint, state.sessionId);
+      if (open && !silent && config.endpoint) reportOpen(config.endpoint, state.sessionId);
       if (open) {
         // Laid out again now it is visible: a reply with cards (the repurchase message, fetched while the
         // panel was closed) scrolls to its text, not to the bottom.
@@ -1360,7 +1342,7 @@
       try { window.localStorage.setItem(OPENING_SEEN_KEY, String(Date.now())); } catch (error) { /* not fatal */ }
     }
     function askOpening() {
-      if (config.transport !== 'proxy' || !config.endpoint || !viewer || state.openingAsked || state.messages.length || state.pending || openingSeenRecently()) return;
+      if (!config.endpoint || !viewer || state.openingAsked || state.messages.length || state.pending || openingSeenRecently()) return;
       state.openingAsked = true;
       saveState(state);
       var url = String(config.endpoint).replace(/\/chat$/, '/opening');
@@ -1467,7 +1449,7 @@
         if (body.sessionId && typeof body.sessionId === 'string') state.sessionId = body.sessionId;
         if (typeof body.conversationId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.conversationId)) {
           state.conversationId = body.conversationId;
-          if (config.transport === 'proxy') cartConversation = body.conversationId;
+          cartConversation = body.conversationId;
         }
         // The turn the 👍 / 👎 rates: on the bubble with the cards (the reply's, else its follow-up's).
         var turnId = typeof body.turnId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.turnId) ? body.turnId : null;

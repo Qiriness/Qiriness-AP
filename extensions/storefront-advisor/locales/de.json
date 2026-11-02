@@ -45,16 +45,6 @@
     "delivery_returns": "Lieferung & Rücksendung",
     "offers": "Aktuelle Angebote"
   },
-  "mock": {
-    "default": "Vielen Dank für Ihre Nachricht. Dies ist eine Demo-Antwort: Die Beratung ist noch nicht verbunden.",
-    "find_product": "Sehr gerne. Damit ich Sie beraten kann, erzählen Sie mir etwas über Ihre Haut: eher trocken, Mischhaut, fettig oder empfindlich? (Demo-Antwort.)",
-    "build_routine": "Lassen Sie uns gemeinsam Ihre Routine zusammenstellen. Möchten Sie eine Morgenroutine, eine Abendroutine oder beides? (Demo-Antwort.)",
-    "compare": "Nennen Sie mir die Produkte, zwischen denen Sie schwanken, und ich helfe Ihnen beim Vergleich. (Demo-Antwort.)",
-    "delivery_returns": "Informationen zu Lieferung und Rücksendung finden Sie bald hier. (Demo-Antwort.)",
-    "offers": "Die aktuellen Angebote finden Sie bald hier. (Demo-Antwort.)",
-    "product_name": "Beispielprodukt",
-    "product_rationale": "Demo-Karte: Die echten Vorschläge kommen mit dem Katalog."
-  },
   "routine": {
     "expand": "Vergrößern",
     "collapse": "Verkleinern",

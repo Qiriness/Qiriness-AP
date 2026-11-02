@@ -30,7 +30,6 @@
 ></div>
 <script type="application/json" id="storefront-advisor-config">
   {
-    "transport": {{ block.settings.transport | json }},
     "endpoint": {{ endpoint | json }},
     "panelScript": {{ 'advisor-panel.js' | asset_url | json }},
     "cartScript": {{ 'advisor-cart.js' | asset_url | json }},
@@ -172,16 +171,6 @@
         "with_evening": {{ 'routine.with_evening' | t | json }},
         "discount_applied": {{ 'routine.discount_applied' | t | json }}
       }
-    },
-    "mock": {
-      "default": {{ 'mock.default' | t | json }},
-      "find_product": {{ 'mock.find_product' | t | json }},
-      "build_routine": {{ 'mock.build_routine' | t | json }},
-      "compare": {{ 'mock.compare' | t | json }},
-      "delivery_returns": {{ 'mock.delivery_returns' | t | json }},
-      "offers": {{ 'mock.offers' | t | json }},
-      "productName": {{ 'mock.product_name' | t | json }},
-      "productRationale": {{ 'mock.product_rationale' | t | json }}
     }
   }
 </script>
@@ -193,17 +182,6 @@
   "javascript": "advisor.js",
   "stylesheet": "advisor.css",
   "settings": [
-    {
-      "type": "select",
-      "id": "transport",
-      "label": "Replies",
-      "info": "Demo replies need no backend. Server sends messages through the app proxy.",
-      "options": [
-        { "value": "mock", "label": "Demo (no backend)" },
-        { "value": "proxy", "label": "Server (app proxy)" }
-      ],
-      "default": "mock"
-    },
     {
       "type": "text",
       "id": "proxy_path",

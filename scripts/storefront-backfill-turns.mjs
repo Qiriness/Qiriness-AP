@@ -13,8 +13,7 @@ import { STOREFRONT_AGENT_T, STOREFRONT_CHAT_T } from './lib/tables.mjs';
 //   npm run storefront:backfill-turns -- --shop x.myshopify.com
 //
 // IDEMPOTENT: a question that already has a turn (live or from an earlier run)
-// is skipped, by user_message_id. Products are named by the advisor's catalogue
-// (STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN on the dev store, else the dashboard's).
+// is skipped, by user_message_id. Products are named by the dashboard shop's catalogue.
 
 const args = process.argv.slice(2);
 const flag = (name) => {
@@ -32,8 +31,7 @@ if (!shops.length) {
   process.exit(1);
 }
 
-const catalogueDomain = env.STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN || config.shopDomain;
-const [catalogueShop] = await supabaseSelect(db, 'shops', { shop_domain: catalogueDomain }, 'id', { limit: 1 });
+const [catalogueShop] = await supabaseSelect(db, 'shops', { shop_domain: config.shopDomain }, 'id', { limit: 1 });
 const products = catalogueShop ? await supabaseSelectAll(db, 'products', { shop_id: catalogueShop.id }, 'id,handle') : [];
 const productIdByHandle = new Map(products.filter((p) => p.handle).map((p) => [p.handle, p.id]));
 

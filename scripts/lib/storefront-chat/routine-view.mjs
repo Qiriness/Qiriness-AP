@@ -49,11 +49,11 @@ export function whyTags(step, profile, labels = {}, mainKey = null, lang = 'fr')
 /**
  * @param {{ advice: object, profile: object, byId: (id: string) => object | null, money: (n: number) => string,
  *   cartVariant: (p: object) => string | null, labels?: object, locale?: string, currency?: string,
- *   linkBase?: string, ref?: string | null, discount?: { code: string, min_products?: number } | null,
+ *   ref?: string | null, discount?: { code: string, min_products?: number } | null,
  *   reward?: { percentage: number, min_quantity?: number } | null }} input
  * @returns {object | null}
  */
-export function buildRoutineView({ advice, profile, byId, money, cartVariant, labels = {}, locale = 'fr', currency = 'EUR', linkBase = '', ref = null, discount = null, reward = null }) {
+export function buildRoutineView({ advice, profile, byId, money, cartVariant, labels = {}, locale = 'fr', currency = 'EUR', ref = null, discount = null, reward = null }) {
   const m = advice?.moments;
   if (advice?.status !== 'recommended' || !m || !Array.isArray(m.day) || !Array.isArray(m.night)) return null;
   const lang = languageOf(locale);
@@ -68,7 +68,7 @@ export function buildRoutineView({ advice, profile, byId, money, cartVariant, la
       product_id: p.id,
       handle: p.handle,
       title: p.name,
-      url: `${linkBase}/products/${encodeURIComponent(p.handle)}`,
+      url: `/products/${encodeURIComponent(p.handle)}`,
       variant_id: variant ?? null,
       ...(chosen?.title ? { variant_title: chosen.title } : {}),
       in_stock: Boolean(p.inStock),

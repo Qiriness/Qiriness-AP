@@ -45,16 +45,6 @@
     "delivery_returns": "Consegna e resi",
     "offers": "Offerte del momento"
   },
-  "mock": {
-    "default": "Grazie per il Suo messaggio. Questa è una risposta dimostrativa: il consulente non è ancora collegato.",
-    "find_product": "Con piacere. Per orientarLa, mi dica qualcosa in più sulla Sua pelle: secca, mista, grassa o sensibile? (Risposta dimostrativa.)",
-    "build_routine": "Costruiamo insieme la Sua routine. Desidera una routine per la mattina, per la sera o per entrambe? (Risposta dimostrativa.)",
-    "compare": "Mi indichi i prodotti tra cui è indecisa: La aiuterò a confrontarli. (Risposta dimostrativa.)",
-    "delivery_returns": "Le informazioni su consegne e resi saranno presto disponibili qui. (Risposta dimostrativa.)",
-    "offers": "Le offerte del momento saranno presto disponibili qui. (Risposta dimostrativa.)",
-    "product_name": "Prodotto di esempio",
-    "product_rationale": "Scheda dimostrativa: i suggerimenti reali arriveranno con il catalogo."
-  },
   "routine": {
     "expand": "Ingrandisci",
     "collapse": "Riduci",

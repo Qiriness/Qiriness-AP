@@ -45,16 +45,6 @@
     "delivery_returns": "Livraison & retours",
     "offers": "Offres du moment"
   },
-  "mock": {
-    "default": "Merci pour votre message. Ceci est une réponse de démonstration : le conseiller n'est pas encore connecté.",
-    "find_product": "Avec plaisir. Pour vous orienter, dites-m'en un peu plus sur votre peau : plutôt sèche, mixte, grasse ou sensible ? (Réponse de démonstration.)",
-    "build_routine": "Construisons votre routine ensemble. Souhaitez-vous une routine du matin, du soir, ou les deux ? (Réponse de démonstration.)",
-    "compare": "Indiquez-moi les soins que vous hésitez à choisir, je vous aiderai à les comparer. (Réponse de démonstration.)",
-    "delivery_returns": "Les informations de livraison et de retour seront bientôt disponibles ici. (Réponse de démonstration.)",
-    "offers": "Les offres du moment seront bientôt disponibles ici. (Réponse de démonstration.)",
-    "product_name": "Exemple de soin",
-    "product_rationale": "Carte de démonstration : les vraies suggestions arriveront avec le catalogue."
-  },
   "routine": {
     "expand": "Agrandir",
     "collapse": "Réduire",

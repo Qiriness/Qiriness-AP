@@ -10,6 +10,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Storefront advisor: dev setup removed before go-live (2026-11-02)
+
+- **Widget:** the embed's « Replies » setting (Demo by default) is gone, with the browser mock transport and the `mock.*` strings in the six locales; `advisor-strings.js` regenerated. The widget always answers through the app proxy.
+- **Server:** the dev-catalogue paths in `storefront-chat-service.ts` (`devCatalogueShopId`, the handle-matched FAQ/collection borrowing) and `productBaseUrl` / `productLinkBase` in `llm-agent.mjs` / `routine-view.mjs` are removed; the backfill reads the dashboard shop's catalogue.
+- **Removed:** `scripts/dev-store/`, `storefront-app/`, the `dev-store:*` npm scripts, two dev-only tests (`contentPatch`, the product base URL); `STOREFRONT_CHAT_CATALOGUE_SHOP_DOMAIN` unset locally.
+- **Database:** the dev store's leftover rows deleted in one transaction checked against the measured counts (722 `storefront_agent_turns`, 1,434 `advisory_events`, 42 `advisor_routines`, 3 `storefront_agent_opens`). Staging rows on the live shop kept.
+- **Checked:** `npm test` 3962/3962, `tsc` clean. Not yet deployed: needs the web deploy and `shopify app deploy`; not viewed on the storefront.
+
 ## The widget follows Weglot's language (2026-11-02)
 
 Owner: « the chatbot text still doesn't change when I change the Shopify language ». The live store translates with **Weglot**: Shopify serves every page in French (`Shopify.locale = "fr"`, `<html lang="fr">`) and Weglot rewrites the page in the browser, so the embed's `t` filter only ever gave French, and Weglot machine-translated whatever widget text existed at load (« Individuelle Beratung ») and not the greeting or buttons drawn later.

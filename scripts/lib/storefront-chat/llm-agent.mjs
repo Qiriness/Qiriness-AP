@@ -134,7 +134,6 @@ function rangesByHandle(knowledge) {
  *   readRoutineCode?: Function | null,
  *   catalogueShopDomain?: string | null,
  *   currency?: string,
- *   productBaseUrl?: string | null,
  *   deadlineMs?: number,
  *   maxToolRounds?: number,
  *   advisor?: ReturnType<import('../advisory/recommend.mjs').createAdvisor> | null,
@@ -170,7 +169,6 @@ export function createLlmAgent({
   readRoutineCode = null,
   catalogueShopDomain = null,
   currency = 'EUR',
-  productBaseUrl = null,
   deadlineMs = DEFAULT_TURN_DEADLINE_MS,
   maxToolRounds = DEFAULT_MAX_TOOL_ROUNDS,
   advisor = null,
@@ -194,7 +192,6 @@ export function createLlmAgent({
       : [...baseDefinitions, ...(targetedAdvise ? [targetedAdvise, useSkillDefinition()] : [])];
     return list.length ? list : null;
   };
-  const linkBase = productLinkBase(productBaseUrl);
   // The ranges from the product knowledge: a range the title does not say still names the product.
   const resolutionIndex = catalogue ? buildResolutionIndex(catalogue, { ranges: rangesByHandle(productKnowledge) }) : null;
 
@@ -222,7 +219,7 @@ export function createLlmAgent({
       const lang = languageOf(locale);
       const money = priceFormatter(currency, locale ?? lang);
       const product = catalogue.products.find((p) => p.id === item.product_id);
-      const products = toCards([{ handle: item.handle, rationale: '' }], new Set([item.handle]), catalogue, money, linkBase);
+      const products = toCards([{ handle: item.handle, rationale: '' }], new Set([item.handle]), catalogue, money);
       if (!product || !products.length) return null;
       const offer = openingPromotion(offers?.status === 'ok' ? promotionsForProduct(offers, product.shopifyId) : []);
       const asked = askToAdd(emptyFlow(), [{ product_id: product.id, variant_id: cartVariant(product), name: product.name }], lang);
@@ -494,7 +491,7 @@ export function createLlmAgent({
         const reward = discountRule && readRoutineCode && shopDomain
           ? routineReward(await withDeadline(readRoutineCode(shopDomain, discountRule.code), 1500).catch(() => null), discountRule.code)
           : null;
-        const view = buildRoutineView({ advice: finalAdvice, profile: advisorTurn.profile, byId, money, cartVariant: variantFor, labels: advisor?.routineLabels ?? {}, locale: displayLanguage(language, locale), currency, linkBase, ref: routine.ref, discount: discountRule, reward });
+        const view = buildRoutineView({ advice: finalAdvice, profile: advisorTurn.profile, byId, money, cartVariant: variantFor, labels: advisor?.routineLabels ?? {}, locale: displayLanguage(language, locale), currency, ref: routine.ref, discount: discountRule, reward });
         if (view) trace.routine_view = { chosen: view.chosen, steps: view.moments.map((x) => x.steps.length), saving: view.discount?.percentage ?? null };
         return view;
       };
@@ -585,7 +582,7 @@ export function createLlmAgent({
         trace.model_skipped = 'cart_add';
         trace.cart = { add: toAdd.add.length, needs_size: toAdd.needs_size.length };
         if (followUp) trace.follow_up = followUp.kind;
-        const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
+        const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money) : [];
         return {
           text: routineAdded
             ? cartDoneText(displayLanguage(language, locale), [], [], { routine: true })
@@ -612,7 +609,7 @@ export function createLlmAgent({
       if (justNo) {
         trace.model_skipped = 'cart_no';
         if (followUp) trace.follow_up = followUp.kind;
-        const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
+        const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money) : [];
         return {
           text: cartNoText(displayLanguage(language, locale)),
           replyLanguage: displayLanguage(language, locale),
@@ -714,7 +711,7 @@ export function createLlmAgent({
           trace.model_skipped = 'routine_cards';
           trace.advice = { ...advisorTurn.trace(), ms: adviceMs, reader: readerTrace };
           if (followUp) trace.follow_up = followUp.kind;
-          const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
+          const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money) : [];
           const ids = [...new Set(routineView.moments.flatMap((m) => m.steps.map((x) => x.product_id)))];
           return {
             text: routineReadyText(displayLanguage(language, locale)),
@@ -891,7 +888,7 @@ export function createLlmAgent({
 
         const parsed = parseReply(result?.content);
         if (shopping?.beforeSanitize) await shopping.beforeSanitize(parsed.text);
-        let products = toCards(parsed.products, offered, catalogue, money, linkBase);
+        let products = toCards(parsed.products, offered, catalogue, money);
         // A recommended routine always shows its products, even when the model
         // forgot to list them: the cards ARE the recommendation.
         const finalAdvice = advisorTurn?.advice ?? null;
@@ -900,15 +897,15 @@ export function createLlmAgent({
         } else if (finalAdvice?.status === 'recommended' && finalAdvice.steps.some((s) => s.top_choices)) {
           // Our top choices are the cards, whatever the model listed (it showed one of three in the batch).
           const top = finalAdvice.steps.flatMap((s) => [s.handle, ...s.alternatives.map((x) => x.handle)]);
-          products = toCards([...products.map((p) => ({ handle: top.find((h) => p.url.endsWith(`/${encodeURIComponent(h)}`)) ?? '', rationale: p.rationale })).filter((x) => x.handle), ...top.map((handle) => ({ handle, rationale: '' }))], offered, catalogue, money, linkBase);
+          products = toCards([...products.map((p) => ({ handle: top.find((h) => p.url.endsWith(`/${encodeURIComponent(h)}`)) ?? '', rationale: p.rationale })).filter((x) => x.handle), ...top.map((handle) => ({ handle, rationale: '' }))], offered, catalogue, money);
         } else if (finalAdvice?.status === 'recommended' && finalAdvice.steps.length > 1) {
           // A routine's cards are its steps, all of them, in order: a day routine is four products,
           // day and night up to seven (owner, 2026-10-16). The model's reasons are kept.
           const why = new Map((parsed.products ?? []).map((p) => [p?.handle, p?.rationale]));
-          products = toCards(finalAdvice.steps.map((s) => ({ handle: s.handle, rationale: why.get(s.handle) ?? '' })), offered, catalogue, money, linkBase, finalAdvice.steps.length);
+          products = toCards(finalAdvice.steps.map((s) => ({ handle: s.handle, rationale: why.get(s.handle) ?? '' })), offered, catalogue, money, finalAdvice.steps.length);
         } else if (!products.length && finalAdvice?.status === 'recommended') {
           // Top choices show as cards too (best first), not only the step's product.
-          products = toCards(finalAdvice.steps.flatMap((s) => [{ handle: s.handle, rationale: '' }, ...(s.top_choices ? s.alternatives.map((x) => ({ handle: x.handle, rationale: '' })) : [])]), offered, catalogue, money, linkBase);
+          products = toCards(finalAdvice.steps.flatMap((s) => [{ handle: s.handle, rationale: '' }, ...(s.top_choices ? s.alternatives.map((x) => ({ handle: x.handle, rationale: '' })) : [])]), offered, catalogue, money);
         }
         // The offer follows products: shown as cards, or the product the conversation is about
         // (its page, or the one they named). A reply about none is not followed by it, and
@@ -970,7 +967,7 @@ export function createLlmAgent({
         // Only the last bubble's buttons are live: a follow-up without its own carries the engine's.
         const followUpChoices = followUp ? (followUp.choices.length ? followUp.choices : engineChoices) : [];
         const advisorChoices = followUp ? [] : engineChoices;
-        const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money, linkBase) : [];
+        const followUpCards = followUp ? toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money) : [];
         // A routine the model built itself: its cards too, and the short sentence in place of its text.
         const routineView = await routineViewFor(finalAdvice);
         return {
@@ -1130,7 +1127,7 @@ export function newCardsOnly(cards, { shownBefore = [], inCart = [], otherTopic 
   return cards.filter((c) => !old.has(c.id));
 }
 
-export function toCards(suggested, offered, catalogue, money, linkBase = '', max = MAX_CARDS) {
+export function toCards(suggested, offered, catalogue, money, max = MAX_CARDS) {
   if (!catalogue) return [];
   const seen = new Set();
   const cards = [];
@@ -1144,7 +1141,7 @@ export function toCards(suggested, offered, catalogue, money, linkBase = '', max
     cards.push({
       id: product.id,
       title: product.name,
-      url: `${linkBase}/products/${encodeURIComponent(product.handle)}`,
+      url: `/products/${encodeURIComponent(product.handle)}`,
       image: null,
       price: product.priceFrom === null ? null : money(product.priceFrom),
       rationale: typeof item.rationale === 'string' ? item.rationale.trim().slice(0, MAX_RATIONALE_CHARS) : '',
@@ -1175,22 +1172,6 @@ export function describeResolution(resolution, byId, money, query = '') {
       ? { name: resolution.range.name, products: resolution.range.ids.slice(0, 8).map((id) => byId(id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name })) }
       : null
   };
-}
-
-/**
- * Where « Découvrir » points. Empty — a same-site path — unless the catalogue
- * lives on another storefront than the widget: the dev store holds a handful
- * of products, the catalogue is production's, so while testing the link goes
- * to the production product page. https origins only; anything else is ignored.
- */
-export function productLinkBase(value) {
-  if (!value) return '';
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' ? url.origin : '';
-  } catch {
-    return '';
-  }
 }
 
 /**

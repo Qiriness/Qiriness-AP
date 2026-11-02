@@ -42,5 +42,5 @@ grep -rn "^### <heading>" docs/decisions/
 | Insights | `docs/decisions/insights.md` | 61 | 45,000 |
 | Page speed | `docs/decisions/page-speed.md` | 5 | 3,200 |
 | Interface language | `docs/decisions/interface-language.md` | 3 | 1,031 |
-| Storefront advisor | `docs/decisions/storefront-advisor.md` | 57 | 32,000 |
+| Storefront advisor | `docs/decisions/storefront-advisor.md` | 58 | 33,000 |
 | Social report (2026-10-09) | `docs/decisions/social-report.md` | 5 | 1,477 |

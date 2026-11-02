@@ -45,16 +45,6 @@
     "delivery_returns": "Envíos y devoluciones",
     "offers": "Ofertas del momento"
   },
-  "mock": {
-    "default": "Gracias por su mensaje. Esta es una respuesta de demostración: la asesora aún no está conectada.",
-    "find_product": "Con mucho gusto. Para orientarle, cuénteme un poco sobre su piel: ¿seca, mixta, grasa o sensible? (Respuesta de demostración.)",
-    "build_routine": "Construyamos juntos su rutina. ¿Desea una rutina de mañana, de noche o ambas? (Respuesta de demostración.)",
-    "compare": "Indíqueme entre qué productos duda y le ayudaré a compararlos. (Respuesta de demostración.)",
-    "delivery_returns": "La información sobre envíos y devoluciones estará disponible aquí muy pronto. (Respuesta de demostración.)",
-    "offers": "Las ofertas del momento estarán disponibles aquí muy pronto. (Respuesta de demostración.)",
-    "product_name": "Producto de ejemplo",
-    "product_rationale": "Tarjeta de demostración: las sugerencias reales llegarán con el catálogo."
-  },
   "routine": {
     "expand": "Ampliar",
     "collapse": "Reducir",

@@ -45,16 +45,6 @@
     "delivery_returns": "Levering & retour",
     "offers": "Actuele aanbiedingen"
   },
-  "mock": {
-    "default": "Bedankt voor uw bericht. Dit is een demo-antwoord: het advies is nog niet gekoppeld.",
-    "find_product": "Graag. Om u op weg te helpen: vertel me iets over uw huid. Eerder droog, gemengd, vet of gevoelig? (Demo-antwoord.)",
-    "build_routine": "Laten we samen uw routine samenstellen. Wilt u een ochtendroutine, een avondroutine of allebei? (Demo-antwoord.)",
-    "compare": "Laat me weten tussen welke producten u twijfelt, dan help ik u ze te vergelijken. (Demo-antwoord.)",
-    "delivery_returns": "Informatie over levering en retourneren vindt u hier binnenkort. (Demo-antwoord.)",
-    "offers": "De actuele aanbiedingen vindt u hier binnenkort. (Demo-antwoord.)",
-    "product_name": "Voorbeeldproduct",
-    "product_rationale": "Demokaart: de echte suggesties komen met de catalogus."
-  },
   "routine": {
     "expand": "Vergroten",
     "collapse": "Verkleinen",

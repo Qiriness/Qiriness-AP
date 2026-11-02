@@ -40,8 +40,6 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # storefront:chat (one proxy-signed message to the advisor)
 |                    # storefront:backfill-turns (the chat log -> storefront_agent_turns)
 |                    # eval:resolution (the advisor's product resolver, live catalogue)
-|                    # dev-store:sync / dev-store:remove (DEV ONLY, scripts/dev-store/:
-|                    # copy the advisor's dev store into Supabase as a development shop)
 |                    # eval:storefront-knowledge (read-only live policy/FAQ checks)
 |                    # inspect:storefront-knowledge (source keys, headings, parameter availability)
 |                    # inspect:storefront-shopping (shop-scoped inventory counts, no codes)
@@ -53,7 +51,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # Klaviyo/social syncs, embedders, importers, reports, migration runner;
 |                    # lib/ is shared by web and agent (REST client, records, rules)
 |-- extensions/storefront-advisor/  # the support app's theme app extension (advisor embed);
-|                    # [app_proxy] in the root shopify.app.toml. storefront-app/: the retired dev app
+|                    # [app_proxy] in the root shopify.app.toml
 |-- data/advisor/qiriness.json  # the brand's advisory playbooks + mappings + merchandising;
 |                    # npm run advisor:load loads it, npm run eval:advisory checks it
 |-- agent/           # always-on worker (own package.json; reuses scripts/lib/). src/: mail
@@ -80,7 +78,7 @@ All tables live in `public`, RLS on, service-role only. The management chat read
 | Projections | views: `ticket_queue` `case_facts` `customer_ticket_facts` `order_fulfilment_timing` `support_by_month` … and the `insights_*` / `orders_list*` / `vip_*` functions |
 | Agent rehearsals | `agent_test_runs` `llm_usage` |
 | Management chat | `chat_conversations` `chat_turns` `chat_queries`; the `chat` schema (14 views) |
-| Storefront advisor | `storefront_chat_*` `advisor_*` `advisory_events` `storefront_agent_turns` `storefront_agent_opens` (dev store only) |
+| Storefront advisor | `storefront_chat_*` `advisor_*` `advisory_events` `storefront_agent_turns` `storefront_agent_opens` |
 | Klaviyo | `klaviyo_connections` `klaviyo_campaigns` `klaviyo_flow_days` |
 | Social and paid media | `social_*` `ad_*` (incl. `social_post_manual_metrics` `social_audience_manual`) |
 | Compliance and audit | `privacy_requests` `data_access_events` `integration_events` |

@@ -11,7 +11,6 @@ import { routineReward } from './shopping-evaluator.mjs';
 import { buildAdvisorKnowledge } from '../advisory/advisor-knowledge.mjs';
 import { knowledgeIndex } from '../advisory/product-knowledge.mjs';
 import { createAdvisor } from '../advisory/recommend.mjs';
-import { contentPatch } from '../../dev-store/copy-production-content.mjs';
 
 // THE ROUTINE CARDS (owner, 2026-10-18), on Qiriness's real sheet: both moments always, the
 // content of each product, the saving from its minimum on; the code applied, never shown.
@@ -145,16 +144,6 @@ test('a routine product in several textures: the one their skin type calls for, 
   const product = { inStock: true, variants: textures.map((v) => ({ ...v, price: 51.9, inStock: true })) };
   assert.equal(cartVariant(product), null);
   assert.equal(cartVariant(product, variantPreference(choice, { skin_type: q('normal') })), 'n');
-});
-
-test('the dev store takes production\'s content where it has none, never over its own', () => {
-  const prod = { short_description: 'Prod', active_ingredients: 'Actifs', usage_instructions: 'Usage', usage_advice: null, structured_facts: { metafields: { 'accentuate.results': { value: 'R' }, 'reviews.rating': { value: '{}' }, 'judgeme.widget': { value: '<div>' } } } };
-  const patch = contentPatch({ short_description: 'Dev', active_ingredients: 'null', usage_instructions: null, structured_facts: { metafields: { 'global.title_tag': { value: 't' } } } }, prod);
-  assert.equal(patch.short_description, undefined);
-  assert.equal(patch.active_ingredients, 'Actifs');
-  assert.equal(patch.usage_instructions, 'Usage');
-  assert.deepEqual(Object.keys(patch.structured_facts.metafields).sort(), ['accentuate.results', 'global.title_tag', 'reviews.rating']);
-  assert.deepEqual(contentPatch({ ...prod }, prod), {});
 });
 
 test('the routine code\'s rule is read on its own: its shop, its code, its rule only', async () => {
