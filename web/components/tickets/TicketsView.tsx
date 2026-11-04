@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from "react";
+import type { CSSProperties, ReactNode, RefObject } from "react";
 import {
   AgentIcon,
   AlertIcon,
@@ -147,32 +147,6 @@ type TicketView = "queue" | "backlog" | "snoozed" | "irrelevant" | "closed" | "f
 // Labels come from the dictionary: `tickets.view.sort.<key>`, `tickets.view.tab.<key>`
 // and `tickets.view.verdict.<key>`.
 
-
-/* The draft/conversation split. `null` means the CSS default (35% of the pane);
-   a number is a height the reviewer dragged to, kept per browser. */
-const DRAFT_HEIGHT_KEY = "tickets.draftPanelHeight";
-const MIN_DRAFT_HEIGHT = 120;
-const MIN_CONVERSATION_HEIGHT = 80;
-const DRAFT_HANDLE_HEIGHT = 8;
-const DRAFT_KEY_STEP = 32;
-
-function readDraftHeight(): number | null {
-  try {
-    const stored = Number(window.localStorage.getItem(DRAFT_HEIGHT_KEY));
-    return Number.isFinite(stored) && stored >= MIN_DRAFT_HEIGHT ? stored : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeDraftHeight(height: number | null) {
-  try {
-    if (height === null) window.localStorage.removeItem(DRAFT_HEIGHT_KEY);
-    else window.localStorage.setItem(DRAFT_HEIGHT_KEY, String(height));
-  } catch {
-    // Storage blocked: the split still works, it just is not remembered.
-  }
-}
 
 function matches(query: string, fields: (string | null | undefined)[]): boolean {
   const needle = query.trim().toLowerCase();
@@ -1540,9 +1514,9 @@ function TicketDetailWorkspace({
   onForwardChanged: (forward: TicketForward) => void;
 }) {
   const t = useT();
-  const frameRef = useRef<HTMLDivElement>(null);
-  const headerRef = useRef<HTMLElement>(null);
-  const [draftHeight, setDraftHeight] = useState<number | null>(readDraftHeight);
+  // The draft either keeps its default share of the pane or takes all of it
+  // below the header. Kept while switching tickets.
+  const [draftExpanded, setDraftExpanded] = useState(false);
   const [middleTab, setMiddleTab] = useState<"conversation" | "notes" | "activity" | "linked">("conversation");
   const [composeMode, setComposeMode] = useState<ComposeMode>("reply");
   // After a forward: offer to snooze until the colleague replies.
@@ -1571,6 +1545,12 @@ function TicketDetailWorkspace({
     };
   }, [ticket.id]);
 
+  // Choosing a tab while the draft fills the pane means wanting to read it.
+  function showMiddleTab(tab: "conversation" | "notes" | "activity" | "linked") {
+    setMiddleTab(tab);
+    setDraftExpanded(false);
+  }
+
   function noteAdded(note: TicketNote) {
     setNotes((current) => [...(current ?? []), note]);
   }
@@ -1579,80 +1559,9 @@ function TicketDetailWorkspace({
     setNotes((current) => (current ?? []).filter((note) => note.id !== noteId));
   }
 
-  // The panel may take everything except the header and a strip of conversation,
-  // so the thread can be squeezed but never pushed off screen entirely.
-  function clampDraftHeight(height: number): number {
-    const frame = frameRef.current;
-    const header = headerRef.current;
-    if (!frame) return height;
-    const max = frame.clientHeight - (header?.offsetHeight ?? 0) - MIN_CONVERSATION_HEIGHT - DRAFT_HANDLE_HEIGHT;
-    return Math.round(Math.max(MIN_DRAFT_HEIGHT, Math.min(height, max)));
-  }
-
-  function commitDraftHeight(height: number | null) {
-    setDraftHeight(height);
-    writeDraftHeight(height);
-  }
-
-  // THE DRAG WRITES THE PANEL'S STYLE, NOT STATE. Setting state on every
-  // pointermove re-rendered the conversation, the draft and its explanation
-  // dozens of times a second, which is what made the handle lag. React learns
-  // the height once, on release. Moves are coalesced to one per frame.
-  function startDrag(event: ReactPointerEvent<HTMLDivElement>) {
-    const frame = frameRef.current;
-    const panel = frame?.querySelector<HTMLElement>(`.${styles.draftPanel}`);
-    if (!frame || !panel || event.button !== 0) return;
-    event.preventDefault();
-    const handle = event.currentTarget;
-    handle.setPointerCapture(event.pointerId);
-    const bottom = frame.getBoundingClientRect().bottom;
-    let latest = draftHeight;
-    let frameRequest = 0;
-    let pointerY = event.clientY;
-
-    // Only once the pointer actually moves: a plain click must leave the panel
-    // exactly as React rendered it, since nothing is committed then.
-    const apply = () => {
-      frameRequest = 0;
-      latest = clampDraftHeight(bottom - pointerY - DRAFT_HANDLE_HEIGHT / 2);
-      panel.classList.add(styles.draftPanelSized);
-      panel.style.maxHeight = "none";
-      panel.style.height = `${latest}px`;
-    };
-    const move = (moveEvent: PointerEvent) => {
-      pointerY = moveEvent.clientY;
-      if (!frameRequest) frameRequest = window.requestAnimationFrame(apply);
-    };
-    const stop = () => {
-      handle.removeEventListener("pointermove", move);
-      handle.removeEventListener("pointerup", stop);
-      handle.removeEventListener("pointercancel", stop);
-      if (frameRequest) {
-        window.cancelAnimationFrame(frameRequest);
-        apply();
-      }
-      document.body.style.userSelect = "";
-      if (latest !== draftHeight) commitDraftHeight(latest);
-    };
-
-    document.body.style.userSelect = "none";
-    handle.addEventListener("pointermove", move);
-    handle.addEventListener("pointerup", stop);
-    handle.addEventListener("pointercancel", stop);
-  }
-
-  function nudgeDraftHeight(event: ReactKeyboardEvent<HTMLDivElement>) {
-    const current = draftHeight ?? frameRef.current?.querySelector<HTMLElement>(`.${styles.draftPanel}`)?.offsetHeight ?? MIN_DRAFT_HEIGHT;
-    if (event.key === "ArrowUp") commitDraftHeight(clampDraftHeight(current + DRAFT_KEY_STEP));
-    else if (event.key === "ArrowDown") commitDraftHeight(clampDraftHeight(current - DRAFT_KEY_STEP));
-    else if (event.key === "Home" || event.key === "Enter") commitDraftHeight(null);
-    else return;
-    event.preventDefault();
-  }
-
   return (
-    <div className={styles.detailFrame} ref={frameRef}>
-      <header className={styles.ticketHeaderBlock} ref={headerRef}>
+    <div className={`${styles.detailFrame} ${draftExpanded ? styles.detailFrameDraftExpanded : ""}`}>
+      <header className={styles.ticketHeaderBlock}>
       <TicketHeader
         ticket={ticket}
         detail={detail}
@@ -1674,7 +1583,7 @@ function TicketDetailWorkspace({
           role="tab"
           aria-selected={middleTab === "conversation"}
           className={middleTab === "conversation" ? styles.middleTabActive : undefined}
-          onClick={() => setMiddleTab("conversation")}
+          onClick={() => showMiddleTab("conversation")}
         >
           {t("tickets.panels.conversation")}
           {thread && <span>{thread.messages.length}</span>}
@@ -1684,7 +1593,7 @@ function TicketDetailWorkspace({
           role="tab"
           aria-selected={middleTab === "notes"}
           className={middleTab === "notes" ? styles.middleTabActive : undefined}
-          onClick={() => setMiddleTab("notes")}
+          onClick={() => showMiddleTab("notes")}
         >
           {t("tickets.panels.notes.tab")}
           {notes && <span>{notes.length}</span>}
@@ -1694,7 +1603,7 @@ function TicketDetailWorkspace({
           role="tab"
           aria-selected={middleTab === "activity"}
           className={middleTab === "activity" ? styles.middleTabActive : undefined}
-          onClick={() => setMiddleTab("activity")}
+          onClick={() => showMiddleTab("activity")}
         >
           {t("tickets.panels.activity")}
           {detail && thread && <span>{activityItems(detail, thread, t).length}</span>}
@@ -1705,7 +1614,7 @@ function TicketDetailWorkspace({
             role="tab"
             aria-selected={middleTab === "linked"}
             className={middleTab === "linked" ? `${styles.middleTabActive} ${styles.linkedTabActive}` : undefined}
-            onClick={() => setMiddleTab("linked")}
+            onClick={() => showMiddleTab("linked")}
           >
             {t("tickets.panels.linked.tab")}
             <span>{linkedThreads.length}</span>
@@ -1740,23 +1649,22 @@ function TicketDetailWorkspace({
         )}
       </div>
 
-      {/* Drag up to read more of the draft, down to read more of the thread.
-          Double-click (or Enter) returns to the default split. */}
-      <div
-        className={styles.draftHandle}
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label={t("tickets.panels.resizeDraft")}
-        aria-valuenow={draftHeight ?? undefined}
-        tabIndex={0}
-        title={t("tickets.panels.resizeHint")}
-        onPointerDown={startDrag}
-        onDoubleClick={() => commitDraftHeight(null)}
-        onKeyDown={nudgeDraftHeight}
-      />
+      {/* Up gives the draft the whole pane below the header; down hands the
+          conversation back. A button, not a drag handle: one click, no aiming. */}
+      <div className={styles.draftToggleBar}>
+        <button
+          type="button"
+          className={styles.draftToggle}
+          aria-expanded={draftExpanded}
+          aria-label={draftExpanded ? t("tickets.panels.collapseDraft") : t("tickets.panels.expandDraft")}
+          title={draftExpanded ? t("tickets.panels.collapseDraft") : t("tickets.panels.expandDraft")}
+          onClick={() => setDraftExpanded((current) => !current)}
+        >
+          <ChevronDownIcon size={16} />
+        </button>
+      </div>
 
       <DraftResponsePanel
-        height={draftHeight}
         ticket={ticket}
         thread={thread}
         error={threadError}
@@ -2395,7 +2303,6 @@ function messageSnippet(message: TicketMessage, t: Translate): string | null {
 type ComposeMode = "reply" | "note" | "forward";
 
 function DraftResponsePanel({
-  height,
   ticket,
   thread,
   error,
@@ -2408,7 +2315,6 @@ function DraftResponsePanel({
   onNoteAdded,
   onForwarded,
 }: {
-  height: number | null;
   ticket: TicketListItem;
   thread: TicketThread | null;
   error: string | null;
@@ -2501,8 +2407,7 @@ function DraftResponsePanel({
 
   return (
     <section
-      className={`${styles.draftPanel} ${height !== null ? styles.draftPanelSized : ""} ${mode === "note" ? styles.draftPanelNote : mode === "forward" ? styles.draftPanelForward : styles.draftPanelReply}`}
-      style={height !== null ? { height, maxHeight: "none" } : undefined}
+      className={`${styles.draftPanel} ${mode === "note" ? styles.draftPanelNote : mode === "forward" ? styles.draftPanelForward : styles.draftPanelReply}`}
       aria-label={mode === "note" ? t("tickets.panels.notes.compose") : t("tickets.panels.draft.aiDraft")}
     >
       <div className={styles.composeTop}>
@@ -2570,6 +2475,8 @@ function DraftResponsePanel({
             <span>
               {t("tickets.panels.compose.to")} <strong>{to ?? requesterName(ticket, t)}</strong>
             </span>
+            <span className={styles.addressTools}>
+            <DraftAlerts blocking={blocking} toCheck={toCheck} info={info} />
             {language && (
               <span
                 className={`${styles.languageTag} ${languageMismatch ? styles.languageMismatch : ""}`}
@@ -2586,35 +2493,8 @@ function DraftResponsePanel({
                 {t(`tickets.panels.lang.${language}`)}
               </span>
             )}
+            </span>
           </div>
-
-          {blocking.map((line) => (
-            <p key={line} className={styles.alertRow} role="alert" title={line}>
-              <AlertIcon size={13} />
-              <span>{line}</span>
-            </p>
-          ))}
-
-          {(toCheck.length > 0 || info.length > 0) && (
-            <details className={`${styles.checkSummary} ${toCheck.length === 0 ? styles.checkSummaryInfo : ""}`}>
-              <summary>
-                {toCheck.length > 0 ? <AlertIcon size={13} /> : <CheckCircleIcon size={13} />}
-                {toCheck.length > 0
-                  ? t("tickets.panels.draft.toCheck", { count: toCheck.length })
-                  : t("tickets.panels.draft.notes", { count: info.length })}
-                {toCheck.length > 0 && info.length > 0 && <span className={styles.checkSummaryExtra}>{t("tickets.panels.draft.notes", { count: info.length })}</span>}
-                <ChevronDownIcon size={13} />
-              </summary>
-              <ul>
-                {toCheck.map((line) => (
-                  <li key={line} className={styles.checkItem}>{line}</li>
-                ))}
-                {info.map((line) => (
-                  <li key={line} className={styles.infoItem}>{line}</li>
-                ))}
-              </ul>
-            </details>
-          )}
 
           {error ? (
             <p className={styles.inlineError} role="alert">{error}</p>
@@ -2722,6 +2602,105 @@ function DraftResponsePanel({
         </>
       )}
     </section>
+  );
+}
+
+type AlertKind = "blocking" | "check" | "info";
+
+/**
+ * What used to be cards above the draft, as icons on the To line. Red: it stops
+ * or changes the send. Amber: worth a look. Grey: for information. Each opens
+ * its list in a popover, so the draft text starts right under the To line.
+ */
+function DraftAlerts({ blocking, toCheck, info }: { blocking: string[]; toCheck: string[]; info: string[] }) {
+  const t = useT();
+  const [open, setOpen] = useState<AlertKind | null>(null);
+  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const rootRef = useRef<HTMLSpanElement>(null);
+
+  // Fixed, not absolute: the draft panel scrolls and would clip a popover.
+  // Anything that moves the button closes it rather than leaving it adrift.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(null);
+    const outside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) close();
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("keydown", escape);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
+  const groups = [
+    { kind: "blocking" as const, lines: blocking, label: t("tickets.panels.draft.blocking", { count: blocking.length }), tone: styles.alertToneBlocking },
+    { kind: "check" as const, lines: toCheck, label: t("tickets.panels.draft.toCheck", { count: toCheck.length }), tone: styles.alertToneCheck },
+    { kind: "info" as const, lines: info, label: t("tickets.panels.draft.notes", { count: info.length }), tone: styles.alertToneInfo },
+  ].filter((group) => group.lines.length > 0);
+  if (groups.length === 0) return null;
+  const current = groups.find((group) => group.kind === open) ?? null;
+
+  function toggle(kind: AlertKind, button: HTMLButtonElement) {
+    if (open === kind) {
+      setOpen(null);
+      return;
+    }
+    const rect = button.getBoundingClientRect();
+    setPosition({ top: rect.bottom + 6, right: Math.max(8, window.innerWidth - rect.right) });
+    setOpen(kind);
+  }
+
+  return (
+    <span className={styles.alertIcons} ref={rootRef}>
+      {groups.map((group) => (
+        <button
+          key={group.kind}
+          type="button"
+          className={`${styles.alertIcon} ${group.tone}`}
+          aria-label={group.label}
+          aria-expanded={open === group.kind}
+          aria-haspopup="dialog"
+          title={group.label}
+          onClick={(event) => toggle(group.kind, event.currentTarget)}
+        >
+          {group.kind === "info" ? <CheckCircleIcon size={14} /> : <AlertIcon size={14} />}
+          <span>{group.lines.length}</span>
+        </button>
+      ))}
+      {/* Screen readers still hear a blocking problem without opening it. */}
+      {blocking.length > 0 && (
+        <span className={styles.srOnly} role="alert">
+          {blocking.join(" ")}
+        </span>
+      )}
+      {current && position && (
+        <div
+          className={`${styles.alertPopover} ${current.tone}`}
+          role="dialog"
+          aria-label={current.label}
+          style={{ top: position.top, right: position.right }}
+        >
+          <p className={styles.alertPopoverTitle}>
+            {current.kind === "info" ? <CheckCircleIcon size={13} /> : <AlertIcon size={13} />}
+            {current.label}
+          </p>
+          <ul>
+            {current.lines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </span>
   );
 }
 

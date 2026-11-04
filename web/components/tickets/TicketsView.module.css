@@ -971,39 +971,62 @@
   font-size: var(--text-caption);
 }
 
-/* The split between conversation and draft. Its own element rather than the
-   panel's top border, so it stays put while the panel scrolls under it. */
-.draftHandle {
+/* The split between conversation and draft: a hairline with one round button
+   on it. Up gives the draft the whole pane below the header, down hands the
+   conversation back. The button straddles the line, so the bar takes no room. */
+.draftToggleBar {
   flex: none;
   position: relative;
-  height: 8px;
+  z-index: 2;
+  height: 0;
   border-top: 1px solid var(--border);
-  background: var(--surface-sunken);
-  cursor: row-resize;
-  touch-action: none;
 }
 
-.draftHandle::after {
-  content: "";
+.draftToggle {
   position: absolute;
-  top: 2px;
+  top: 0;
   left: 50%;
-  width: 36px;
-  height: 3px;
-  margin-left: -18px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
   border-radius: var(--radius-pill);
-  background: var(--border-strong);
+  background: var(--surface);
+  color: var(--text-muted);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.draftHandle:hover::after,
-.draftHandle:focus-visible::after,
-.draftHandle:active::after {
+/* The chevron points up while collapsed (« give me more draft ») and down once
+   expanded (« put it back »). */
+.draftToggle svg {
+  transform: rotate(180deg);
+  transition: transform 0.2s ease;
+}
+
+.draftToggle[aria-expanded="true"] svg {
+  transform: rotate(0deg);
+}
+
+.draftToggle:hover {
+  border-color: var(--teal);
   background: var(--teal);
+  color: #fff;
+  box-shadow: 0 3px 10px rgba(0, 128, 128, 0.25);
+  transform: translate(-50%, -50%) scale(1.08);
 }
 
-.draftHandle:focus-visible {
+.draftToggle:active {
+  transform: translate(-50%, -50%) scale(0.96);
+}
+
+.draftToggle:focus-visible {
   outline: 2px solid var(--teal);
-  outline-offset: -2px;
+  outline-offset: 2px;
 }
 
 .draftPanel {
@@ -1018,19 +1041,19 @@
   overflow: auto;
 }
 
-/* A dragged height. It may still shrink, so a height saved on a tall screen
-   cannot push the conversation out of a short one. Once a reviewer has asked for
-   more room, the draft text uses it instead of stopping at its default cap. */
-.draftPanelSized {
-  flex: 0 1 auto;
-  min-height: 120px;
+/* Expanded: the conversation steps aside and the draft, its text uncapped,
+   takes everything under the header. */
+.detailFrameDraftExpanded .conversationArea {
+  display: none;
 }
 
-.draftPanelSized .draftBody {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-3);
+.detailFrameDraftExpanded .draftPanel {
+  flex: 1 1 auto;
+  max-height: none;
+}
+
+.detailFrameDraftExpanded .draftBody {
+  max-height: none;
 }
 
 .draftLabels {
@@ -2424,95 +2447,117 @@
   color: var(--error);
 }
 
-/* What stops or changes the send: one red line each, the full text on hover. */
-.alertRow {
-  margin: 0;
-  display: flex;
+.addressTools {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px var(--space-3);
-  border: 1px solid var(--error-100);
-  border-radius: var(--radius);
-  background: var(--error-050);
-  color: var(--error);
-  font-size: var(--text-caption);
 }
 
-.alertRow > span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.alertRow svg {
-  flex: none;
-}
-
-/* Everything else worth a look, folded into one amber line. */
-.checkSummary {
-  border: 1px solid var(--warning-100);
-  border-radius: var(--radius);
-  background: var(--warning-050);
-  font-size: var(--text-caption);
-}
-
-.checkSummaryInfo {
-  border-color: var(--border);
-  background: var(--surface-sunken);
-}
-
-.checkSummary summary {
-  display: flex;
+/* What used to be cards above the draft: one small icon per kind, with its
+   count, opening a popover. Red stops or changes the send; amber is worth a
+   look; grey is information. */
+.alertIcons {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px var(--space-3);
-  color: var(--warning-ink);
+  gap: 4px;
+}
+
+.alertIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 7px;
+  border: 1px solid var(--tone-border);
+  border-radius: var(--radius-pill);
+  background: var(--tone-bg);
+  color: var(--tone-ink);
+  font: inherit;
+  font-size: var(--text-caption);
   font-weight: var(--weight-semibold);
   cursor: pointer;
-  list-style: none;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
-.checkSummary summary::-webkit-details-marker {
-  display: none;
+.alertIcon:hover,
+.alertIcon[aria-expanded="true"] {
+  box-shadow: 0 0 0 3px var(--tone-bg);
+  transform: translateY(-1px);
 }
 
-.checkSummaryInfo summary {
-  color: var(--text-muted);
+.alertIcon:focus-visible {
+  outline: 2px solid var(--tone-ink);
+  outline-offset: 1px;
 }
 
-.checkSummary summary > svg:last-child {
-  margin-left: auto;
-  transition: transform 0.15s ease;
+.alertToneBlocking {
+  --tone-border: var(--error-100);
+  --tone-bg: var(--error-050);
+  --tone-ink: var(--error);
 }
 
-.checkSummary[open] summary > svg:last-child {
-  transform: rotate(180deg);
+.alertToneCheck {
+  --tone-border: var(--warning-100);
+  --tone-bg: var(--warning-050);
+  --tone-ink: var(--warning-ink);
 }
 
-.checkSummaryExtra {
-  color: var(--text-subtle);
-  font-weight: var(--weight-regular);
+.alertToneInfo {
+  --tone-border: var(--border);
+  --tone-bg: var(--surface-sunken);
+  --tone-ink: var(--text-muted);
 }
 
-.checkSummaryExtra::before {
-  content: "· ";
+.alertPopover {
+  position: fixed;
+  z-index: 60;
+  width: min(360px, calc(100vw - 16px));
+  max-height: min(50vh, 22rem);
+  overflow: auto;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  border: 1px solid var(--tone-border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+  font-size: var(--text-caption);
+  animation: alertPopoverIn 0.12s ease-out;
 }
 
-.checkSummary ul {
+.alertPopoverTitle {
+  margin: 0 0 var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tone-ink);
+  font-weight: var(--weight-semibold);
+}
+
+.alertPopover ul {
   margin: 0;
-  padding: 0 var(--space-3) var(--space-2) calc(var(--space-3) + 19px);
+  padding-left: 19px;
   display: grid;
   gap: 4px;
+  color: var(--text-strong);
   line-height: 1.5;
 }
 
-.checkItem {
-  color: var(--text-strong);
+@keyframes alertPopoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
-.infoItem {
-  color: var(--text-muted);
+@media (prefers-reduced-motion: reduce) {
+  .draftToggle,
+  .draftToggle svg,
+  .alertIcon {
+    transition: none;
+  }
+
+  .alertPopover {
+    animation: none;
+  }
 }
 
 .noteComposer {

@@ -109,13 +109,12 @@ Leaving `/tickets` used to throw away the open ticket, the tab and every filter,
 
 **All four tables share one height** (`min(62vh, 50rem)`), replacing a 50vh queue and a 26rem default for the rest. The split existed to keep a collapsed "Closed" header on screen without scrolling; the page scroller already handles that, and the cost was making Backlog and Closed read as lesser tables when they are the same table with a different filter. Capped in rem as well as vh because a table past ~50rem stops being scannable.
 
-### The draft/conversation split is the reviewer's to move (2026-09-15)
+### The draft/conversation split is one button, not a drag (2026-11-04)
 
-A handle sits between the conversation and the draft panel: dragging it up gives the draft room and takes it from the thread, dragging it down does the opposite; arrow keys step it, double-click or Enter resets to the default 35%. A fixed 35% with an 11rem cap on the draft text meant a long reply was read through a letterbox while the thread above had room to spare.
+A round arrow button sits on the line between the conversation and the draft. Up gives the draft the whole pane below the header (the conversation is hidden and the draft text drops its 11rem cap); down returns to the default 35% split. Choosing a Conversation / Notes / Activity / Linked tab also collapses it, since that is asking to read the thread.
 
-- **The height is kept per browser in `localStorage`** (`tickets.draftPanelHeight`) and survives switching tickets — it is a reading preference, not data about a ticket, so it does not belong in the database.
-- **A dragged height may still shrink.** The conversation keeps an 80px floor, so a height saved on a tall screen cannot push the thread off a short one.
-- **Once sized, the draft text drops its cap** and uses the room it was given; the default split keeps the cap.
+- **Replaced the drag handle (2026-09-15).** The 8px handle was hard to see and to grab, so reviewers did not find it; the reason it existed — reading a long reply through a letterbox — is served by one click to full height.
+- **Two states, not a height.** Expanded or not, kept in component state while switching tickets; nothing in `localStorage` any more (the old `tickets.draftPanelHeight` key is simply ignored).
 
 ### The expanded row is three blocks and no more
 
@@ -338,7 +337,7 @@ Individual tool lookups stay in Activity, because inline they would outnumber th
 
 **Earlier messages fold behind « Show N earlier messages ».** What is read first is the latest message from outside and everything after it.
 
-**Warnings fold, but blocking problems do not.** Failed checks, auto-send holds, a stale draft and a refused send change whether or how the reply goes, so each stays visible as one red line, with the full text on hover. Everything else folds into one amber « N things to check » line: warnings, the before-sending action, duplicate, case and outbound notes. Before this, each was a full-width bordered paragraph, and a draft with three warnings pushed its own text below the fold.
+**Warnings are icons on the To line, not lines above the draft (2026-11-04).** Up to three pill icons with a count: **red** — failed checks, auto-send holds, a stale draft, a refused send (what stops or changes the send); **amber** — warnings, the before-sending action, duplicate; **grey** — case and outbound notes. Each opens its list in a popover (fixed-positioned so the scrolling panel cannot clip it; outside click, Escape or scrolling closes it). Before, blocking problems were one red line each and the rest an amber « N things to check » line, and a ticket with several still pushed the draft text down. Red is kept as a separate, coloured icon so a blocked send is still seen at a glance, and the blocking text is announced to screen readers without opening it.
 
 **The reply language is on the To line.** It turns red when the draft's language differs from the ticket's. `tickets.language` and `ticket_drafts.language` already existed; the dashboard had never shown them.
 
