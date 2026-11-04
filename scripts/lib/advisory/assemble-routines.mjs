@@ -72,6 +72,8 @@ export function assembleRoutines({ routines, rules, products, settings }) {
     }
   }
   for (const key of Object.keys(perFoundation)) if (!foundations.some((f) => f.key === key)) warnings.push(`settings: foundation ${key} is not a main concern on the Rules tab`);
+  // A range by age with no age known (settings `range_without_age`): spelt as the products spell it.
+  for (const f of foundations) if (f.range_without_age) f.range_without_age = rangeOf(f.range_without_age, `settings: foundation ${f.key} range_without_age`);
 
   const ageRanges = (rules.age_ranges ?? []).map((a) => ({ ...a, range: rangeOf(a.range, `age ${a.key}`) }));
   if (foundations.some((f) => f.range_by_age) && !ageRanges.length) warnings.push('a main concern takes its range by age, and the Rules tab has no age range');

@@ -3249,7 +3249,7 @@
    "time_of_day": "Matin et soir",
    "area": "Visage",
    "primary_concern": "Déshydratation",
-   "other_concerns": "Ridules",
+   "other_concerns": null,
    "skin_dry": "Idéal",
    "skin_normal": "Adapté",
    "skin_combination": "Adapté",

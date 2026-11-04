@@ -593,7 +593,9 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   /** The routine's range: the main concern's, or by their age for anti-age (Rules tab). */
   function rangeFor(f, c) {
     if (!f?.range_by_age) return f?.preferred_range ?? null;
-    return ageRanges.find((a) => a.key === c.age)?.range ?? f.preferred_range ?? null;
+    // No age known: the brand's range for that case, when its settings give one (« Premières rides »
+    // with no age → Active Énergie; owner, 2026-11-04).
+    return ageRanges.find((a) => a.key === c.age)?.range ?? (c.age ? null : f.range_without_age) ?? f.preferred_range ?? null;
   }
 
   /** How well a product treats the need: their main concern 3, among its others 2, the main concern's others 1; their other concerns a little. */

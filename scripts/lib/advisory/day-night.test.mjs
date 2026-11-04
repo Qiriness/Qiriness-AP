@@ -96,6 +96,9 @@ test('the age chooses the anti-age range: Active Énergie under 25, Temps Sublim
   // « Premières rides » (fine lines) follows the age as well: at 45, Exception.
   const fine = build({ primary_concern: q('early_signs_of_ageing'), skin_type: q('normal'), age_band: q('45_plus'), routine_time: q('day') });
   assert.equal(fine.steps[1].handle, 'serum-anti-age-elixir-dexception');
+  // With no age known, Active Énergie (owner, 2026-11-04: settings F `range_without_age`).
+  const noAge = build({ primary_concern: q('early_signs_of_ageing'), skin_type: q('normal'), routine_time: q('day') });
+  assert.equal(noAge.steps[1].handle, 'serum-anti-age-elixir-active-energie-lift');
 });
 
 test('a range with no eye care of its own: the eye serum with no range', () => {
