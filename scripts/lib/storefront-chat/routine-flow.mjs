@@ -31,7 +31,8 @@
  * the widget adds it, on that click only.
  */
 
-import { messages, alternation } from '../i18n/languages.mjs';
+import { LEXICONS, messages, alternation } from '../i18n/languages.mjs';
+import { norm } from '../advisory/text.mjs';
 
 export const FLOW_CHOICE = /^flow:routine:(yes|no)$/;
 export const CART_CHOICE = /^flow:cart:(yes|no)$/;
@@ -72,6 +73,37 @@ export function asksToAdd(message) {
   return ADD_REQUEST.test(m) && !NOT_ADD.test(m);
 }
 
+const ADD_NAMED = new RegExp(`(${alternation('turns.addNamed')})`, 'iu');
+/**
+ * « Ajoute aussi une Caresse Active Énergie Lift »: an add without the cart word (stress test 282:
+ * the model answered « je ne peux pas modifier votre panier »). The caller counts it only when the
+ * message names exactly one product.
+ */
+export function asksToAddNamed(message) {
+  const m = String(message ?? '');
+  return ADD_NAMED.test(m) && !NOT_ADD.test(m);
+}
+
+/**
+ * How many units an add request asks for (« Ajoute deux Wrap Hyal-Aqua », stress test 281: one was
+ * added): the first count word or digit 2–9 not followed by a size or a price. 1 when none.
+ */
+export function addQuantity(message) {
+  const words = norm(message).split(' ');
+  const counts = countWordsAll();
+  for (let i = 0; i < words.length; i += 1) {
+    const n = /^[2-9]$/.test(words[i]) ? Number(words[i]) : counts.get(words[i]);
+    if (n && !UNIT_AFTER.has(words[i + 1] ?? '')) return n;
+  }
+  return 1;
+}
+const UNIT_AFTER = new Set(['ml', 'g', 'cl', 'l', 'euro', 'euros', 'eur', 'ans', 'years', 'jours', 'days', 'semaines', 'weeks', 'fois', 'times', 'x']);
+let COUNT_WORDS = null;
+function countWordsAll() {
+  COUNT_WORDS ??= new Map(LEXICONS.flatMap((l) => Object.entries(l.countWords ?? {}).flatMap(([n, ws]) => ws.map((w) => [w, Number(n)]))));
+  return COUNT_WORDS;
+}
+
 export function emptyFlow() {
   return { offer: null, anchor: null, treat_offered: false, cart: { pending: [], asked: [] }, routine_ref: null };
 }
@@ -81,7 +113,7 @@ export function cleanFlow(saved) {
   const anchor = saved?.anchor && ID.test(saved.anchor.id ?? '') && SOURCES.includes(saved.anchor.source) ? { id: saved.anchor.id, source: saved.anchor.source } : null;
   const pending = (Array.isArray(saved?.cart?.pending) ? saved.cart.pending : [])
     .filter((x) => x && ID.test(x.id ?? '') && (x.variant_id === null || GID_VARIANT.test(x.variant_id ?? '')))
-    .slice(0, 8).map((x) => ({ id: x.id, variant_id: x.variant_id }));
+    .slice(0, 8).map((x) => ({ id: x.id, variant_id: x.variant_id, ...(Number.isInteger(x.quantity) && x.quantity > 1 && x.quantity <= 9 ? { quantity: x.quantity } : {}) }));
   const asked = (Array.isArray(saved?.cart?.asked) ? saved.cart.asked : []).filter((id) => ID.test(id ?? '')).slice(-20);
   // The routine just built (advisor_routines.ref): « Oui, ajouter » marks it added to the cart.
   const routineRef = typeof saved?.routine_ref === 'string' && ID.test(saved.routine_ref) ? saved.routine_ref : null;
@@ -107,9 +139,10 @@ export function cartAnswer(flow, { choice = null, message = '' } = {}) {
 export function askToAdd(flow, items, lang, { discount = false } = {}) {
   const next = cleanFlow(flow);
   const t = text(lang);
-  next.cart = { pending: items.map((x) => ({ id: x.product_id, variant_id: x.variant_id ?? null })), asked: [...new Set([...next.cart.asked, ...items.map((x) => x.product_id)])] };
+  next.cart = { pending: items.map((x) => ({ id: x.product_id, variant_id: x.variant_id ?? null, ...(x.quantity > 1 ? { quantity: x.quantity } : {}) })), asked: [...new Set([...next.cart.asked, ...items.map((x) => x.product_id)])] };
   const withDiscount = discount && items.length > 1;
-  const words = withDiscount ? t.cartRoutineDiscount : items.length > 1 ? t.cartRoutine : t.cartOne(items[0].name);
+  // « 2 × Masque … »: the units asked for, said in the question (stress test 281).
+  const words = withDiscount ? t.cartRoutineDiscount : items.length > 1 ? t.cartRoutine : t.cartOne(items[0].quantity > 1 ? `${items[0].quantity} × ${items[0].name}` : items[0].name);
   return { flow: next, followUp: { kind: 'cart', text: words, choices: [{ label: withDiscount ? t.cartYesDiscount : t.cartYes, value: 'flow:cart:yes' }, { label: t.cartNo, value: 'flow:cart:no' }], productIds: [] } };
 }
 
@@ -121,7 +154,7 @@ export function askToAdd(flow, items, lang, { discount = false } = {}) {
 export function cartToAdd(flow, nameOf = () => null) {
   const pending = cleanFlow(flow).cart.pending;
   return {
-    add: pending.filter((x) => x.variant_id).map((x) => ({ product_id: x.id, variant_id: x.variant_id })),
+    add: pending.filter((x) => x.variant_id).map((x) => ({ product_id: x.id, variant_id: x.variant_id, quantity: x.quantity ?? 1 })),
     needs_size: pending.filter((x) => !x.variant_id).map((x) => nameOf(x.id)).filter(Boolean),
   };
 }

@@ -78,3 +78,17 @@ test('in the builder, while the engine still needs the concern, its question com
   assert.ok(reply.choices.some((c) => c.value.startsWith('profile:primary_concern:')));
 });
 
+
+// « Je veux retrouver les soins que j'achetais chez vous », signed in, the only order cancelled and
+// refunded (stress run 2026-11-02, test 108): the past tense is read, and the empty history is said.
+test('a signed-in customer with no purchase kept is told so, not « I cannot see your history »', async () => {
+  const client = scripted(answer('Je ne vois aucun achat conservé sur votre compte.'));
+  await agentWith(client).respond({ message: 'Je veux retrouver les soins que j’achetais chez vous.', context: { locale: 'fr' }, purchases: async () => null });
+  const system = client.calls[0].system;
+  assert.match(system, /"purchases":\[\]/);
+  assert.match(system, /PURCHASES with an empty list/);
+  // A failed read says nothing: the reply cannot claim there is no purchase.
+  const failed = scripted(answer('…'));
+  await agentWith(failed).respond({ message: 'Je veux retrouver les soins que j’achetais chez vous.', context: { locale: 'fr' }, purchases: async () => { throw new Error('read failed'); } });
+  assert.doesNotMatch(failed.calls[0].system, /"purchases":\[\]/);
+});

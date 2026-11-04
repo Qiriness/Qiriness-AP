@@ -12,6 +12,8 @@ export default {
     stillLooking: ['still looking', 'just looking', 'not yet', 'maybe later', 'later'],
     cartYes: ['add( (it|them|this|that))?', 'put (it|them) in', 'go ahead', 'do it', "i'?ll take (it|them)"],
     addRequest: ['\\b(add|put|pop|place)\\b[^.?!]{0,60}\\b(cart|basket|bag)\\b', "\\bi'?ll take (it|them|this|that)\\b"],
+    /** Adding a product they name, without the cart word (« Ajoute aussi une Caresse … », stress test 282). At the start; counts only when one product is named. */
+    addNamed: ['^\\s*(?:and |also |please )?add(?: me)?(?: also| too)? (?:a|an|the|one|two|three|four|five|[1-9])\\b'],
     notAdd: ["don'?t add", 'do not add', 'remove'],
   },
 
@@ -23,6 +25,10 @@ export default {
   asksToSee: ['show( me)?', 'see( it)?', 'link'],
 
   pastPurchase: [
+    // The past said in other tenses (« les soins que j'achetais », stress run 2026-11-02, test 108).
+    'i used to (?:buy|order|use|get)',
+    'my (?:old|previous|usual) (?:products|purchases|items)',
+    'find (?:my|the) (?:old |usual )?products',
     'i (?:have |\'ve )?(?:already )?(?:bought|ordered|purchased|got)',
     'my (?:last |previous |past )?(?:orders?|purchases?)',
     'last time',

@@ -13,6 +13,8 @@ export default {
     stillLooking: ['ik kijk nog', 'ik zoek nog', 'nog niet', 'ik denk er nog over na'],
     cartYes: ['toevoeg\\w*', 'voeg (het|ze) toe', 'ik neem (het|ze|die|dat)', 'in (het|mijn) (winkelmandje|mandje)'],
     addRequest: ['\\b(voeg\\w*|toevoeg\\w*|doe|stop|leg)\\b[^.?!]{0,60}\\b(winkelmandje|winkelwagen|mandje)\\b', '\\bik neem (het|ze|die|dat)\\b'],
+    /** Adding a product they name, without the cart word (« Ajoute aussi une Caresse … », stress test 282). At the start; counts only when one product is named. */
+    addNamed: ['^\\s*(?:en )?voeg(?: (?:ook|nog))* (?:een|de|het|twee|drie|vier|vijf|[1-9])\\b'],
     notAdd: ['niet toevoegen', 'niet in (het|mijn) (winkelmandje|mandje)', 'verwijder\\w*', 'haal (het|ze) eruit'],
   },
 
@@ -24,6 +26,10 @@ export default {
   asksToSee: ['toon\\w*', 'laat (het )?zien', 'bekijken', 'link'],
 
   pastPurchase: [
+    // The past said in other tenses (« les soins que j'achetais », stress run 2026-11-02, test 108).
+    'ik (?:kocht|bestelde|gebruikte)',
+    'vroeger (?:gekocht|besteld|gebruikt)',
+    'mijn (?:oude|vaste) producten',
     'ik heb (al |eerder )?(gekocht|besteld)',
     'mijn (laatste|vorige) (bestelling|bestellingen|aankopen)',
     'de vorige keer',

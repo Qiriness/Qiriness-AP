@@ -83,12 +83,14 @@ export default {
   },
 
   exclusions: [
+    // « Je supporte mal le parfum » (stress run 2026-11-02): an intolerance is an exclusion too.
+    /\b(?:sensitive to|intolerant (?:to|of)|i react to|i don t (?:tolerate|like|do)|i can t (?:stand|tolerate|do)|i dislike|i hate|bothered by)(?: the| any)? (?<item>fragrances?|perfumes?|parfum|scents?|alcohol|retinol|essential oils?)\b/g,
     /\b(?:without|no|free from|free of|allergic to|i avoid|avoid|i can t use|can t use|cannot use) (?<item>fragrance|perfume|parfum|alcohol|retinol|essential oils?|oils?|silicones?|sulfates?|sulphates?|parabens?|niacinamide|vitamin c|[a-z]+ acid)\b/g,
     /\b(?<item>fragrance|perfume|alcohol|paraben|sulfate|sulphate|silicone|oil) free\b/g
   ],
 
   ingredients: {
-    fragrance: ['fragrance', 'fragrances', 'perfume'],
+    fragrance: ['fragrance', 'fragrances', 'perfume', 'perfumes', 'scent', 'scents'],
     alcohol: ['alcohol'],
     retinol: ['retinol'],
     essential_oils: ['essential oils', 'essential oil'],
@@ -162,9 +164,19 @@ export default {
   budgetSmall: /\b(more than i (wanted|want|meant|planned) to (spend|pay)|a bit (much|steep)|out of my price range|money is tight|small budget|on a budget|tight budget|limited budget|affordable|inexpensive|cheap|cheaper|not too expensive|too expensive|too pricey|(a bit|quite|very|so) (expensive|pricey)|pricey|costs too much|less expensive|can t afford|cannot afford|out of my budget|over my budget|beyond my budget|outside my budget)\b/,
   // A ceiling, in the normalised text: « under 60 », « 40 euros max ». Group 1: the amount.
   budgetAmount: [
+    /\bi (?:only |just )?have (?:about |around |only |just )?(\d{1,4}) (?:euros?|dollars?|pounds?|eur|usd|gbp)\b/,
+    /\b(\d{1,4}) (?:euros?|dollars?|pounds?) (?:for me|budget|to spend)\b/,
     /\b(?:under|less than|below|no more than|up to|max|maximum|at most|budget of|budget is|budget around)\s(\d{1,4})\b(?! (?:ans?|ml|jours?|semaines?|mois|minutes?|min|h|heures?|fois|produits?|etapes?|soins?|years?|yo|days?|weeks?|months?|hours?|times|products?|steps?))/,
     /\b(\d{1,4}) (?:euros? |dollars? |pounds? |eur |usd |gbp )?(?:max|maximum|tops|at most)\b/
   ],
+  // How many products they want (« un seul produit », « deux produits maximum »): [pattern, count],
+  // a null count read from the `n` group (a digit, or a word of `countWords`, by number).
+  productCount: [
+    [/\b(?:just|only) (?:one|1)(?: [a-z]+){0,2} (?:product|item|thing)s?\b|\ba single (?:[a-z]+ )?(?:product|item)\b|\bone (?:product|item) only\b/, '1'],
+    [/\b(?<n>\d|two|three|four|five) (?:products?|items?) (?:max|maximum|at most|tops)\b/, null],
+    [/\b(?:no more than|at most|max|maximum|only|just) (?<n>\d|two|three|four|five) (?:products?|items?)\b/, null]
+  ],
+  countWords: { 2: ['two'], 3: ['three'], 4: ['four'], 5: ['five'] },
 
   age: [/\b(?:i am|i m|im) (\d{2})\b/, /\b(\d{2}) (?:years? old|yo|y o)\b/],
   ageWords: [[/\b(twenties|20s)\b/, 25], [/\b(thirties|30s)\b/, 35], [/\b(forties|40s)\b/, 45], [/\b(fifties|50s)\b/, 55], [/\b(sixties|seventies|60s|70s)\b/, 65]],

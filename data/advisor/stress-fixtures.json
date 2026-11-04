@@ -1,0 +1,12 @@
+{
+  "_about": "The state each launch stress test starts from, for npm run advisor:stress. Keyed by test id (a scenario's first turn sets the scenario's session). cart: catalogue handles the widget's basket snapshot holds (catalogue price, no discount). page: the storefront page the chat is opened on. customer: a TEST customer's Shopify id, signed as the app proxy would; null = not signed in. A test with no entry is a new chat on the home page, empty basket, not signed in.",
+  "182": { "page": { "pageType": "product", "productHandle": "masque-led-visage" }, "cart": [{ "handle": "masque-led-visage", "quantity": 1 }] },
+  "183": { "cart": [{ "handle": "creme-hydratante-peau-seche-caresse-source-deau-riche", "quantity": 1 }] },
+  "176": { "page": { "pageType": "product", "productHandle": "coffret-source-deau-hydratation-eclat-2026" } },
+  "192": { "page": { "pageType": "product", "productHandle": "serum-anti-taches-niacinamide-eclat-parfait" } },
+  "203": { "cart": [{ "handle": "masque-hydratant-repulpant-hyal-aqua", "quantity": 2 }, { "handle": "creme-anti-age-caresse-active-energie-lift", "quantity": 1 }] },
+  "208": { "cart": [{ "handle": "masque-hydratant-repulpant-hyal-aqua", "quantity": 1 }, { "handle": "creme-anti-age-caresse-active-energie-lift", "quantity": 1 }] },
+  "211": { "customer": null, "_todo": "needs test customer A (two orders): set its Shopify customer id" },
+  "213": { "customer": null, "_todo": "needs test customer A with a repurchase prompt already shown" },
+  "216": { "customer": null, "_todo": "needs test customers A then B on one browser: partly a UI check" }
+}

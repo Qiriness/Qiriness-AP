@@ -419,6 +419,20 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |                                # try-routine-flow.mjs): the routine builder flow with
 |                                # the real agent and model on the sample set, FR + EN,
 |                                # no database
+|                                # scripts/advisor/try-advice.mjs [--local] "<turn>" "profile:<field>:<value>"…:
+|                                # the advice engine alone on the live catalogue and the shop's
+|                                # active knowledge (--local: built from qiriness-knowledge.json +
+|                                # -routine-settings.json, what advisor:load would write); no model,
+|                                # no session; READ-ONLY
+|-- data/advisor/Qiriness_Chatbot_Launch_Stress_Tests_200.xlsx  # the launch QA workbook
+|                                # (200 tests, Smoke 25, UI checks); npm run advisor:stress
+|                                # (scripts/advisor/stress-run.mjs, plan + grader prompt in
+|                                # scripts/lib/storefront-chat/stress-plan.mjs, workbook I/O in
+|                                # scripts/advisor/stress-sheet.py) sends each test through the
+|                                # signed chat endpoint, grades it with a second model against
+|                                # live facts, writes a copy to data/advisor/stress-runs/
+|                                # (git-ignored); fixtures in data/advisor/stress-fixtures.json.
+|                                # WRITES chat sessions to the configured database
 |-- data/advisor/sample-routines/  # INVENTED routines (plan § 3.1–3.4), 51 invented
 |                                # products filling them, score-baseline.json;
 |                                # npm run advisor:score (scripts/advisor/score-routines.mjs)

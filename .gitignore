@@ -27,3 +27,6 @@ situation-matches.html
 Notes/Labelling_Changes_*.md
 Notes/Casework_Label_Review_*.md
 Notes/casework-labels-*.json
+
+# Launch stress-test runs (npm run advisor:stress): chat session ids and replies, regenerated on demand.
+data/advisor/stress-runs/

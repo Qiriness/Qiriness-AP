@@ -83,6 +83,8 @@ export default {
 
   /** Each has an `item` group: the ingredient, as typed. */
   exclusions: [
+    // « Je supporte mal le parfum » (stress run 2026-11-02): an intolerance is an exclusion too.
+    /\b(?:je (?:ne )?(?:supporte|tolere) (?:pas|mal)|je supporte mal|je tolere mal|je n aime pas|intolerante? (?:a|au|aux)|sensible (?:a|au|aux)|je reagis (?:a|au|aux))(?: l| la| le| les)? (?<item>parfums?|alcool|retinol|huiles? essentielles?)\b/g,
     /\b(?:sans|pas de|pas d|allergique (?:a|au|aux)(?: l| la| le)?|j evite(?: le| la| les)?) (?<item>parfum|alcool|retinol|huiles? essentielles?|huile|silicones?|sulfates?|parabenes?|niacinamide|vitamine c|acide [a-z]+)\b/g
   ],
 
@@ -165,9 +167,19 @@ export default {
   budgetSmall: /\b((plus|au dessus) (de|que) ce que je (voulais|veux|pensais|comptais) (mettre|depenser|y mettre)|je voulais (mettre|depenser) moins|un peu juste (en ce moment|ce mois ci|ce mois)|petit budget|pas trop cher|pas cher|budget (serre|limite|reduit)|petits prix|economique|trop cher(e|s|es)?|(un peu|bien|assez|vraiment) cher(e|s|es)?|c est cher|hors de prix|moins cher(e|s|es)?|plus abordable|pas les moyens|au dessus de mon budget|depasse mon budget|hors budget|trop onereu(x|se)|ruineu(x|se)|pas dans mon budget)\b/,
   // A ceiling, in the normalised text (« € » is gone): « moins de 60 », « 40 euros max ». Group 1: the amount.
   budgetAmount: [
+    /\bj ai (?:seulement |que |juste |environ |a peu pres |un budget de )?(\d{1,4}) (?:euros?|eur)\b/,
+    /\b(\d{1,4}) (?:euros?|eur) (?:pour moi|de budget|a depenser|a mettre|maxi)\b/,
     /\b(?:moins de|pas plus de|maximum|max|jusqu a|budget (?:de|d environ|d|d un maximum de)|en dessous de|sous les|sous)\s(\d{1,4})\b(?! (?:ans?|ml|jours?|semaines?|mois|minutes?|min|h|heures?|fois|produits?|etapes?|soins?|years?|yo|days?|weeks?|months?|hours?|times|products?|steps?))/,
     /\b(\d{1,4}) (?:euros? |eur )?(?:max|maximum|grand maximum|pas plus)\b/
   ],
+  // How many products they want (« un seul produit », « deux produits maximum »): [pattern, count],
+  // a null count read from the `n` group (a digit, or a word of `countWords`, by number).
+  productCount: [
+    [/\b(?:un|une) (?:seule?|unique)(?: [a-z]+){0,2} (?:produit|soin|article)s?\b|\b(?:un|une) seule?\b(?! fois)/, '1'],
+    [/\b(?<n>\d|deux|trois|quatre|cinq) (?:produits?|soins?|articles?) (?:max|maximum|au maximum|grand maximum|pas plus)\b/, null],
+    [/\b(?:pas plus de|maximum|max|au maximum|seulement|juste|que) (?<n>\d|deux|trois|quatre|cinq) (?:produits?|soins?|articles?)\b/, null]
+  ],
+  countWords: { 2: ['deux'], 3: ['trois'], 4: ['quatre'], 5: ['cinq'] },
 
   /** Group 1: the age in years. */
   age: [/\b(\d{2}) ans\b/],

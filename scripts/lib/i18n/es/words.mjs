@@ -13,6 +13,8 @@ export default {
     // « añadir », « añádelo » (the accent moves with the pronoun).
     cartYes: ['a[nñ][aá]d\\w*', 'agr[eé]g\\w*', 'p[oó]n(lo|la|los|las)', 'me (lo|la|los|las) llevo', 'dale'],
     addRequest: ['(a[nñ][aá]d\\w*|agr[eé]g\\w*|p[oó]n\\w*|m[eé]te\\w*)[^.?!]{0,60}\\b(carrito|cesta|carro)\\b', '\\bme (lo|la|los|las) llevo\\b'],
+    /** Adding a product they name, without the cart word (« Ajoute aussi une Caresse … », stress test 282). At the start; counts only when one product is named. */
+    addNamed: ['^\\s*(?:y |tambi[eé]n )?(?:a[nñ]ade|agrega)(?:me)?(?: tambi[eé]n)? (?:un|una|el|la|los|las|dos|tres|cuatro|cinco|[1-9])\\b'],
     notAdd: ['no (lo |la |los |las )?(a[nñ]ad|agreg|pong)\\w*', 'no (al|en el) carrito', 'quit\\w*', 'elimin\\w*', 'borr\\w*'],
   },
 
@@ -24,6 +26,10 @@ export default {
   asksToSee: ['mu[eé]stra\\w*', 'ver', 'enlace', 'ficha'],
 
   pastPurchase: [
+    // The past said in other tenses (« les soins que j'achetais », stress run 2026-11-02, test 108).
+    '(?:compraba|ped[ií]a|usaba)',
+    'mis (?:antiguos|viejos|habituales) productos',
+    'encontrar (?:mis|los) productos',
     '(ya )?(he comprado|compr[eé]|he pedido|ped[ií])',
     'mis ([uú]ltimos |anteriores )?(pedidos|compras)',
     'mi ([uú]ltimo |anterior )?pedido',

@@ -14,6 +14,8 @@ export default {
     cartYes: ['hinzuf[uü]g\\w*', 'f[uü]g\\w* (es|sie|ihn) hinzu', 'ich nehme (es|sie|ihn|das)', '(bitte )?in den warenkorb'],
     // The verb comes first (« füge es in den Warenkorb ») or last (« bitte in den Warenkorb legen »).
     addRequest: ['\\b(f[uü]g\\w*|leg\\w*|pack\\w*|tu\\w*|hinzuf[uü]g\\w*)\\b[^.?!]{0,60}\\b(warenkorb|einkaufswagen)\\b', '\\b(warenkorb|einkaufswagen)\\b[^.?!]{0,30}\\b(legen|hinzuf[uü]gen|tun|packen)\\b', '\\bich nehme (es|sie|ihn|das|die)\\b'],
+    /** Adding a product they name, without the cart word (« Ajoute aussi une Caresse … », stress test 282). At the start; counts only when one product is named. */
+    addNamed: ['^\\s*(?:und )?f[uü]ge?(?: (?:mir|auch|noch))* (?:ein|eine|einen|den|die|das|zwei|drei|vier|f[uü]nf|[1-9])\\b'],
     notAdd: ['nicht (hinzuf[uü]gen|in den warenkorb)', 'entfern\\w*', 'l[oö]sch\\w*'],
   },
 
@@ -25,6 +27,10 @@ export default {
   asksToSee: ['zeig\\w*', 'ansehen', 'anschauen', 'link'],
 
   pastPurchase: [
+    // The past said in other tenses (« les soins que j'achetais », stress run 2026-11-02, test 108).
+    'ich (?:kaufte|bestellte|benutzte)',
+    'fr(?:ü|u)her (?:gekauft|bestellt|benutzt)',
+    'meine (?:alten|üblichen|ublichen) produkte',
     'ich habe (schon |bereits )?(gekauft|bestellt)',
     '(schon|bereits) (gekauft|bestellt)',
     'meine (letzte|letzten|vorherige) (bestellung|bestellungen|k[aä]ufe)',

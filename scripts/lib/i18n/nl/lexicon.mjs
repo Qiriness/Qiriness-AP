@@ -79,6 +79,8 @@ export default {
 
   /** Each has an `item` group: the ingredient, as typed. */
   exclusions: [
+    // « Je supporte mal le parfum » (stress run 2026-11-02): an intolerance is an exclusion too.
+    /\b(?:ik kan (?:niet|slecht) tegen|gevoelig voor|ik reageer op|ik hou niet van|ik houd niet van)(?: de| het)? (?<item>parfum|geurstoffen?|alcohol|retinol)\b/g,
     /\b(?:zonder|geen|allergisch voor|ik vermijd|vermijd) (?<item>parfum|geurstoffen?|alcohol|retinol|essentiele olien|olien|olie|siliconen?|sulfaten?|parabenen?|niacinamide|vitamine c|\w+zuur)\b/g,
     /\b(?<item>parfum|alcohol|olie|siliconen|parabenen|sulfaat)vrij\b/g
   ],
@@ -152,9 +154,19 @@ export default {
   moreOptions: /\b(iets anders|andere (opties|producten|keuzes|alternatieven)|een ander product|een andere optie|wat nog meer|alternatieven)\b/,
   budgetSmall: /\b(klein budget|krap budget|beperkt budget|goedkop\w*|betaalbaar\w*|voordelig\w*|niet te duur|te duur|(best|vrij|erg|heel) duur|kost te veel|kan ik niet betalen|boven mijn budget|buiten mijn budget)\b/,
   budgetAmount: [
+    /\bik heb (?:maar |slechts |ongeveer |zo n )?(\d{1,4}) euro\b/,
+    /\b(\d{1,4}) euro (?:voor mij|budget)\b/,
     /\b(?:onder|minder dan|maximaal|max|hoogstens|tot|budget van|budget is)\s(\d{1,4})\b(?! (?:jaar|ml|dagen|weken|maanden|minuten|min|uur|keer|producten|stappen|years?|days?|weeks?|months?|ans?|jours?|mois))/,
     /\b(\d{1,4}) (?:euro )?(?:max|maximaal|hoogstens)\b/
   ],
+  // How many products they want (« un seul produit », « deux produits maximum »): [pattern, count],
+  // a null count read from the `n` group (a digit, or a word of `countWords`, by number).
+  productCount: [
+    [/\b(?:maar|slechts|alleen) (?:een|1)(?: [a-z]+){0,2} (?:product|artikel)\b|\been enkel (?:[a-z]+ )?product\b/, '1'],
+    [/\b(?<n>\d|twee|drie|vier|vijf) producten (?:maximaal|hoogstens|max)\b/, null],
+    [/\b(?:maximaal|hoogstens|max|maar|slechts) (?<n>\d|twee|drie|vier|vijf) producten\b/, null]
+  ],
+  countWords: { 2: ['twee'], 3: ['drie'], 4: ['vier'], 5: ['vijf'] },
 
   /** Group 1: the age in years. */
   age: [/\bik ben (\d{2})\b/, /\b(\d{2}) jaar\b/],

@@ -199,8 +199,15 @@ test('« trop cher »: a « petit plaisir » with its price, and neither the rou
   assert.match(client.calls.at(-1).system, /playbook treat is a small affordable treat/);
 });
 
+// The bench's top choices for a need, as the advice gives them: what a reply names.
+const benchTop = (concern) => {
+  const advice = createAdvisor(CONFIG, BENCH, { knowledge: BENCH_KNOWLEDGE, routines: read('data/advisor/sample-routines/routines.json') })
+    .advise({ profile: { primary_concern: { value: concern, source: 'natural_language', confidence: 'high', turn: 1 } }, mode: 'conversation' });
+  return advice.steps.flatMap((s) => [s.handle, ...s.alternatives.map((a) => a.handle)]).map((h) => BENCH.products.find((p) => p.handle === h).name.replace(/\s*\([^)]*\)$/, ''));
+};
+
 test('a need shows our top choices as cards; « trop cher » just after a product gives a cheaper one of its type', async () => {
-  const client = scripted(answer('Voici nos meilleurs choix.'), answer('Une crème moins chère.'));
+  const client = scripted(answer(`Voici nos meilleurs choix : ${benchTop('dehydration').join(', ')}.`), answer('Une crème moins chère.'));
   const agent = benchAgent(client);
   const r1 = await agent.respond({ message: 'Je cherche une crème pour mon visage déshydraté', context: { locale: 'fr' } });
   assert.ok(r1.products.length >= 1);
@@ -210,8 +217,17 @@ test('a need shows our top choices as cards; « trop cher » just after a produc
   const after = BENCH.products.find((p) => p.id === r2.trace.advice.steps[0].id);
   assert.ok(['cheaper', 'treat'].includes(r2.trace.advice.playbook));
   if (r2.trace.advice.playbook === 'cheaper') assert.ok(after.priceFrom < before.priceFrom && after.type === before.type);
-  const top = await benchAgent(scripted(answer('Voici.'))).respond({ message: 'Que me conseillez-vous pour mon visage déshydraté ?', context: { locale: 'fr' } });
+  const top = await benchAgent(scripted(answer(`Je vous conseille ${benchTop('dehydration').join(', puis ')}.`))).respond({ message: 'Que me conseillez-vous pour mon visage déshydraté ?', context: { locale: 'fr' } });
   assert.equal(top.products.length, 3);
+});
+
+test('the cards are what the reply recommends: none named, no card; one named, one card (stress run 2026-11-02)', async () => {
+  const [best] = benchTop('dehydration');
+  // The LED-programme answer: the concern word computed top choices, the reply names none of them.
+  const none = await benchAgent(scripted(answer('Pour les imperfections, choisissez le programme M5.'))).respond({ message: 'Quel programme du masque LED pour la peau déshydratée, M1 ou M5 ?', context: { locale: 'fr' } });
+  assert.deepEqual(none.products, []);
+  const one = await benchAgent(scripted(answer(`Je vous conseille ${best}.`))).respond({ message: 'Que me conseillez-vous pour mon visage déshydraté ?', context: { locale: 'fr' } });
+  assert.deepEqual(one.products.map((c) => c.title.replace(/\s*\([^)]*\)$/, '')), [best]);
 });
 
 test('« Oui, ajouter » after a routine: the code writes the turn and tells the widget what to add; no model call', async () => {

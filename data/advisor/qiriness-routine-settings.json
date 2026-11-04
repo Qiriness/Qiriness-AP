@@ -28,6 +28,9 @@
 
   "premium_concerns": ["deep_wrinkles", "significant_loss_of_density", "advanced_loss_of_firmness", "demanding_mature_skin", "regeneration"],
 
+  "single_product_types": ["serum", "cream", "mask", "lotion", "cleanser", "exfoliant", "sheet_mask"],
+  "_single_product_types_note": "One product for a need, outside the routine builder (owner, 2026-11-04, stress run of 2026-11-02): the first of these types that has a product for the concern is the pick, the next ones are its top choices, in this order. Products-tab type keys (product-knowledge.mjs FUNCTIONAL_TYPES).",
+
   "foundation_priority": ["F", "E", "B", "A", "D", "Y"],
   "_foundation_priority_note": "PROPOSED (plan § 3.1): several concerns, none chosen with a button, the tie goes to the first. Sensitive skin (C), oily skin (G) and the basic routine (H) are gone (owner, 2026-10-16): sensitive and oily are skin types now. Qiriness to confirm.",
 

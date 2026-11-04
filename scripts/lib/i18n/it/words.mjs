@@ -12,6 +12,8 @@ export default {
     stillLooking: ['sto ancora guardando', 'sto ancora cercando', 'non ancora', 'pi[uù] tardi', 'ci penso'],
     cartYes: ['aggiung\\w*', 'mettil[oaie]', 'mett\\w*', 'lo prendo', 'la prendo', 'li prendo', 'le prendo'],
     addRequest: ['\\b(aggiung\\w*|mett\\w*|inserisc\\w*)\\b[^.?!]{0,60}\\bcarrello\\b', '\\b(lo|la|li|le) prendo\\b'],
+    /** Adding a product they name, without the cart word (« Ajoute aussi une Caresse … », stress test 282). At the start; counts only when one product is named. */
+    addNamed: ['^\\s*(?:e |anche )?aggiungi(?:mi)?(?: anche)? (?:un|una|uno|il|la|lo|i|le|gli|due|tre|quattro|cinque|[1-9])\\b'],
     notAdd: ['non (lo |la |li |le )?(aggiung|mett)\\w*', 'non nel carrello', 'rimuov\\w*', 'togli\\w*'],
   },
 
@@ -23,6 +25,10 @@ export default {
   asksToSee: ['mostra\\w*', 'vedere', 'rivedere', 'link', 'scheda'],
 
   pastPurchase: [
+    // The past said in other tenses (« les soins que j'achetais », stress run 2026-11-02, test 108).
+    '(?:compravo|ordinavo|usavo|prendevo)',
+    'i (?:miei )?(?:vecchi|soliti) prodotti',
+    'ritrovare i (?:miei )?prodotti',
     'ho (gia )?(comprato|acquistato|ordinato|preso)',
     'i miei (ultimi |precedenti )?(acquisti|ordini)',
     'il mio (ultimo |precedente )?ordine',

@@ -260,3 +260,39 @@ test('a word the shop writes is not corrected into a name, unless a product type
   assert.deepEqual(r('le baume lip beauty').products.map((p) => p.id), ['b1']);
   assert.deepEqual(r('le déodorant orange').products.map((p) => p.id), ['b2']);
 });
+
+test('a request to add names one product: « ajoute un Wrap X » resolves even when X is shared with a kit', () => {
+  // Launch stress test 201 (2026-11-02): « Ajoute un Wrap Hyal-Aqua à mon panier »; the kit shares « Hyal-Aqua »,
+  // so « un » made it discovery, nothing resolved, and the model answered « je ne peux pas modifier votre panier ».
+  const index = buildResolutionIndex(buildCatalogue([
+    row('o1', 'Masque Hydratant & Repulpant - Opale Douce', 'O1'),
+    row('o2', 'Kit 4 Masques Hydratants - Opale Douce', 'O2'),
+    row('o3', 'Masque Apaisant - Wrap Lune', 'O3'),
+    row('o4', 'Masque Éclat - Wrap Soleil', 'O4')
+  ], []));
+  const message = 'Ajoute un Wrap Opale Douce à mon panier';
+  assert.deepEqual(resolveProducts(message, { index }).products, [], 'unchanged outside a request to add');
+  assert.deepEqual(resolveProducts(message, { index, ordering: true }).products.map((p) => p.id), ['o1']);
+  assert.deepEqual(resolveProducts('Ajoute le Wrap Opale Douce à mon panier', { index }).products.map((p) => p.id), ['o1']);
+  // Still discovery when nothing is named: « ajoute un masque » is not a product.
+  assert.deepEqual(resolveProducts('Ajoute un masque à mon panier', { index, ordering: true }).products, []);
+});
+
+// « Les patchs pour les yeux vendus en pot de 60 » (stress run 2026-11-02, test 149): type words and
+// numbers name nothing alone, but a type and a count in exactly one title name that product.
+test('a type and a count that only one title holds name that product; a price or an age names none', () => {
+  const index = buildResolutionIndex(buildCatalogue([
+    row('p60', 'Regard d’Or – Patchs yeux éclat anti-âge (60 patchs)', 'P60'),
+    row('pkit', 'Kit Patchs Yeux Hydratation & Éclat x4', 'PK4'),
+    row('pse', 'Patchs Yeux Lissants - Hyal-Éclat', 'PSE'),
+    row('pfl', 'Patchs Anti-imperfections - Flash Patch', 'PFL'),
+    row('cr50', 'Crème Hydratante - Source d’Eau 50 ml', 'C50'),
+    row('cr30', 'Crème Riche - Temps Sublime 50 ml', 'C30')
+  ], []));
+  const say = (m) => resolveProducts(m, { index }).products.map((p) => p.id);
+  assert.deepEqual(say('Je parle des patchs pour les yeux vendus en pot de 60.'), ['p60']);
+  assert.deepEqual(say('le pot de 60 patchs'), ['p60']);
+  assert.deepEqual(say('j’ai 60 ans et je cherche une crème'), []);
+  // Two creams of 50 ml: a count both titles hold names neither.
+  assert.deepEqual(say('la crème 50 ml'), []);
+});

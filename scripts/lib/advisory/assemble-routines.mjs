@@ -20,6 +20,7 @@
  */
 
 import { pickNames, renamed } from './routine-knowledge.mjs';
+import { FUNCTIONAL_TYPES } from './product-knowledge.mjs';
 
 const fold = (s) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').replace(/[’‘`´]/g, "'").toLowerCase().trim();
 const withoutNotes = (o) => Object.fromEntries(Object.entries(o ?? {}).filter(([k]) => !k.startsWith('_')));
@@ -91,6 +92,13 @@ export function assembleRoutines({ routines, rules, products, settings }) {
   const priority = settings.foundation_priority ?? [];
   for (const key of priority) if (!foundations.some((f) => f.key === key)) warnings.push(`foundation_priority: ${key} is not a main concern`);
   for (const f of foundations) if (f.primary_concerns.length && !priority.includes(f.key)) warnings.push(`foundation_priority: ${f.key} is missing`);
+  // One product for a need: the brand's order of types (foundations.mjs), each a Products-tab type.
+  const knownTypes = new Set(Object.values(FUNCTIONAL_TYPES));
+  const singleTypes = (Array.isArray(settings.single_product_types) ? settings.single_product_types : []).filter((t) => {
+    if (knownTypes.has(t)) return true;
+    warnings.push(`single_product_types: « ${t} » is not a product type`);
+    return false;
+  });
 
   return {
     routines: {
@@ -101,6 +109,8 @@ export function assembleRoutines({ routines, rules, products, settings }) {
       preselected: withoutNotes(settings.preselected),
       premium_concerns: settings.premium_concerns ?? [],
       foundation_priority: priority,
+      // One product for a need: its type in this order, the next types its top choices (owner, 2026-11-04).
+      ...(singleTypes.length ? { single_product_types: singleTypes } : {}),
       // The eye module's concerns, and an eye routine's (a main concern with `area: eyes` in the settings).
       eye_concerns: [...new Set([...(modules.find((m) => m.type === 'eye')?.when ?? []), ...foundations.filter((f) => f.area === 'eyes').flatMap((f) => f.primary_concerns)])],
       sensitive_concerns: rules.concerns.filter((c) => c.skin === 'sensitive').map((c) => c.key),

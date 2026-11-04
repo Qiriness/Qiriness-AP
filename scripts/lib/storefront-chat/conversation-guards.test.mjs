@@ -170,3 +170,26 @@ test('under the cart question, « ajouter svp » and "add them" are a yes; « ne
   for (const m of ['Ajoutez la crème au panier', 'je la prends', 'put it in my basket', "I'll take it"]) assert.ok(asksToAdd(m), m);
   for (const m of ["Ne l'ajoutez pas au panier", 'remove it from my cart', 'Que contient mon panier ?', 'Cette crème est-elle adaptée ?']) assert.ok(!asksToAdd(m), m);
 });
+
+// STRESS TESTS 281–282 (owner, 2026-11-04): « Ajoute deux Wrap Hyal-Aqua dans mon panier » added one,
+// then « Ajoute aussi une Caresse Active Énergie Lift » got « je ne peux pas modifier votre panier ».
+test('« ajoute deux X au panier » asks for and adds two; « ajoute aussi une Y » without the cart word is a request too', async () => {
+  const mask = product('test-masque-hydratant-wrap');
+  const client = scripted();
+  const agent = agentWith(client);
+  const r1 = await agent.respond({ message: 'Ajoute deux Masque Hydratant Wrap dans mon panier.', context: { locale: 'fr' } });
+  assert.match(r1.text, /Souhaitez-vous que j'ajoute 2 × Masque Hydratant Wrap/);
+  let history = next([], 'Ajoute deux Masque Hydratant Wrap dans mon panier.', r1);
+  const r2 = await agent.respond({ message: 'Oui, ajouter', choice: 'flow:cart:yes', context: { locale: 'fr' }, history, advisorState: advisorStateFromHistory(history) });
+  assert.deepEqual(r2.cart.add.map((x) => [x.product_id, x.quantity]), [[mask.id, 2]]);
+  assert.match(r2.text, /2 × Masque Hydratant Wrap/);
+  history = next(history, 'Oui, ajouter', r2);
+  const r3 = await agent.respond({ message: 'Ajoute aussi une Crème Hydratante Light.', context: { locale: 'fr' }, history, advisorState: advisorStateFromHistory(history) });
+  assert.match(r3.text, /Souhaitez-vous que j'ajoute Crème Hydratante Light/);
+  assert.equal(client.calls.filter((c) => c.pass !== 'storefront_profile_read').length, 0, 'no reply-model call');
+  // Not a request: a question, or how they use a product.
+  for (const m of ["Est-ce que j'ajoute une lotion ?", "J'ajoute du sérum le soir"]) {
+    const r = await agentWith(scripted(answer('…'))).respond({ message: m, context: { locale: 'fr' } });
+    assert.notEqual(r.trace.model_skipped, 'cart_ask', m);
+  }
+});

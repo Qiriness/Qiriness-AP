@@ -22,6 +22,8 @@ export default {
     cartYes: ['ajout\\w*', 'rajout\\w*', 'mets[- ]?(le|la|les)?', 'mettez[- ]?(le|la|les)?', 'vas[- ]y', 'allez[- ]y', 'je (le|la|les) prends'],
     /** Asking to add something (owner, 2026-10-29). Anywhere. */
     addRequest: ['\\b(ajout\\w*|rajout\\w*|mets|mettez|mettre|placez)\\b[^.?!]{0,60}\\bpanier\\b', '\\bje (le|la|les) prends\\b'],
+    /** Adding a product they name, without the cart word (« Ajoute aussi une Caresse … », stress test 282). At the start; counts only when one product is named. */
+    addNamed: ["^\\s*(?:et |puis )?(?:ajout|rajout)(?:e|ez|er)(?:[- ]moi)?(?: aussi| également| egalement| encore)? (?:un|une|le|la|les|l'|l’|des|deux|trois|quatre|cinq|[1-9])"],
     /** Not adding, or taking out. Anywhere. */
     notAdd: ["ne (l'|l’|le |la |les )?(ajout|mett)\\w* pas", 'pas (au|dans mon|dans le) panier', 'retir\\w*', 'enlev\\w*', 'supprim\\w*'],
   },
@@ -41,6 +43,10 @@ export default {
 
   /** purchase-turn.mjs: the customer talks about what they bought before. RAW. */
   pastPurchase: [
+    // The past said in other tenses (« les soins que j'achetais », stress run 2026-11-02, test 108).
+    "(?:j'|j’|je )(?:achetais|commandais|prenais|utilisais)",
+    '(?:mes|les) anciens? (?:achats?|soins|produits)',
+    'retrouver (?:mes|les) (?:soins|produits)',
     "(?:j'|j’|je )ai (?:déjà )?(?:acheté|commandé|pris)",
     'mes (?:derniers? |précédents? )?(?:achats?|commandes?)',
     'ma (?:dernière |précédente )?commande',

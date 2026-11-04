@@ -81,6 +81,8 @@ export default {
 
   /** Each has an `item` group: the ingredient, as typed. */
   exclusions: [
+    // « Je supporte mal le parfum » (stress run 2026-11-02): an intolerance is an exclusion too.
+    /\b(?:ich vertrage (?:kein\w*|schlecht|nicht)|empfindlich (?:gegen|auf)|ich reagiere auf|ich mag kein\w*)(?: den| die| das)? (?<item>parfum|duftstoffe?|alkohol|retinol|atherische ole)\b/g,
     /\b(?:ohne|kein|keine|allergisch gegen|ich vermeide|vertrage kein\w*) (?<item>parfum|duftstoffe?|alkohol|retinol|atherische ole|ole|ol|silikone?|sulfate?|parabene?|niacinamid|vitamin c|\w+saure)\b/g,
     /\b(?<item>parfum|duftstoff|alkohol|silikon|paraben|sulfat|ol)frei\b/g
   ],
@@ -154,9 +156,19 @@ export default {
   moreOptions: /\b(etwas anderes|andere (optionen|produkte|vorschlage|alternativen)|ein anderes produkt|eine andere (option|alternative)|was noch|sonst noch etwas|alternativen)\b/,
   budgetSmall: /\b(kleines budget|knappes budget|begrenztes budget|gunstig\w*|preiswert\w*|billig\w*|nicht zu teuer|zu teuer|(etwas|ziemlich|sehr|so) teuer|kostet zu viel|kann ich mir nicht leisten|uber meinem budget|ausserhalb meines budgets)\b/,
   budgetAmount: [
+    /\bich habe (?:nur |etwa |ungefahr |circa )?(\d{1,4}) euro\b/,
+    /\b(\d{1,4}) euro (?:fur mich|budget)\b/,
     /\b(?:unter|weniger als|hochstens|maximal|max|bis zu|budget von|budget ist)\s(\d{1,4})\b(?! (?:jahre?n?|ml|tage?n?|wochen|monate?n?|minuten|min|stunden|mal|produkte?|schritte?|years?|days?|weeks?|months?|ans?|jours?|mois))/,
     /\b(\d{1,4}) (?:euro )?(?:max|maximal|hochstens)\b/
   ],
+  // How many products they want (« un seul produit », « deux produits maximum »): [pattern, count],
+  // a null count read from the `n` group (a digit, or a word of `countWords`, by number).
+  productCount: [
+    [/\b(?:nur|bloss) (?:ein|eine|einen|1)(?: [a-z]+){0,2} (?:produkt|pflege|artikel)\b|\bein einziges (?:[a-z]+ )?produkt\b/, '1'],
+    [/\b(?<n>\d|zwei|drei|vier|funf) produkte (?:maximal|hochstens|max)\b/, null],
+    [/\b(?:hochstens|maximal|max|nur) (?<n>\d|zwei|drei|vier|funf) produkte\b/, null]
+  ],
+  countWords: { 2: ['zwei'], 3: ['drei'], 4: ['vier'], 5: ['funf'] },
 
   /** Group 1: the age in years. */
   age: [/\bich bin (\d{2})\b/, /\b(\d{2}) jahre\b/],

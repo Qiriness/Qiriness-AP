@@ -203,15 +203,16 @@ export function buildResolutionIndex(catalogue, { aliases = new Map(), ranges: p
  *   index: ReturnType<typeof buildResolutionIndex>,
  *   pageProductId?: string | null,
  *   refs?: import('./conversation-refs.mjs').ConversationRefs,
- *   choice?: string | null
- * }} context
+ *   choice?: string | null,
+ *   ordering?: boolean
+ * }} context  ordering: the message asks to add to the cart; « un X » there names one X
  */
 // « cette crème », « ce soin », "this cream" on a product page: that product, not
 // another cream found by its name (customer batch, 2026-10-13: « cette crème »
 // on the Light cream's page resolved to another cream).
 const DEMONSTRATIVE = new RegExp(wordsOf('demonstrativeCare').map((f) => `\\b${f}\\b`).join('|'));
 
-export function resolveProducts(message, { index, pageProductId = null, refs = null, choice = null, known = [] }) {
+export function resolveProducts(message, { index, pageProductId = null, refs = null, choice = null, known = [], ordering = false }) {
   const out = { products: [], candidates: [], unresolved: [], range: null, clarificationFor: null };
   const text = String(message ?? '');
   const demonstrative = Boolean(pageProductId && index.byId.has(pageProductId) && DEMONSTRATIVE.test(` ${normalise(text)} `));
@@ -263,8 +264,11 @@ export function resolveProducts(message, { index, pageProductId = null, refs = n
   const discovery = isDiscoveryQuestion(normalise(text));
   for (const c of chunks) {
     // « des masques pour les mains », « une crème » : discovery. Only a product's
-    // full commercial name still resolves inside it.
-    if (c.indefinite || (discovery && c.bare)) {
+    // full commercial name still resolves inside it. Not in a request to add (`ordering`):
+    // « ajoute un Wrap Hyal-Aqua » is one of that product, not any mask (launch stress test 201,
+    // 2026-11-02: « Hyal-Aqua » is shared with the kit, so nothing resolved and the model said
+    // « je ne peux pas modifier votre panier »).
+    if ((c.indefinite && !(ordering && c.identity.length > 0)) || (discovery && c.bare)) {
       if (c.identity.length > 0) resolveIdentityChunk(c, index, out, { exclusiveOnly: true });
       continue;
     }
@@ -274,6 +278,20 @@ export function resolveProducts(message, { index, pageProductId = null, refs = n
   }
   if (demonstrative && !out.products.length && !out.candidates.length) {
     out.products.push(resolved(index, pageProductId, 'strong', 'page: this product', 'this'));
+  }
+
+  // A TYPE AND A COUNT THAT NAME ONE PRODUCT (stress run 2026-11-02, test 149: « les patchs pour les
+  // yeux vendus en pot de 60 » is Regard d'Or, « (60 patchs) » in its title, yet type words and
+  // numbers name nothing, and the eye advice answered with a serum). Only when exactly one product
+  // has both the type word and that number in its title; a price or an age matches no title.
+  if (!out.products.length && !out.candidates.length && !discovery) {
+    const words = normalise(text).split(' ').map(fold);
+    const care = words.filter((t) => index.careTypes.has(t));
+    const counts = words.filter((t) => /^\d{2,3}$/.test(t));
+    if (care.length && counts.length) {
+      const hits = index.products.filter((e) => care.some((t) => e.tokens.has(t)) && counts.some((n) => e.tokens.has(n)));
+      if (hits.length === 1) out.products.push(resolved(index, hits[0].product.id, 'strong', `type and count: ${care[0]} ${counts[0]}`, `${care[0]} ${counts[0]}`));
+    }
   }
 
   // A follow-up to a clarification: « la crème » after « Crème, Sérum ou Coffret ? ».

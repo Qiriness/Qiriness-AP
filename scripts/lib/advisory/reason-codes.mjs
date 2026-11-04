@@ -58,6 +58,8 @@ export const SKIPPED = {
   ALREADY_OWNED: 'already_owned',
   /** Left out to keep the routine within the customer's budget. */
   OVER_BUDGET: 'over_budget',
+  /** Left out to keep to the number of products they asked for (« deux produits maximum »). */
+  OVER_PRODUCT_LIMIT: 'over_product_limit',
   NO_ELIGIBLE_PRODUCT: 'no_eligible_product',
   /** Day and night: this night step's product is already in the day routine (`product_id`), used morning and evening. */
   ALSO_IN_DAY_ROUTINE: 'also_in_day_routine'

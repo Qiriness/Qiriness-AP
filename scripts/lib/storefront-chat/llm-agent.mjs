@@ -48,7 +48,7 @@ import { ADVISE, PROFILE_CHOICE, adviseToolDefinition, createAdvisorTurn } from 
 import { ORDER_TOOL, orderToolDefinition, runOrderTool } from './order-tools.mjs';
 import { USE_SKILL, activeSkill, skillBlock, skillNamed, useSkillDefinition } from './skills.mjs';
 import { GET_PAST_PURCHASES } from './skills/routine-builder.mjs';
-import { CART_CHOICE, FLOW_CHOICE, anchorFor, askToAdd, asksToAdd, beforeAdvice, cartDoneText, cartNoText, cartToAdd, emptyFlow, followUpFor, followUpNote, routineReadyText } from './routine-flow.mjs';
+import { CART_CHOICE, FLOW_CHOICE, addQuantity, anchorFor, askToAdd, asksToAdd, asksToAddNamed, beforeAdvice, cartDoneText, cartNoText, cartToAdd, emptyFlow, followUpFor, followUpNote, routineReadyText } from './routine-flow.mjs';
 import { cleanPurchaseState, customerRanges, describePurchases, emptyPurchaseState, mentionsPastPurchase, purchaseItems } from './purchase-turn.mjs';
 import { READER_TIMEOUT_MS, mentionsSkin, readProfile, shouldRead } from './profile-reader.mjs';
 import { isBuiltRoutine, routineRecord } from '../advisory/routine-record.mjs';
@@ -283,7 +283,7 @@ export function createLlmAgent({
       // A profile chip is our own label, never a product name: « Moins de 25 ans » had resolved to the hand
       // products (« moins » one letter from « mains ») and their « which one? » replaced the routine question.
       let resolution = resolutionIndex && !profileChoice
-        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || flowChoice ? null : choice })
+        ? resolveProducts(message, { index: resolutionIndex, pageProductId: pageProduct?.id ?? null, refs, choice: profileChoice || flowChoice ? null : choice, ordering: asksToAdd(message) || asksToAddNamed(message) })
         : null;
       const resolvedIds = new Set(resolution?.products.map((p) => p.id) ?? []);
       // An accessory or a device only when asked for (owner, 2026-10-29: the Gua Sha came for « produits à moins
@@ -368,6 +368,9 @@ export function createLlmAgent({
         const ranges = customerRanges(items, purchaseState, productKnowledge);
         if (advisorTurn?.useRanges(ranges)) for (const h of advisorTurn.handles()) offered.add(h);
         if (ranges.length) purchaseTrace.ranges = ranges.length;
+        // Asked about, read, and nothing kept (stress run 2026-11-02, test 108: the only order
+        // cancelled and refunded): an empty list, so the reply says so instead of « I cannot see it ».
+        if (!items.length && summary !== undefined && mentionsPastPurchase(message)) purchaseView = { purchases: [] };
         if (items.length) {
           purchaseView = describePurchases(items, purchaseState, { knowledge: productKnowledge, measured: repurchaseIntervals });
           const low = purchaseView.purchases.filter((p) => p.may_be_running_low).length;
@@ -586,7 +589,7 @@ export function createLlmAgent({
         return {
           text: routineAdded
             ? cartDoneText(displayLanguage(language, locale), [], [], { routine: true })
-            : cartDoneText(displayLanguage(language, locale), toAdd.add.map((x) => byId(x.product_id)?.name).filter(Boolean), toAdd.needs_size, { discount: Boolean(toAdd.discount_code) }),
+            : cartDoneText(displayLanguage(language, locale), toAdd.add.map((x) => { const name = byId(x.product_id)?.name; return name && x.quantity > 1 ? `${x.quantity} × ${name}` : name; }).filter(Boolean), toAdd.needs_size, { discount: Boolean(toAdd.discount_code) }),
           replyLanguage: displayLanguage(language, locale),
           products: [],
           choices: [],
@@ -630,13 +633,17 @@ export function createLlmAgent({
       // used to answer « je ne peux pas ajouter directement ». What it is: the product named; else the last
       // bubble's card, or the routine it showed; else the page's product. Several cards without a routine
       // are ambiguous: the model asks which.
-      if (advisorTurn && !flowStart.cart && asksToAdd(message)) {
+      // « Ajoute aussi une Caresse Active Énergie Lift »: no cart word, one product named (stress test 282).
+      const addNamed = resolvedIds.size === 1 && asksToAddNamed(message);
+      if (advisorTurn && !flowStart.cart && (asksToAdd(message) || addNamed)) {
         const last = [...history].reverse().find((m) => m.role === 'assistant');
         const urls = last?.context?.follow_up?.products?.length ? last.context.follow_up.products : last?.context?.products ?? [];
         const shown = urls.map((url) => catalogue?.products.find((p) => String(url).endsWith(`/products/${encodeURIComponent(p.handle)}`))).filter(Boolean);
         const routineShown = shown.length > 1 && Boolean(flow.routine_ref);
         const target = resolvedIds.size === 1 ? [byId([...resolvedIds][0])] : shown.length === 1 || routineShown ? shown : !shown.length && pageProduct ? [pageProduct] : [];
-        const items = target.filter((p) => p?.inStock).map((p) => ({ product_id: p.id, variant_id: routineShown ? variantFor(p) : cartVariant(p), name: p.name }));
+        // « Ajoute deux Wrap Hyal-Aqua »: the units asked for, for one product (stress test 281: one was added).
+        const quantity = target.length === 1 ? addQuantity(message) : 1;
+        const items = target.filter((p) => p?.inStock).map((p) => ({ product_id: p.id, variant_id: routineShown ? variantFor(p) : cartVariant(p), name: p.name, quantity }));
         if (items.length) {
           const lang = displayLanguage(language, locale);
           const asked = askToAdd(flow, items, lang, { discount: routineShown && Boolean(routineDiscount) });
@@ -895,17 +902,23 @@ export function createLlmAgent({
         if (caution) {
           // A caution turn forces no card (the acne-treatment answer showed three cleansers under it).
         } else if (finalAdvice?.status === 'recommended' && finalAdvice.steps.some((s) => s.top_choices)) {
-          // Our top choices are the cards, whatever the model listed (it showed one of three in the batch).
+          // THE CARDS ARE WHAT THE REPLY RECOMMENDS (stress run 2026-11-02, owner): our top choices it
+          // listed or named, in its order. All three were shown whatever the reply said, so « one product »
+          // came with three cards, and the LED-programme and rosacea answers (no product named) with the
+          // lotion and the cleansing bar the concern word had computed.
           const top = finalAdvice.steps.flatMap((s) => [s.handle, ...s.alternatives.map((x) => x.handle)]);
-          products = toCards([...products.map((p) => ({ handle: top.find((h) => p.url.endsWith(`/${encodeURIComponent(h)}`)) ?? '', rationale: p.rationale })).filter((x) => x.handle), ...top.map((handle) => ({ handle, rationale: '' }))], offered, catalogue, money);
+          const listed = products.map((p) => ({ handle: top.find((h) => p.url.endsWith(`/${encodeURIComponent(h)}`)) ?? '', rationale: p.rationale })).filter((x) => x.handle);
+          const named = namedInReply(parsed.text, top, catalogue).map((handle) => ({ handle, rationale: '' }));
+          products = toCards([...listed, ...named], offered, catalogue, money);
         } else if (finalAdvice?.status === 'recommended' && finalAdvice.steps.length > 1) {
           // A routine's cards are its steps, all of them, in order: a day routine is four products,
           // day and night up to seven (owner, 2026-10-16). The model's reasons are kept.
           const why = new Map((parsed.products ?? []).map((p) => [p?.handle, p?.rationale]));
           products = toCards(finalAdvice.steps.map((s) => ({ handle: s.handle, rationale: why.get(s.handle) ?? '' })), offered, catalogue, money, finalAdvice.steps.length);
         } else if (!products.length && finalAdvice?.status === 'recommended') {
-          // Top choices show as cards too (best first), not only the step's product.
-          products = toCards(finalAdvice.steps.flatMap((s) => [{ handle: s.handle, rationale: '' }, ...(s.top_choices ? s.alternatives.map((x) => ({ handle: x.handle, rationale: '' })) : [])]), offered, catalogue, money);
+          // The model forgot to list what it recommends: the products its reply names. None named: no card.
+          const engine = finalAdvice.steps.flatMap((s) => [s.handle, ...s.alternatives.map((x) => x.handle)]);
+          products = toCards(namedInReply(parsed.text, engine, catalogue).map((handle) => ({ handle, rationale: '' })), offered, catalogue, money);
         }
         // The offer follows products: shown as cards, or the product the conversation is about
         // (its page, or the one they named). A reply about none is not followed by it, and
@@ -1125,6 +1138,25 @@ export function newCardsOnly(cards, { shownBefore = [], inCart = [], otherTopic 
   if (otherTopic) return [];
   const old = new Set([...shownBefore, ...inCart]);
   return cards.filter((c) => !old.has(c.id));
+}
+
+/**
+ * The handles a reply names, in the order it names them: a product's full name, or a part of it
+ * between dashes of two words or more (« la Lotion Kéfir », « le Wrap Terre d'Orient »). One word
+ * (« Sérum ») names no product.
+ */
+export function namedInReply(text, handles, catalogue) {
+  const said = ` ${norm(text)} `;
+  const at = (handle) => {
+    const name = catalogue?.products.find((p) => p.handle === handle)?.name;
+    if (!name) return -1;
+    // A trailing bracket is not said: « Regard d'Or – Patchs yeux éclat anti-âge (60 patchs) ».
+    const bare = String(name).replace(/\s*\([^)]*\)\s*$/, '');
+    const parts = [name, bare, ...bare.split(/\s[-–—]\s/)].map(norm).filter((p) => p.split(' ').length >= 2);
+    const hits = parts.map((p) => said.indexOf(` ${p} `)).filter((i) => i >= 0);
+    return hits.length ? Math.min(...hits) : -1;
+  };
+  return [...new Set(handles)].map((h) => ({ h, i: at(h) })).filter((x) => x.i >= 0).sort((a, b) => a.i - b.i).map((x) => x.h);
 }
 
 export function toCards(suggested, offered, catalogue, money, max = MAX_CARDS) {

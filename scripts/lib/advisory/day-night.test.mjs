@@ -155,17 +155,26 @@ test('cleanser or lotion: the skin type, then the concern; a tie goes to the lot
   assert.equal(build({ primary_concern: q('imperfections'), skin_type: q('oily'), routine_time: q('day') }).steps[0].handle, 'lotion-tonique-purifiante-matifiante-nettoyante');
 });
 
-test('a step whose product must treat the need stays empty rather than padded: no serum treats blemishes', () => {
+test('a step whose product must treat the need takes one that does: the Éclat Parfait serum treats blemishes (owner, 2026-11-04)', () => {
   const a = build({ primary_concern: q('imperfections'), skin_type: q('oily'), routine_time: q('day') });
-  assert.equal(a.steps.length, 3);
-  assert.deepEqual(a.skipped.map((s) => [s.slot, s.reason]), [['day_2', 'no_eligible_product']]);
+  assert.equal(a.steps.length, 4);
+  assert.ok(a.steps.some((s) => s.handle === 'serum-anti-taches-niacinamide-eclat-parfait'), a.steps.map((s) => s.handle).join());
+  assert.deepEqual(a.skipped, []);
 });
 
-test('outside the builder, one product for one need still: the serum for wrinkles, the lotion for blemishes', () => {
+test('outside the builder, one product for one need still, by the brand’s type order: the serum for wrinkles, the Éclat Parfait serum then cream for blemishes', () => {
   const one = (concern) => advisor.advise({ profile: { primary_concern: q(concern) }, mode: 'conversation' });
   assert.equal(KNOWLEDGE.get(one('wrinkles').steps[0].handle).functional_type, 'serum');
   assert.equal(one('wrinkles').scope, 'targeted');
-  assert.equal(KNOWLEDGE.get(one('imperfections').steps[0].handle).functional_type, 'lotion');
+  // Blemishes (owner, 2026-11-04): the Éclat Parfait serum, and when it is out of stock its cream; the top
+  // choices follow the brand's type order (cream, mask, lotion…).
+  const blemishes = one('imperfections');
+  assert.equal(blemishes.steps[0].handle, 'serum-anti-taches-niacinamide-eclat-parfait');
+  assert.deepEqual(blemishes.steps[0].alternatives.map((a) => KNOWLEDGE.get(a.handle).functional_type), ['cream', 'mask']);
+  const noSerum = { ...CATALOGUE, products: CATALOGUE.products.map((p) => (p.handle === 'serum-anti-taches-niacinamide-eclat-parfait' ? { ...p, inStock: false } : p)) };
+  const without = createAdvisor(read('data/advisor/qiriness.json'), noSerum, { knowledge: KNOWLEDGE, routines: built.routines })
+    .advise({ profile: { primary_concern: q('imperfections') }, mode: 'conversation' });
+  assert.equal(without.steps[0].handle, 'creme-hydratante-visage-caresse-eclat-parfait');
   // The eyes alone: an eye product, the eye serums and creams among them.
   const eyes = advisor.advise({ profile: { primary_concern: q('dark_circles') }, mode: 'conversation' });
   assert.equal(KNOWLEDGE.get(eyes.steps[0].handle).area, 'eyes');

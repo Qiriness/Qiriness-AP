@@ -103,6 +103,8 @@ const L = {
   budgetSmall: union((l) => l.budgetSmall),
   moreOptions: union((l) => l.moreOptions),
   budgetAmount: LANGUAGES.flatMap((l) => l.budgetAmount ?? []),
+  productCount: LANGUAGES.flatMap((l) => l.productCount ?? []),
+  countWords: Object.fromEntries(LANGUAGES.flatMap((l) => Object.entries(l.countWords ?? {}).flatMap(([n, words]) => words.map((w) => [w, Number(n)])))),
   age: LANGUAGES.flatMap((l) => l.age),
   ageWords: LANGUAGES.flatMap((l) => l.ageWords),
   routineBuilder: union((l) => l.routineBuilder),
@@ -146,7 +148,7 @@ const ALL_PATTERNS = [
   L.eyes, L.hands, L.lips, L.feet, L.body, L.face, L.men, L.women, L.routineNone, L.wants, L.concernIs, L.asksFor, L.additive, L.routineBuilder, L.routineAsk, L.dontKnow,
   ...L.concerns.map(([re]) => re), ...L.skinTypes.map(([, re]) => re), ...L.sensitivity.map(([, re]) => re),
   ...L.routineSteps.map(([, re]) => re), ...L.desired.map(([, re]) => re), ...L.scope.map(([, re]) => re),
-  ...L.routineTime.map(([, re]) => re), ...L.requests.map(([, re]) => re), L.budgetSmall, L.moreOptions, ...L.budgetAmount,
+  ...L.routineTime.map(([, re]) => re), ...L.requests.map(([, re]) => re), L.budgetSmall, L.moreOptions, ...L.budgetAmount, ...L.productCount.map(([re]) => re),
   ...L.exclusions, ...L.routineClauses, ...L.age, ...L.ageWords.map(([re]) => re)
 ];
 const NEUTRAL = new Set(LANGUAGES.flatMap((l) => [...l.markers, ...l.fillers]));
@@ -191,8 +193,18 @@ export function detectLanguage(message) {
  * @param {{ profile?: object, lastAsked?: string | null }} [context]
  * @returns {{ updates: { field: string, value: string, source: 'natural_language', confidence: string }[], routineBuilder: boolean, residue: string[] }}
  */
+/**
+ * The currency sign as a word, so the budget patterns read it once « € » is normalised away:
+ * « J'ai 12 € » → « j ai 12 euro », « £30 » → « 30 pounds ».
+ */
+function withCurrency(message) {
+  return String(message ?? '')
+    .replace(/([€£$])\s*(\d+)/g, '$2 $1')
+    .replace(/€/g, ' euro ').replace(/£/g, ' pounds ').replace(/\$/g, ' dollars ');
+}
+
 export function extractProfile(message, { profile = {}, lastAsked = null } = {}) {
-  let text = ` ${norm(message)} `;
+  let text = ` ${norm(withCurrency(message))} `;
   const updates = [];
   const add = (field, value, confidence = 'medium', extra = {}) => updates.push({ field, value, source: 'natural_language', confidence, ...extra });
   const consume = (re) => { text = text.replace(new RegExp(re.source, 'g'), ' '); };
@@ -254,6 +266,14 @@ export function extractProfile(message, { profile = {}, lastAsked = null } = {})
   const amount = L.budgetAmount.map((re) => text.match(re)).find(Boolean);
   // Under 5 is a count, not a price (« max 3 »).
   if (amount && Number(amount[1]) >= 5) add('budget_max', String(Number(amount[1])), 'high');
+  // « Un seul produit », « deux produits maximum »: how many cards, and how long a routine.
+  const counted = L.productCount.map(([re, n]) => [text.match(re), n]).find(([m]) => m);
+  if (counted) {
+    const [m, n] = counted;
+    const said = n ?? m.groups?.n;
+    const count = /^\d$/.test(String(said)) ? Number(said) : L.countWords[said];
+    if (count >= 1 && count <= 9) add('max_products', String(count), 'high');
+  }
 
   const age = L.age.map((re) => text.match(re)).find(Boolean);
   const years = age ? Number(age[1]) : L.ageWords.find(([re]) => re.test(text))?.[1];

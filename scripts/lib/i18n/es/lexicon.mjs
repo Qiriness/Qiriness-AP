@@ -77,11 +77,13 @@ export default {
 
   /** Each has an `item` group: the ingredient, as typed. */
   exclusions: [
+    // « Je supporte mal le parfum » (stress run 2026-11-02): an intolerance is an exclusion too.
+    /\b(?:no tolero|tolero mal|no soporto|sensible (?:a|al|a la)|intolerante (?:a|al|a la)|no me gusta|no me gustan)(?: el| la| los| las)? (?<item>perfumes?|fragancias?|alcohol|retinol|aceites esenciales)\b/g,
     /\b(?:sin|nada de|alergic[ao] (?:a|al|a la)|evito(?: el| la| los| las)?) (?<item>perfume|fragancia|alcohol|retinol|aceites esenciales|aceite esencial|aceites?|siliconas?|sulfatos?|parabenos?|niacinamida|vitamina c|acido [a-z]+)\b/g
   ],
 
   ingredients: {
-    fragrance: ['perfume', 'fragancia', 'fragancias'],
+    fragrance: ['perfume', 'perfumes', 'fragancia', 'fragancias'],
     alcohol: ['alcohol'],
     retinol: ['retinol'],
     essential_oils: ['aceites esenciales', 'aceite esencial'],
@@ -149,9 +151,19 @@ export default {
   moreOptions: /\b(algo mas|otra cosa|otras (opciones|alternativas|propuestas)|otros productos|otro producto|otra opcion|que mas)\b/,
   budgetSmall: /\b(presupuesto (pequeno|ajustado|limitado|reducido)|poco presupuesto|economic[oa]s?|barat[oa]s?|asequible|no muy car[oa]|demasiado car[oa]|(un poco|bastante|muy|algo) car[oa]|es car[oa]|cuesta demasiado|mas barat[oa]|no me lo puedo permitir|fuera de mi presupuesto|por encima de mi presupuesto)\b/,
   budgetAmount: [
+    /\btengo (?:solo |solamente |unos |alrededor de |apenas )?(\d{1,4}) euros?\b/,
+    /\b(\d{1,4}) euros? (?:para mi|de presupuesto|para gastar)\b/,
     /\b(?:menos de|no mas de|maximo|max|hasta|presupuesto de|por debajo de)\s(\d{1,4})\b(?! (?:anos|ml|dias|semanas|meses|minutos|min|horas|veces|productos|pasos|years?|days?|weeks?|months?|ans?|jours?|mois))/,
     /\b(\d{1,4}) (?:euros? )?(?:max|maximo|como maximo)\b/
   ],
+  // How many products they want (« un seul produit », « deux produits maximum »): [pattern, count],
+  // a null count read from the `n` group (a digit, or a word of `countWords`, by number).
+  productCount: [
+    [/\bun (?:solo|unico)(?: [a-z]+){0,2} producto\b|\bsolo un producto\b/, '1'],
+    [/\b(?<n>\d|dos|tres|cuatro|cinco) productos (?:como maximo|maximo|max)\b/, null],
+    [/\b(?:no mas de|como maximo|maximo|max|solo) (?<n>\d|dos|tres|cuatro|cinco) productos\b/, null]
+  ],
+  countWords: { 2: ['dos'], 3: ['tres'], 4: ['cuatro'], 5: ['cinco'] },
 
   /** Group 1: the age in years. */
   age: [/\b(\d{2}) anos\b/],

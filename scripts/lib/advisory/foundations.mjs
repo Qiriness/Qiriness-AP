@@ -125,6 +125,15 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   const sizeLabels = routines.questions?.chips?.size ?? {};
   // The day / night routine (the brand's Routines tab), when the routines carry it.
   const routineSteps = routines.routine_steps ?? null;
+  // ONE PRODUCT FOR A NEED, BY TYPE (owner, 2026-11-04: « serum, then crème, then masque, then lotion,
+  // then nettoyant, then gommage, then masque monodose »): the brand's order of types, when its
+  // settings give one. The first type that has a product for their concern is the pick, the next ones
+  // its top choices. Without it, the day routine's types, best score first (as before).
+  const singleSteps = Array.isArray(routines.single_product_types) && routines.single_product_types.length
+    ? routines.single_product_types.map((type, i) => ({ order: i + 1, type, frequency: 'daily', required: true, targets: 'primary' }))
+    : null;
+  // The order is for a face need: the eyes alone keep their own eye step, the eye routine its own steps.
+  const ordersTypes = (f) => Boolean(singleSteps) && f.key !== 'eyes' && f.area !== 'eyes' && !f.routine_steps;
   const ageRanges = routines.age_ranges ?? [];
   const sensitiveConcerns = new Set(routines.sensitive_concerns ?? []);
   // The eye routine: a main concern with its own steps for the eyes (settings `area: eyes`).
@@ -167,6 +176,8 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       request: valueOf(profile, 'request'),
       budget: valueOf(profile, 'budget'),
       budgetMax: Number(valueOf(profile, 'budget_max')) || null,
+      // How many products at most (« un seul produit », « deux produits maximum »).
+      maxProducts: Number(valueOf(profile, 'max_products')) || null,
       // Body care only when they said it: the model reader guessed « body » from « after showering »
       // (customer batch, EN) and the advice had nothing for a face.
       area: profile.body_area?.source === 'model_inferred' && valueOf(profile, 'body_area') === 'body' ? null : valueOf(profile, 'body_area'),
@@ -222,6 +233,11 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       if (c.desired) return [f.steps.find((s) => s.type === c.desired) ?? { order: 1, type: c.desired, frequency: 'daily', required: true, targets: 'primary' }];
       // The day / night routine's types, the serum first: the first that has a product for the need
       // (no serum treats blemishes: their lotion).
+      if (ordersTypes(f)) {
+        // The brand's order: the first type with a product made for their concern, else the first with any.
+        const has = (s, need) => products.some((x) => eligible(x, s, f, c, new Set()) && (!c.budgetMax || (x.product.priceFrom ?? Infinity) <= c.budgetMax) && (!need || [x.k.primary_concern, ...x.k.other_concerns].includes(need)));
+        return [singleSteps.find((s) => c.primary && has(s, c.primary)) ?? singleSteps.find((s) => has(s, null)) ?? f.steps[0]];
+      }
       if (routineSteps) return [f.steps.find((s) => s.targets === 'primary' && products.some((x) => eligible(x, s, f, c, new Set()))) ?? f.steps[0]];
       return [f.steps.find((s) => s.targets === 'primary') ?? f.steps[0]];
     }
@@ -259,9 +275,12 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
    * ranks. Sensitivity and the ingredients they avoid stay hard. A routine keeps the skin type hard.
    */
   function targetedPool(step, f, c, used, scope) {
-    const pool = products.filter((x) => eligible(x, step, f, c, used));
+    // ONE PRODUCT WITH A CEILING: only what it buys (stress run 2026-11-02: « 45 € maximum » got
+    // nothing, the 58 € serum being dropped after the choice instead of a cheaper product chosen).
+    const affordable = (x) => scope !== 'targeted' || !c.budgetMax || (x.product.priceFrom ?? Infinity) <= c.budgetMax;
+    const pool = products.filter((x) => eligible(x, step, f, c, used) && affordable(x));
     if (pool.length || scope !== 'targeted' || !c.skin) return pool;
-    const relaxed = products.filter((x) => eligible(x, step, f, { ...c, skin: null }, used));
+    const relaxed = products.filter((x) => eligible(x, step, f, { ...c, skin: null }, used) && affordable(x));
     relaxed.skinRelaxed = true;
     return relaxed;
   }
@@ -454,17 +473,24 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     // of each type that targets it, not three of one type. A type they asked
     // for (« juste un sérum ») keeps its own alternatives.
     if (scope === 'targeted' && mode !== 'routine_builder' && !c.desired && steps.length === 1 && !eyesAlone) {
-      const others = f.steps
+      const ordered = ordersTypes(f);
+      const typeRank = (r) => singleSteps.findIndex((s) => s.type === r.step.type);
+      const others = (ordered ? singleSteps : f.steps)
         // A cleanser is a top choice only where the foundation says it treats the need (Imperfections).
         .filter((s) => s.frequency === 'daily' && s.type !== steps[0].type && !c.owned.includes(s.type) && (s.type !== 'cleanser' || s.targets === 'primary'))
-        .map((s) => { const pool = targetedPool({ ...s, targets: 'primary' }, f, c, used, scope); return pool.map((x) => ({ x, ...score(x, s, f, c, ranges, pool.skinRelaxed) })).filter((r) => [r.x.k.primary_concern, ...r.x.k.other_concerns].includes(c.primary)); })
+        .map((s) => { const pool = targetedPool({ ...s, targets: 'primary' }, f, c, used, scope); return pool.map((x) => ({ x, step: s, ...score(x, s, f, c, ranges, pool.skinRelaxed) })).filter((r) => [r.x.k.primary_concern, ...r.x.k.other_concerns].includes(c.primary)); })
           .map((list) => list
           .sort((a, b) => b.s - a.s || a.x.product.priceFrom - b.x.product.priceFrom)[0])
         .filter(Boolean)
-        .sort((a, b) => b.s - a.s)
+        // A product the type order would list twice (a lotion that also fills the cleanser step): once.
+        .filter((r, i, all) => all.findIndex((o) => o.x.id === r.x.id) === i)
+        .sort((a, b) => (ordered ? typeRank(a) - typeRank(b) : 0) || b.s - a.s)
         .slice(0, 2);
       if (others.length) steps[0] = { ...steps[0], alternatives: others.map((r) => ({ product_id: r.x.id, handle: r.x.handle })) };
     }
+    // « Un seul produit »: no top choices beyond it; « deux maximum »: one alternative.
+    if (c.maxProducts && scope === 'targeted') for (const s of steps) s.alternatives = s.alternatives.slice(0, Math.max(0, c.maxProducts - 1));
+    if (c.maxProducts && scope !== 'targeted') withinCount(steps, skipped, c.maxProducts);
     // THE TYPE ASKED FOR HAS NOTHING FOR THE CONCERN (owner, 2026-10-19: « est-ce que vous avez un
     // sérum pour les taches » got an anti-fatigue serum, the spot serum being out of stock, then
     // « je ne trouve pas » three times). The best product of another type that treats it takes its
@@ -473,16 +499,18 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     const treats = (x) => [x.k.primary_concern, ...x.k.other_concerns].includes(c.primary);
     if (scope === 'targeted' && mode !== 'routine_builder' && c.primary && !eyesAlone && !wanted.length && steps.length <= 1 && !(steps[0] && treats(byId.get(steps[0].product_id)))) {
       const outOfStock = products.filter((x) => !x.product.inStock && fillsStep(x.k, c.desired) && x.k.status !== 'do_not_advise' && !isBundle(x.k) && x.k.primary_concern === c.primary);
-      const other = f.steps
+      const ordered = ordersTypes(f);
+      const typeRank = (r) => (ordered ? singleSteps.findIndex((s) => s.type === r.step.type) : 0);
+      const other = (ordered ? singleSteps : f.steps)
         .filter((s) => s.frequency === 'daily' && s.type !== (c.desired ?? steps[0]?.type) && !c.owned.includes(s.type))
         .flatMap((s) => targetedPool({ ...s, targets: 'primary' }, f, c, new Set(exclude), scope).filter(treats).map((x) => ({ x, step: s, ...score(x, s, f, c, ranges) })))
-        .sort((a, b) => b.s - a.s || (a.x.product.priceFrom ?? 0) - (b.x.product.priceFrom ?? 0) || a.x.name.localeCompare(b.x.name));
+        .sort((a, b) => typeRank(a) - typeRank(b) || b.s - a.s || (a.x.product.priceFrom ?? 0) - (b.x.product.priceFrom ?? 0) || a.x.name.localeCompare(b.x.name));
       if (other.length) {
         const [top, ...rest] = other;
         steps.splice(0, steps.length, {
           slot: `${top.step.type}_${top.step.order}`, kind: KIND[top.step.type] ?? top.step.type, type: top.step.type, optional: false,
           product_id: top.x.id, handle: top.x.handle,
-          alternatives: rest.filter((r) => r.x.id !== top.x.id).slice(0, 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })),
+          alternatives: rest.filter((r) => r.x.id !== top.x.id).slice(0, c.maxProducts ? Math.max(0, c.maxProducts - 1) : 2).map((r) => ({ product_id: r.x.id, handle: r.x.handle })),
           reason_codes: [...top.reasons, ...(c.desired ? [FIT.ASKED_TYPE_UNAVAILABLE] : [])],
           merchandised: null,
           scores: { suitability: top.s, routine_fit: 0, total: top.s },
@@ -738,6 +766,7 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
     }
     for (const x of wanted) if (!placed.some((p) => p.product_id === x.id)) placed.push({ product_id: x.id, handle: x.handle, status: PINNED.NO_STEP });
     const budget = c.budgetMax ? withinBudget(steps, skipped, plan, c.budgetMax) : null;
+    if (c.maxProducts) withinCount(steps, skipped, c.maxProducts);
     return { f, scope: time, steps, skipped, pinned: placed, c, budget, range: current };
   }
 
@@ -816,6 +845,21 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   }
 
   /**
+   * A number of products at most (« deux produits maximum »; stress run 2026-11-02: four came). The
+   * steps whose type comes last in the brand's single-product order go first (`single_product_types`:
+   * two keeps the serum and the cream), a type it does not list before any it does; else the last
+   * steps. Dropped steps are said (`over_product_limit`).
+   */
+  function withinCount(steps, skipped, max) {
+    const rank = (s) => { const i = singleSteps ? singleSteps.findIndex((x) => x.type === s.type) : -1; return i < 0 ? Infinity : i; };
+    while (steps.length > max) {
+      const victim = [...steps].sort((a, b) => rank(b) - rank(a) || steps.indexOf(b) - steps.indexOf(a))[0];
+      steps.splice(steps.indexOf(victim), 1);
+      skipped.push({ slot: victim.slot, kind: victim.kind, reason: SKIPPED.OVER_PRODUCT_LIMIT, product_id: victim.product_id, handle: victim.handle });
+    }
+  }
+
+  /**
    * « Trop cher » just after one product (owner, 2026-10-13; widened 2026-10-16).
    * In order, each cheaper than it by CHEAPER_RATIO at least and never premium
    * unless their concern justifies it (a premium cream €1.60 cheaper was offered
@@ -880,7 +924,9 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
   function special(profile, request) {
     const c = read(profile);
     const fit = (x) => [x.k.primary_concern, ...x.k.other_concerns].filter((t) => c.concerns.includes(t)).length;
-    const available = products.filter((x) => x.product.inStock && x.k.status !== 'do_not_advise' && (!x.k.men || c.men));
+    // Their ceiling and the ingredients they avoid hold here too (stress run 2026-11-02: « j'ai 12 € »
+    // for a spa moment got a 31,50 € scrub).
+    const available = products.filter((x) => x.product.inStock && x.k.status !== 'do_not_advise' && (!x.k.men || c.men) && !excluded(x, c) && (!c.budgetMax || (x.product.priceFrom ?? Infinity) <= c.budgetMax));
     if (request === 'gift') {
       const gifts = available.filter((x) => x.k.gift || isBundle(x.k)).sort((a, b) => fit(b) - fit(a) || isBundle(b.k) - isBundle(a.k) || a.product.priceFrom - b.product.priceFrom);
       if (!gifts.length) return null;
@@ -894,7 +940,9 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
       const [type, area] = t.split(':');
       // A spa evening is a treat: its mask is a sheet mask first, a cream mask otherwise.
       const fills = (k) => k.functional_type === type || (type === 'mask' && k.functional_type === 'sheet_mask');
-      const pool = available.filter((x) => fills(x.k) && (x.k.area ?? 'face') === (area ?? 'face') && !used.has(x.id)).sort((a, b) => Boolean(b.k.treat) - Boolean(a.k.treat) || fit(b) - fit(a) || a.product.priceFrom - b.product.priceFrom);
+      // With a ceiling, each step only what is left of it once the earlier steps are paid.
+      const left = c.budgetMax ? c.budgetMax - totalOf(steps) : Infinity;
+      const pool = available.filter((x) => fills(x.k) && (x.k.area ?? 'face') === (area ?? 'face') && !used.has(x.id) && (x.product.priceFrom ?? Infinity) <= left).sort((a, b) => Boolean(b.k.treat) - Boolean(a.k.treat) || fit(b) - fit(a) || a.product.priceFrom - b.product.priceFrom);
       if (!pool.length) continue;
       used.add(pool[0].id);
       steps.push({ slot: `spa_${t.replace(':', '_')}`, kind: KIND[type] ?? type, type, optional: false, product_id: pool[0].id, handle: pool[0].handle, alternatives: pool.slice(1, 3).map((x) => ({ product_id: x.id, handle: x.handle })), reason_codes: ['spa'], merchandised: null, scores: { suitability: fit(pool[0]), routine_fit: 0, total: fit(pool[0]) } });

@@ -35,7 +35,9 @@ export const FIELDS = {
   request: { multi: false },
   budget: { multi: false },
   /** A spending ceiling for the routine, in the shop's currency (« moins de 60 € »). */
-  budget_max: { multi: false }
+  budget_max: { multi: false },
+  /** How many products they want at most (« un seul produit », « deux produits maximum »): 1 to 9. */
+  max_products: { multi: false }
 };
 
 export const SOURCES = ['quick_choice', 'natural_language', 'model_inferred', 'page_context', 'inferred'];
@@ -79,6 +81,7 @@ export function allowedValues(vocabulary) {
 export function isValidUpdate(update, allowed) {
   if (!update || !FIELDS[update.field]) return false;
   if (update.field === 'preferences' || update.field === 'known_exclusions') return typeof update.value === 'string' && FREE_TEXT.test(update.value);
+  if (update.field === 'max_products') return typeof update.value === 'string' && /^[1-9]$/.test(update.value);
   if (update.field === 'budget_max') return typeof update.value === 'string' && /^[1-9]\d{0,4}$/.test(update.value);
   if (update.field === 'age') return typeof update.value === 'string' && /^\d{2,3}$/.test(update.value) && Number(update.value) >= 12 && Number(update.value) <= 110;
   return (allowed[update.field] ?? []).includes(update.value);

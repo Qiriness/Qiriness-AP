@@ -283,8 +283,9 @@
     return addAllToCart([variantGid]);
   }
 
-  /* Several at once (a routine, or « Oui, ajouter »): one request, one unit each. */
-  function addAllToCart(variantGids) {
+  /* Several at once (a routine, or « Oui, ajouter »): one request, one unit each unless `quantities`
+     says more (« Ajoute deux Wrap Hyal-Aqua », 1 to 9). */
+  function addAllToCart(variantGids, quantities) {
     var ids = (variantGids || []).map(function (g) { return String(g || '').replace(/^gid:\/\/shopify\/ProductVariant\//, ''); });
     if (!ids.length || ids.some(function (id) { return !/^[1-9][0-9]{0,19}$/.test(id); })) return Promise.reject(new Error('variant'));
     var root = (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) || '/';
@@ -292,7 +293,10 @@
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ items: ids.map(function (id) { return { id: Number(id), quantity: 1 }; }) })
+      body: JSON.stringify({ items: ids.map(function (id, i) {
+        var q = quantities && Number(quantities[i]);
+        return { id: Number(id), quantity: q >= 1 && q <= 9 ? Math.floor(q) : 1 };
+      }) })
     }).then(function (res) {
       if (!res.ok) throw new Error('cart ' + res.status);
       try {
@@ -1499,7 +1503,7 @@
           }).then(function () { saveState(state); render(); });
         } else if (cart && Array.isArray(cart.add) && cart.add.length) {
           var answered = state.messages[state.messages.length - 1];
-          addAllToCart(cart.add.map(function (x) { return x.variant_id; })).then(function () {
+          addAllToCart(cart.add.map(function (x) { return x.variant_id; }), cart.add.map(function (x) { return x.quantity; })).then(function () {
             return applyDiscount(cart.discount_code);
           }).then(function () {
             if (onCardAdd) cart.add.forEach(function (x) { if (typeof x.product_id === 'string') onCardAdd(x.product_id); });

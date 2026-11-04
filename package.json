@@ -53,6 +53,7 @@
     "advisor:try-flow": "node scripts/advisor/try-routine-flow.mjs",
     "advisor:score": "node scripts/advisor/score-routines.mjs",
     "advisor:try-batch": "node scripts/advisor/try-customer-batch.mjs",
+    "advisor:stress": "node scripts/advisor/stress-run.mjs",
     "advisor:widget-strings": "node scripts/advisor/build-widget-strings.mjs",
     "eval:storefront-knowledge": "node scripts/eval-storefront-knowledge.mjs",
     "inspect:storefront-knowledge": "node scripts/inspect-storefront-knowledge.mjs",

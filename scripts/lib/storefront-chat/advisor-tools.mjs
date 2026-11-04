@@ -298,7 +298,7 @@ export function createAdvisorTurn({ advisor, state = null, message, choice = nul
         ...(s.part ? { time: s.part } : {}),
         reason: s.reason,
         // also_in_day_routine: the day routine's product, used in the evening too.
-        ...(s.product_id && s.reason === 'also_in_day_routine' ? { product: byId.get(s.product_id)?.name ?? null } : s.product_id && s.reason !== 'over_budget' ? { customer_product: byId.get(s.product_id)?.name ?? null } : {})
+        ...(s.product_id && s.reason === 'also_in_day_routine' ? { product: byId.get(s.product_id)?.name ?? null } : s.product_id && s.reason !== 'over_budget' && s.reason !== 'over_product_limit' ? { customer_product: byId.get(s.product_id)?.name ?? null } : {})
       })),
       // The routine's price only with a budget (what it was cut to fit): otherwise the cards show prices
       // and the reply names none (owner, 2026-10-17).

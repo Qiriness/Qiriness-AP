@@ -77,6 +77,8 @@ export default {
 
   /** Each has an `item` group: the ingredient, as typed. */
   exclusions: [
+    // « Je supporte mal le parfum » (stress run 2026-11-02): an intolerance is an exclusion too.
+    /\b(?:non sopporto|tollero male|non tollero|sensibile (?:a|al|ai|alla|alle)|intollerante (?:a|al|ai|alla|alle)|non mi piace|non mi piacciono)(?: il| i| la| le| lo| gli)? (?<item>profum[oi]|fragranz[ae]|alcool|alcol|retinolo|oli essenziali)\b/g,
     /\b(?:senza|niente|allergic[ao] (?:a|al|alla|agli|ai)|evito(?: il| la| lo| i| gli| le)?) (?<item>profumo|fragranza|alcool|alcol|retinolo|oli essenziali|olio essenziale|olio|oli|siliconi?|solfati?|parabeni?|niacinamide|vitamina c|acido [a-z]+)\b/g
   ],
 
@@ -149,9 +151,19 @@ export default {
   moreOptions: /\b(qualcos altro|altre (opzioni|proposte|alternative|scelte)|altri prodotti|un altro prodotto|un altra (opzione|proposta)|cos altro)\b/,
   budgetSmall: /\b(piccolo budget|budget (limitato|ridotto)|economic[oaie]|poco costos[oa]|non troppo car[oa]|troppo car[oa]|(un po|molto|abbastanza) car[oa]|costa troppo|meno car[oa]|piu economic[oa]|non posso permettermel[oa]|fuori (dal mio )?budget|sopra il mio budget)\b/,
   budgetAmount: [
+    /\bho (?:solo |soltanto |circa |solamente )?(\d{1,4}) euro\b/,
+    /\b(\d{1,4}) euro (?:per me|di budget|da spendere)\b/,
     /\b(?:meno di|non piu di|massimo|max|fino a|budget di|sotto i|sotto)\s(\d{1,4})\b(?! (?:anni|ml|giorni|settimane|mesi|minuti|min|ore|volte|prodotti|passaggi|years?|days?|weeks?|months?|ans?|jours?|mois))/,
     /\b(\d{1,4}) (?:euro )?(?:max|massimo)\b/
   ],
+  // How many products they want (« un seul produit », « deux produits maximum »): [pattern, count],
+  // a null count read from the `n` group (a digit, or a word of `countWords`, by number).
+  productCount: [
+    [/\bun (?:solo|unico)(?: [a-z]+){0,2} prodott[oi]\b|\bsolo un prodotto\b/, '1'],
+    [/\b(?<n>\d|due|tre|quattro|cinque) prodotti (?:al massimo|massimo|max)\b/, null],
+    [/\b(?:non piu di|al massimo|massimo|max|solo) (?<n>\d|due|tre|quattro|cinque) prodotti\b/, null]
+  ],
+  countWords: { 2: ['due'], 3: ['tre'], 4: ['quattro'], 5: ['cinque'] },
 
   /** Group 1: the age in years. */
   age: [/\b(\d{2}) anni\b/],
