@@ -321,3 +321,28 @@ test('the model opens the builder only when a routine is asked for, and then fro
   assert.equal(again.advisor.mode, 'routine_builder');
   assert.equal(again.trace.advice.question, 'primary_concern');
 });
+
+test('« Non merci » to the routine offer: one reply, no model call, the petit plaisir for their concern (owner, 2026-11-05)', async () => {
+  const client = scripted(answer('Pour les imperfections, je vous propose ce soin.'));
+  const agent = agentWith(client);
+  const first = await agent.respond({ message: "J'ai des imperfections sur le visage", context: { locale: 'fr' } });
+  // The offer is on the screen (it waits for the engine's own question; that turn is not what is tested here).
+  const state = { ...first.advisor, flow: { ...first.advisor.flow, offer: 'offered' } };
+  // The fixture's prices put every mask over the treat cap: a treat is given here.
+  const treat = CATALOGUE.products.find((p) => /masque/i.test(p.name));
+  const realTreat = advisor.treat;
+  advisor.treat = () => ({ product_id: treat.id });
+  let no;
+  try {
+    no = await agent.respond({ message: 'Non merci', choice: 'flow:routine:no', advisorState: state, context: { locale: 'fr' } });
+  } finally {
+    advisor.treat = realTreat;
+  }
+  // Was: the model's « Bien sûr, je reste à votre écoute », then the treat's « Très bien… » as a second bubble.
+  assert.equal(client.calls.length, 1);
+  assert.equal(no.trace.model_skipped, 'offer_no');
+  assert.equal(no.followUp, undefined);
+  assert.equal(no.text, "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci, parfait pour atténuer vos imperfections, pourrait vous plaire :");
+  assert.deepEqual(no.products.map((c) => c.id), [treat.id]);
+  assert.equal(no.advisor.flow.treat_offered, true);
+});

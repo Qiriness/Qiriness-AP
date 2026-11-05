@@ -10,6 +10,13 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## « Non merci » to the routine offer: one reply, one treat per conversation (2026-11-05)
+
+- **One bubble, no model call** (`model_skipped: 'offer_no'`): the treat's sentence and its card. It was the model's « Bien sûr… je reste à votre écoute » then the treat's « Très bien… ».
+- **The sentence names their concern** (`treatAfterNo(concern)`, six languages): « …celui-ci, parfait pour atténuer vos imperfections, pourrait vous plaire : ». `concernName` now reads the lexicon's key through `concern_map` (`advisor.concernMap`), so a concern typed in the chat gets its label after a routine too.
+- **One treat per conversation:** « Refaire ma routine » no longer resets `treat_offered`; a budget treat sets it.
+- Tests 3980/3980 (two new: the « Non » turn on the real Qiriness sheet, the sentence and once-only rule). **Not deployed.**
+
 ## Launch stress test, run and graded by script (2026-11-02)
 
 - **`npm run advisor:stress -- --smoke | --only <ids> | --all`:** reads `data/advisor/Qiriness_Chatbot_Launch_Stress_Tests_200.xlsx`, sends each test to the chat endpoint signed as the app proxy (new session per standalone test, one session per scenario in turn order, the widget's basket snapshot, `cart.add` applied to the next turn's basket), grades each reply with `gpt-6-sol` against the « Critère de réussite » given the live catalogue, public offers, parameters, storefront policies and what the advisor can do, and writes a copy of the workbook (Réponse, Résultat, Type d'échec, times, Notes QA with the session id) to `data/advisor/stress-runs/` (git-ignored).

@@ -115,16 +115,21 @@ test('on a product page: the answer, the offer; « oui » typed starts the build
   assert.ok(!r3.trace.advice.steps.some((s) => s.id === r4.followUp.products[0].id));
 });
 
-test('« Non merci » to the offer: a treat, and no second offer', async () => {
-  const client = scripted(answer('Pour la déshydratation, le Sérum Hydratant Aqua.'), answer('Très bien.'), answer('Voici.'));
+test('« Non merci » to the offer: ONE reply, the treat for their concern, and no second offer (owner, 2026-11-05)', async () => {
+  const client = scripted(answer('Pour la déshydratation, le Sérum Hydratant Aqua.'), answer('Voici.'));
   const agent = agentWith(client);
   const r1 = await agent.respond({ message: "J'ai le visage déshydraté", context: { locale: 'fr' } });
   assert.deepEqual(r1.followUp.choices.map((c) => c.value), ['flow:routine:yes', 'flow:routine:no']);
   let history = next([], "J'ai le visage déshydraté", r1);
   const r2 = await agent.respond({ message: 'Non merci', choice: 'flow:routine:no', context: { locale: 'fr' }, history, advisorState: advisorStateFromHistory(history) });
   assert.equal(r2.advisor.flow.offer, 'declined');
-  assert.equal(r2.followUp.products[0].id, product('test-masque-hydratant-wrap').id);
-  assert.match(r2.followUp.text, /^Très bien\./);
+  // No model reply beside it (it said « Bien sûr, je reste à votre écoute », then the treat said « Très bien »).
+  assert.equal(r2.trace.model_skipped, 'offer_no');
+  assert.equal(r2.followUp, undefined);
+  assert.equal(r2.products[0].id, product('test-masque-hydratant-wrap').id);
+  // This sample set has no concern labels: the plain sentence (with the concern: builder-questions.test.mjs).
+  assert.equal(r2.text, "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :");
+  assert.equal(r2.advisor.flow.treat_offered, true);
   history = next(history, 'Non merci', r2);
   const r3 = await agent.respond({ message: 'Et pour les rides ?', context: { locale: 'fr' }, history, advisorState: advisorStateFromHistory(history) });
   // No second routine offer (a single product may now get the cart question).
@@ -288,4 +293,16 @@ test('the treat after a routine names their concern, FR and EN (owner, 2026-10-1
   assert.equal(say('en', 'Dark spots'), 'And for a little moment of pampering, perfect for easing your dark spots, you might like this treat:');
   // No concern known: the plain sentence.
   assert.equal(say('fr', null), 'Et pour un moment de douceur, ce petit plaisir pourrait vous plaire :');
+});
+
+test('the treat after a « Non » names their concern too, and comes once per conversation (owner, 2026-11-05)', () => {
+  const treat = { product_id: ID(11) };
+  const say = (lang, concern) => followUpFor({ ...base, lang, flow: { ...emptyFlow(), offer: 'declined' }, answer: 'no', treat, concern }).followUp.text;
+  assert.equal(say('fr', 'Imperfections'), "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci, parfait pour atténuer vos imperfections, pourrait vous plaire :");
+  assert.equal(say('en', 'Dark spots'), 'Of course. If you fancy a little treat, you might like this one, perfect for easing your dark spots:');
+  assert.equal(say('fr', null), "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :");
+  // Already offered: never again, after a « Non » or after a routine.
+  const offered = { ...emptyFlow(), offer: 'declined', treat_offered: true };
+  assert.equal(followUpFor({ ...base, flow: offered, answer: 'no', treat }).followUp, null);
+  assert.notEqual(followUpFor({ ...base, flow: offered, builder: true, advice: { status: 'recommended' }, treat }).followUp?.kind, 'treat');
 });

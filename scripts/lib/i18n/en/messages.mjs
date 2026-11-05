@@ -11,7 +11,7 @@ export default {
     yes: 'Yes please',
     no: 'No thanks',
     treatAfterRoutine: (concern) => concern ? `And for a little moment of pampering, perfect for easing your ${concern}, you might like this treat:` : 'And for a little moment of pampering, you might like this treat:',
-    treatAfterNo: 'Of course. If you fancy a little treat, you might like this one:',
+    treatAfterNo: (concern) => concern ? `Of course. If you fancy a little treat, you might like this one, perfect for easing your ${concern}:` : 'Of course. If you fancy a little treat, you might like this one:',
     cartOne: (name) => `Would you like me to add ${name} to your cart?`,
     cartRoutine: 'Would you like me to add this routine to your cart?',
     cartRoutineDiscount: 'Would you like me to add this routine to your cart? Your routine discount will be applied automatically.',

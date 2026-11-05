@@ -10,7 +10,8 @@
  *               2026-11-02: the owner found it did not work as wanted)
  *   anchor      the product they came in with (page, named, our top pick) is
  *               built into the routine (`pinned` in the engine)
- *   treat       one « petit plaisir » after the routine, or after a « Non »
+ *   treat       one « petit plaisir » per conversation: after the routine, or after a « Non »
+ *               (a new routine asked for later gets none; owner, 2026-11-05)
  *
  * The follow-up's words and buttons both come from here, so they always agree
  * (the live run of 2026-10-13 had the model's text ask one thing and the
@@ -253,7 +254,7 @@ export function followUpFor({ flow, lang, builder, answer, advice, showsProducts
 
   if (answer === 'no' && treat && !next.treat_offered) {
     next.treat_offered = true;
-    return say('treat', t.treatAfterNo, { productIds: [treat.product_id] });
+    return say('treat', t.treatAfterNo(inSentence(concern, lang)), { productIds: [treat.product_id] });
   }
   // A routine is ready: « shall I add it to your cart? » first; the treat follows the answer.
   if (builder && advice?.status === 'recommended' && cartable.length && !cart) return askCart(cartable);

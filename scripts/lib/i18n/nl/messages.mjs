@@ -16,7 +16,7 @@ export default {
     no: 'Nee, dank u',
     // Their concern without an article (« ideaal bij rimpels »): right whatever its gender.
     treatAfterRoutine: (concern) => concern ? `En voor een moment van ontspanning, ideaal bij ${concern}, valt dit kleine verwenmoment misschien in de smaak:` : 'En voor een moment van ontspanning valt dit kleine verwenmoment misschien in de smaak:',
-    treatAfterNo: 'Prima. Als u zin hebt in een klein verwenmoment, valt dit misschien in de smaak:',
+    treatAfterNo: (concern) => concern ? `Prima. Als u zin hebt in een klein verwenmoment, valt dit misschien in de smaak, ideaal bij ${concern}:` : 'Prima. Als u zin hebt in een klein verwenmoment, valt dit misschien in de smaak:',
     cartOne: (name) => `Zal ik ${name} aan uw winkelmandje toevoegen?`,
     cartRoutine: 'Zal ik deze routine aan uw winkelmandje toevoegen?',
     cartRoutineDiscount: 'Zal ik deze routine aan uw winkelmandje toevoegen? Uw routinekorting wordt automatisch toegepast.',

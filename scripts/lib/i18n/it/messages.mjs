@@ -16,7 +16,7 @@ export default {
     no: 'No, grazie',
     // Their concern without an article (« in caso di rughe »): right whatever its gender.
     treatAfterRoutine: (concern) => concern ? `E per un momento di dolcezza, ideale in caso di ${concern}, questo piccolo piacere potrebbe piacerLe:` : 'E per un momento di dolcezza, questo piccolo piacere potrebbe piacerLe:',
-    treatAfterNo: 'Va benissimo. Se avesse voglia di un piccolo piacere, questo potrebbe piacerLe:',
+    treatAfterNo: (concern) => concern ? `Va benissimo. Se avesse voglia di un piccolo piacere, questo, ideale in caso di ${concern}, potrebbe piacerLe:` : 'Va benissimo. Se avesse voglia di un piccolo piacere, questo potrebbe piacerLe:',
     cartOne: (name) => `Desidera che aggiunga ${name} al Suo carrello?`,
     cartRoutine: 'Desidera che aggiunga questa routine al Suo carrello?',
     cartRoutineDiscount: 'Desidera che aggiunga questa routine al Suo carrello? Lo sconto routine verrà applicato automaticamente.',

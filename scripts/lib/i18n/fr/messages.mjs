@@ -23,7 +23,8 @@ export default {
     no: 'Non merci',
     // With their concern (owner, 2026-10-19): « parfait pour atténuer vos imperfections ».
     treatAfterRoutine: (concern) => concern ? `Et pour un moment de douceur, parfait pour atténuer ${possessive(concern)} ${concern}, ce petit plaisir pourrait vous plaire :` : 'Et pour un moment de douceur, ce petit plaisir pourrait vous plaire :',
-    treatAfterNo: "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :",
+    // Their concern too (owner, 2026-11-05): the whole « Non » turn is this one sentence and the card.
+    treatAfterNo: (concern) => concern ? `Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci, parfait pour atténuer ${possessive(concern)} ${concern}, pourrait vous plaire :` : "Très bien. Si l'envie vous prend d'un petit plaisir, celui-ci pourrait vous plaire :",
     cartOne: (name) => `Souhaitez-vous que j'ajoute ${name} à votre panier ?`,
     cartRoutine: 'Souhaitez-vous que j\'ajoute cette routine à votre panier ?',
     cartRoutineDiscount: 'Souhaitez-vous que j\'ajoute cette routine à votre panier ? Votre remise routine s\'y appliquera automatiquement.',

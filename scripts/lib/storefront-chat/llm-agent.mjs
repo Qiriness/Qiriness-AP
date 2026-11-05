@@ -396,8 +396,9 @@ export function createLlmAgent({
       if (advisorTurn) {
         const builder = advisorTurn.mode === 'routine_builder';
         const lang = displayLanguage(language, locale);
-        // A new routine asked for after one: its treat and cart question come again.
-        if (advisorTurn.restarted) flow = { ...flow, treat_offered: false, routine_ref: null, cart: { pending: [], asked: [] } };
+        // A new routine asked for after one: its cart question comes again; never a second treat (owner,
+        // 2026-11-05: « petit plaisir should be offered once per convo »).
+        if (advisorTurn.restarted) flow = { ...flow, routine_ref: null, cart: { pending: [], asked: [] } };
         // Entering the builder without an offer (« construisez-moi une routine »): the product they came for still counts.
         if (builder && !flow.anchor) {
           const anchor = anchorFor({ pageProductId: pageProduct?.id ?? null, resolvedIds: [...resolvedIds] });
@@ -406,6 +407,7 @@ export function createLlmAgent({
         const finalAdvice = advisorTurn.advice;
         // A budget treat already is the treat: never another one, never the routine offer after it.
         const budgetTreat = finalAdvice?.playbook?.key === 'treat';
+        if (budgetTreat) flow = { ...flow, treat_offered: true };
         // The treat follows a routine: right away, or after the answer to « shall I add it to your cart? ».
         const routineCartAnswered = Boolean(flowStart.cart) && (cartPending.length > 1 || Boolean(flowStart.flow.routine_ref));
         const treatDue = !budgetTreat && !flow.treat_offered && (flowStart.answer === 'no' || routineCartAnswered || (builder && finalAdvice?.status === 'recommended'));
@@ -436,7 +438,7 @@ export function createLlmAgent({
           cartable,
           cart: flowStart.cart,
           discount: Boolean(routineDiscount) && isBuiltRoutine(finalAdvice, advisorTurn.mode),
-          concern: concernName(advisorTurn.profile, advisor?.routineLabels ?? {}, finalAdvice?.playbook?.key ?? null, lang)
+          concern: concernName(advisorTurn.profile, advisor?.routineLabels ?? {}, finalAdvice?.playbook?.key ?? null, lang, advisor?.concernMap ?? {})
         });
         flow = decided.flow;
         followUp = decided.followUp;
@@ -624,6 +626,27 @@ export function createLlmAgent({
           resolution: null,
           refs: { recommended: [], mentioned: [] },
           ...(followUp ? { followUp: { text: followUp.text, products: followUpCards, choices: followUp.choices } } : {}),
+          ...(advisorTurn ? { advisor: advisorState_(advisorTurn.nextState()), events: [] } : {})
+        };
+      }
+
+      // « NON MERCI » TO THE ROUTINE OFFER: the code's own turn when a treat follows (owner, 2026-11-05: the
+      // model's « Bien sûr, je reste à votre écoute » then the treat's « Très bien… » were two replies to one
+      // « Non »). One bubble: the treat's sentence, its card. A longer message (« non, mais un sérum ? ») is a request.
+      const offerNo = flowStart.answer === 'no' && followUp?.kind === 'treat' && (flowChoice || (!resolvedIds.size && message.trim().split(/\s+/).length <= 4));
+      if (offerNo) {
+        trace.model_skipped = 'offer_no';
+        trace.follow_up = 'treat';
+        return {
+          text: followUp.text,
+          replyLanguage: displayLanguage(language, locale),
+          products: toCards(followUp.productIds.map((id) => ({ handle: byId(id)?.handle, rationale: '' })), offered, catalogue, money),
+          choices: [],
+          model,
+          usage: usage.inputTokens || usage.outputTokens ? usage : null,
+          trace,
+          resolution: null,
+          refs: { recommended: [], mentioned: followUp.productIds },
           ...(advisorTurn ? { advisor: advisorState_(advisorTurn.nextState()), events: [] } : {})
         };
       }

@@ -24,10 +24,16 @@ const STAGES = new Set(['prepare', 'activate', 'optimise', 'regenerate']);
 
 const clip = (text) => (typeof text === 'string' && text.trim() ? (text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT - 1).trimEnd()}…` : text.trim()) : null);
 
-/** Their main concern's name in their language (« Rides »), else their routine's (the treat's sentence). */
-export function concernName(profile, labels = {}, mainKey = null, lang = 'fr') {
+/**
+ * Their main concern's name in their language (« Rides »), else their routine's (the treat's sentence).
+ * A concern read from their words is the lexicon's key (« imperfections »): the brand's concern_map gives
+ * its standard concern (« blemishes »), the key the labels use (owner, 2026-11-05: the treat after « Non »
+ * named no concern).
+ */
+export function concernName(profile, labels = {}, mainKey = null, lang = 'fr', concernMap = {}) {
   const name = (row) => localized(row, lang);
-  return name(labels.concerns?.[valueOf(profile, 'primary_concern')]) ?? name(labels.main?.[mainKey]) ?? null;
+  const key = valueOf(profile, 'primary_concern');
+  return name(labels.concerns?.[key]) ?? name(labels.concerns?.[concernMap?.[key]]) ?? name(labels.main?.[mainKey]) ?? null;
 }
 
 /** « Peau sèche · Rides »: what of theirs this product was chosen for (its skin and concern codes), in their language. */
