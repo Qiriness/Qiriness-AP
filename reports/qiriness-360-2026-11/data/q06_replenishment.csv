@@ -1,0 +1,76 @@
+product,range_,buyers,matured_buyers,avg_qty_per_order,pct_same_product_180d,pct_same_product_ever,pct_any_later_order_matured,pct_switch_same_range,reorder_events,p25_days,median_days,p75_days
+Soins Crèmes Anti-âge Duo Jour & Nuit Temps Sublime,Temps Sublime,170,121,1.11,19.8,22.9,57.0,21.2,39,81,117,215
+Crème Yeux Anti-Âge Regard d’Exception,Exception,50,39,1.01,28.2,22.0,56.4,18.0,11,59,110,150
+Élixir Source d'Eau,Source d'Eau,107,67,1.13,22.4,21.5,44.8,15.9,23,65,106,163
+CC Crème Homme - Acide Hyaluronique - Soin Bonne Mine,Homme,293,251,1.83,17.9,21.5,30.7,5.8,63,74,127,196
+Fluide Hydratant Acide Hyaluronique - Homme,Homme,77,62,1.55,8.1,20.8,35.5,16.9,16,149,200,294
+Nettoyant Visage Purifiant Homme - Protection Quotidienne,Homme,59,48,1.40,10.4,20.3,43.8,25.4,12,65,151,212
+Mousse Divine,Nettoyage & lotions,116,81,1.21,13.6,19.8,42.0,15.5,23,106,159,201
+Sérum Anti-Âge Global - Élixir d'Exception,Exception,41,27,1.09,25.9,19.5,40.7,22.0,8,81,107,114
+Crème Contour des Yeux Anti-âge - Caresse Regard Sublime,Regard (Éclat / Sublime),89,62,1.11,16.1,19.1,56.5,13.5,17,87,170,241
+Crème Anti-âge - Rétinol & Acide Hyaluronique - Caresse Temps Sublime Riche,Temps Sublime,43,28,1.08,10.7,18.6,57.1,27.9,8,100,177,272
+Sérum Anti-âge Liftant Acide Hyaluronique & Rétinol - Élixir Temps Sublime,Temps Sublime,70,54,1.07,9.3,18.6,57.4,34.3,13,125,180,246
+Lotion Hydratante Peau Sèche - Lotion Exquise,Nettoyage & lotions,106,75,1.50,16.0,17.9,46.7,12.3,19,27,64,188
+Caresse Source d'Eau,Source d'Eau,215,145,1.22,13.1,17.2,50.3,17.2,37,96,161,215
+Caresse d'Exception,Exception,82,66,1.05,18.2,17.1,36.4,15.9,14,53,128,164
+Baume Hydratant,Autre,59,48,1.65,10.4,16.9,33.3,13.6,10,100,144,205
+Caresse Source d'Eau Riche,Source d'Eau,83,56,1.21,12.5,16.9,50.0,19.3,14,70,135,196
+Eau Micellaire Démaquillante 3 en 1 - Eau Micellaire Divine,Nettoyage & lotions,60,46,1.17,10.9,16.7,45.7,16.7,10,63,205,357
+Crème Hydratante Niacinamide Protection Anti-tâches  - Caresse Éclat Parfait,Éclat Parfait,144,103,1.18,16.5,16.0,37.9,6.9,23,64,135,166
+Crème Nuit Anti-Âge Régénérante - Caresse Temps Sublime,Temps Sublime,63,44,1.08,13.6,15.9,56.8,30.2,10,143,162,202
+Sérum Booster Anti-âge Vitamine C - Temps Sublime,Temps Sublime,128,96,1.11,14.6,15.6,46.9,20.3,20,47,110,185
+Élixir Éclat Parfait,Éclat Parfait,73,67,1.26,13.4,15.1,53.7,20.5,11,40,127,161
+Lait Démaquillant Amande Douce - Fluide Lacté Exquis,Nettoyage & lotions,48,29,1.24,13.8,14.6,44.8,12.5,7,49,101,166
+Pain Nettoyant Visage Doux Beurre de Karité - Sans savon,Nettoyage & lotions,64,51,1.50,13.7,14.1,49.0,15.6,9,37,58,150
+CC Crème - Soin Bonne Mine Gel Teinté,Teint & solaire (CC/BB/UV),313,240,1.25,10.8,14.1,31.7,2.9,44,76,149,218
+Crème Anti-Âge Homme,Homme,79,64,1.40,9.4,13.9,32.8,17.7,11,114,156,230
+Crème Anti-Âge - Acide Hyaluronique - Caresse Active Énergie Lift,Active Énergie,182,172,1.07,9.3,13.7,42.4,14.3,25,76,135,204
+Masque Hydratant - Sleeping Mask Peau Sèche,"Masques, wraps & patchs",132,101,1.15,8.9,13.6,45.5,16.7,18,75,152,211
+BB Crème,Teint & solaire (CC/BB/UV),175,135,1.15,11.9,12.6,37.0,2.9,22,70,141,182
+Crème Hydratante et Matifiante - Voile Source d'Eau,Source d'Eau,169,132,1.27,9.1,12.4,30.3,7.1,21,70,162,206
+Coffret Hydratation Corps - Crème Corps et Crème Mains,Corps,67,51,1.14,15.7,11.9,45.1,7.5,8,30,50,89
+Masque Visage Matifiant - Wrap Purifiant,"Masques, wraps & patchs",117,88,2.66,1.1,11.1,30.7,20.5,13,85,207,252
+Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,Active Énergie,208,149,1.13,8.1,11.1,40.9,8.7,23,78,147,222
+Masque Mains Hydratant - Wrap Hydra-Repair,Corps,45,38,2.02,7.9,11.1,34.2,8.9,5,110,159,180
+Sérum Anti-Âge - Élixir Active Énergie Lift,Active Énergie,100,73,1.04,9.6,11.0,49.3,21.0,11,105,126,205
+Coffret Soins Hydratation Visage Source d'Eau,Source d'Eau,64,64,1.23,10.9,10.9,57.8,39.1,7,37,40,56
+Gel Nettoyant Anti-imperfections - Ginger Gel Purifiant,Autre,129,93,1.31,10.8,10.9,34.4,11.6,14,70,115,154
+Sérum Yeux Caféine + Niacinamide Vitamine B3 - Élixir Regard Éclat,Regard (Éclat / Sublime),168,97,1.11,8.2,10.7,45.4,8.9,18,66,97,197
+Caresse Active Énergie,Active Énergie,84,58,1.08,10.3,10.7,39.7,10.7,9,88,155,184
+Lotion Kéfir Purifiante,Nettoyage & lotions,114,80,1.25,10.0,10.5,37.5,15.8,12,59,108,176
+Masque Visage Hydratant Enveloppant - Wrap Apaisant,"Masques, wraps & patchs",182,140,2.42,3.6,10.4,35.7,18.1,19,67,180,254
+Flash Patch®,"Masques, wraps & patchs",59,39,1.66,7.7,10.2,33.3,8.5,6,125,175,217
+Coffret Source d’Eau – Rituel Hydratation Intense Crème et Exfoliant,Source d'Eau,151,106,1.24,8.5,9.9,40.6,19.9,15,93,128,171
+"Coffret Soins Anti-âge - Exfoliant, Crème, Eau micellaire - Temps Sublime",Temps Sublime,71,54,1.12,7.4,9.9,42.6,25.4,7,17,29,115
+Déodorant Bille Anti-transpirant 48H - Fleur d'Oranger 100% Naturel - Roll On - Sans Alcool,Corps,62,46,1.24,8.7,9.7,52.2,8.1,6,115,132,193
+Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,"Masques, wraps & patchs",281,187,1.78,6.4,9.6,33.2,15.3,27,19,66,180
+Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,Temps Sublime,138,110,1.08,7.3,9.4,38.2,15.2,13,102,115,180
+Kit 4 Masques Hydratants Acide Hyaluronique - Hyal-Aqua,"Masques, wraps & patchs",194,161,1.24,6.8,9.3,27.3,16.0,18,73,119,205
+Crème Mains Hydratante & Réparatrice - Caresse Mains Velours,Corps,44,34,1.63,5.9,9.1,44.1,15.9,4,140,166,214
+Masque Visage Hydratant - Wrap Éclat,"Masques, wraps & patchs",155,102,1.69,5.9,9.0,32.4,15.5,14,82,159,200
+Masque Hydratant - Wrap Hyal-Aqua,"Masques, wraps & patchs",127,83,1.81,6.0,8.7,36.1,19.7,11,67,85,125
+Masque Pieds Enveloppant Hydratant - Wrap Pieds Hydra-Repair,Corps,84,51,1.78,9.8,8.3,33.3,4.8,7,62,90,191
+Brume Hydratante Protectrice - Concombre Acide Hyaluronique - Sensi Zen,Sensi Zen,73,44,1.38,6.8,8.2,34.1,1.4,6,32,82,189
+Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,"Masques, wraps & patchs",186,151,2.35,7.9,8.1,35.8,14.5,15,66,128,173
+UV PROTECT SPF 50 - Soin Solaire Haute Protection,Teint & solaire (CC/BB/UV),77,49,1.17,4.1,7.8,38.8,1.3,6,39,85,124
+Lait Corps Qi Revitalisant – Hydratation & Éclat,Qi (corps & bien-être),65,47,1.13,6.4,7.7,55.3,12.3,5,68,119,208
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),Regard (Éclat / Sublime),340,248,1.11,8.9,7.6,24.2,2.4,26,51,72,141
+Masque Exfoliant Hydratant - Grenade Citron - Wrap Vitamine A & E,"Masques, wraps & patchs",96,80,1.05,6.3,7.3,30.0,18.8,7,77,97,172
+Coffret Soin Anti-Âge Temps Sublime,Temps Sublime,111,94,1.09,6.4,7.2,43.6,22.5,8,133,159,184
+Crème Anti-âge Globale - Acide Hyaluronique & Rétinol - Caresse Temps Sublime,Temps Sublime,99,71,1.06,5.6,7.1,46.5,24.2,7,114,135,202
+Coffret Énergie Lift – Le trio vitalité bonne mine,Active Énergie,44,44,1.27,6.8,6.8,56.8,20.5,3,32,46,94
+Coffret Prestige Temps Sublime – Rituel anti-âge global & regard sublimé,Temps Sublime,100,100,1.09,6.0,6.0,44.0,39.0,6,8,8,32
+Masque Argile Thermo-Purifiant - Huile de Pépins de Raisin- Wrap Terre d'Orient,"Masques, wraps & patchs",84,69,1.13,4.3,6.0,21.7,11.9,5,129,139,180
+Exfoliant sans grains -  Wrap Exfolys,"Masques, wraps & patchs",143,115,1.13,4.3,5.6,23.5,11.2,8,49,154,201
+Coffret Hydratation Visage & Regard – Caresse Source d’Eau,Source d'Eau,56,56,1.14,5.4,5.4,50.0,41.1,3,24,26,27
+Eau Qi – Eau de Parfum Énergisante & Revitalisante,Qi (corps & bien-être),57,45,1.07,2.2,3.5,33.3,7.0,2,96,105,115
+Kit Rituel Hydratant,"Masques, wraps & patchs",64,57,1.42,1.8,3.1,22.8,9.4,2,134,232,331
+Lotion Tonique & Hydratante - Éclat Parfait,Éclat Parfait,77,58,1.12,0.0,2.6,34.5,9.1,2,120,140,161
+Coffret D'Exception – Crème Anti-Âge & Gommage Visage,Exception,41,34,1.05,2.9,2.4,35.3,22.0,1,157,157,157
+Sauna Visage,Appareils & SPA,87,78,1.25,1.3,2.3,21.8,0.0,2,154,177,199
+Masque LED Visage Éclat & Régénération,Appareils & SPA,104,94,1.01,1.1,1.9,18.1,0.0,2,87,146,206
+Coffret Temps Sublime et Soin Bonne Mine – Éclat & Jeunesse,Temps Sublime,56,56,1.04,1.8,1.8,50.0,21.4,1,109,109,109
+"Kit Rituel Éclat - Spa, Gommage, Masque","Masques, wraps & patchs",79,79,1.45,1.3,1.3,26.6,13.9,1,28,28,28
+Coffret Source d'Eau  - Hydratation & Éclat,Source d'Eau,73,1,1.31,0.0,0.0,100.0,8.2,0,,,
+Gommage Grains Purifiant - Riz & Hibiscus- Wrap Exfolys,"Masques, wraps & patchs",92,71,1.03,0.0,0.0,38.0,15.2,0,,,
+Kit Rituel Purifiant,"Masques, wraps & patchs",49,48,1.27,0.0,0.0,20.8,16.3,0,,,

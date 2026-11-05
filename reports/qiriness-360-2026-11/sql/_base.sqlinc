@@ -1,0 +1,104 @@
+-- Shared CTEs, inserted where a statement writes /*BASE*/ (must be followed by more CTEs or a select).
+-- POPULATION: Qiriness own-site DTC orders (Online Store + Shop app), processed 2025-03-01 .. 2026-10-31 (Europe/Paris),
+-- excluding: marketplaces (Amazon, Mirakl/Yves Rocher), draft orders, cancelled/voided, zero-merchandise orders,
+-- internal/test codes (LAPFAM26 = LAP family, pattest). Session timezone is Europe/Paris (set by run.mjs).
+-- MONEY: Shopify prices are VAT-inclusive; total_tax is only populated from 2026-07, so ex-VAT = incl-VAT / 1.20.
+--   gross_ttc  = sum of line original_total (pre-discount merchandise, incl. VAT)
+--   sub_ttc    = subtotal_price (merchandise after all discounts, before shipping, incl. VAT)
+--   net_ttc    = sub_ttc - refunds (refund capped at sub_ttc; refunds of shipping thus slightly overstate)
+--   net_ht     = net_ttc / 1.2   ← "net product revenue" used in the report
+--   shipping and tax excluded; no gift cards are sold (checked).
+-- QUALIFYING ORDER = net_ttc > 0 (fully refunded orders do not count as a purchase).
+-- LEGACY customer = profile created on 2025-04-14 (the 51,770-profile import from the previous platform).
+bo_all as (
+  select o.id, o.customer_id cid, o.processed_at ts,
+         date_trunc('month', o.processed_at)::date m,
+         o.subtotal_price sub_ttc,
+         coalesce(o.total_discounts,0) disc_ttc,
+         least(coalesce(o.total_refunded,0), o.subtotal_price) ref_ttc,
+         o.subtotal_price - least(coalesce(o.total_refunded,0), o.subtotal_price) net_ttc,
+         (o.subtotal_price - least(coalesce(o.total_refunded,0), o.subtotal_price)) / 1.2 net_ht,
+         coalesce(array_length(o.discount_codes,1),0) > 0 has_code,
+         exists (select 1 from jsonb_array_elements(coalesce(o.discount_applications,'[]')) d
+                 where d->>'kind' in ('code','manual')
+                    or (d->>'kind' = 'automatic' and d->>'name' not ilike '%frais de port%')) has_promo,
+         o.discount_codes codes,
+         coalesce(o.shipping_destination->>'country_code','??') cc,
+         (c.shopify_created_at at time zone 'Europe/Paris')::date = date '2025-04-14' legacy,
+         c.email_marketing_state mstate
+  from orders o
+  join customers c on c.id = o.customer_id and c.shop_id = :shop
+  where o.shop_id = :shop
+    and o.sales_channel in ('Online Store','Shop')
+    and o.cancelled_at is null and coalesce(o.financial_status,'') <> 'VOIDED'
+    and o.subtotal_price > 0
+    and o.processed_at >= timestamptz '2025-03-01 00:00 Europe/Paris'
+    and o.processed_at <  timestamptz '2026-11-01 00:00 Europe/Paris'
+    and not (coalesce(o.discount_codes, '{}') && array['LAPFAM26','pattest'])
+),
+bo as (
+  select b.*,
+         row_number() over (partition by cid order by ts, id) seq,
+         lag(ts) over (partition by cid order by ts, id) prev_ts,
+         min(ts) over (partition by cid) first_ts,
+         count(*) over (partition by cid) n_orders
+  from bo_all b where net_ttc > 0
+),
+bl as (
+  select l.order_id, b.cid, b.ts, b.m, b.seq, b.has_promo, b.has_code, b.legacy,
+         coalesce(nullif(l.product_id,''), 'title:' || l.title) pkey,
+         l.title, l.sku, l.quantity::int qty,
+         l.original_total::numeric gross_ttc,
+         -- allocate order-level discounts and refunds proportionally to the line
+         l.discounted_total::numeric * b.sub_ttc / nullif(sum(l.discounted_total::numeric) over (partition by l.order_id),0)
+           * (b.net_ttc / b.sub_ttc) / 1.2 net_ht,
+         case
+           when l.title ilike '%homme%' then 'Homme'
+           when l.title ilike '% qi %' or l.title ilike 'qi %' then 'Qi (corps & bien-être)'
+           when l.title ilike '%temps sublime%' then 'Temps Sublime'
+           when l.title ilike '%source d%eau%' then 'Source d''Eau'
+           when l.title ilike '%exception%' then 'Exception'
+           when l.title ilike '%nergie%' then 'Active Énergie'
+           when l.title ilike '%clat parfait%' then 'Éclat Parfait'
+           when l.title ilike '%sensi zen%' then 'Sensi Zen'
+           when l.title ilike 'CC Cr%' or l.title ilike 'BB Cr%' or l.title ilike '%UV PROTECT%' or l.title ilike '%bonne mine%'
+             or l.title ilike '%gel teint%' then 'Teint & solaire (CC/BB/UV)'
+           when l.title ilike '%regard%' then 'Regard (Éclat / Sublime)'
+           when l.title ilike '%kit rituel%' then 'Masques, wraps & patchs'
+           when l.title ilike '%LED%' or l.title ilike '%acupression%' or l.title ilike '%sauna%' or l.title ilike '%gua sha%'
+             or l.title ilike '%roller%' or l.title ilike '%spa %' then 'Appareils & SPA'
+           when l.title ilike '%corps%' or l.title ilike '%mains%' or l.title ilike '%pieds%' or l.title ilike '%body%'
+             or l.title ilike '%odorant%' or l.title ilike '%bain lact%' or l.title ilike '%peignoir%' then 'Corps'
+           when l.title ilike '%wrap%' or l.title ilike 'masque%' or l.title ilike '%patch%' or l.title ilike '%hyal-%'
+             or l.title ilike '%masques%' then 'Masques, wraps & patchs'
+           when l.title ilike '%nettoy%' or l.title ilike '%micellaire%' or l.title ilike '%maquill%' or l.title ilike '%mousse%'
+             or l.title ilike '%lotion%' then 'Nettoyage & lotions'
+           else 'Autre'
+         end range_,
+         case
+           when l.title ilike '%regard%' or l.title ilike '%yeux%' then 'Yeux'
+           when l.title ilike '%LED%' or l.title ilike '%acupression%' or l.title ilike '%sauna%' or l.title ilike '%gua sha%'
+             or l.title ilike '%spa %' then 'Appareils & SPA'
+           when l.title ilike '% qi %' or l.title ilike 'qi %' or l.title ilike '%corps%' or l.title ilike '%mains%'
+             or l.title ilike '%pieds%' or l.title ilike '%body%' or l.title ilike '%odorant%' or l.title ilike '%bain lact%'
+             or l.title ilike '%peignoir%' then 'Corps & bien-être'
+           when l.title ilike '%anti-%ge%' or l.title ilike '%temps sublime%' or l.title ilike '%exception%'
+             or l.title ilike '%nergie%' or l.title ilike '%wrap d%or%' or l.title ilike '%lift%' then 'Anti-âge'
+           when l.title ilike '%purif%' or l.title ilike '%nettoy%' or l.title ilike '%micellaire%' or l.title ilike '%maquill%'
+             or l.title ilike '%exfol%' or l.title ilike '%gommage%' or l.title ilike '%flash patch%' or l.title ilike '%matifiant -%'
+             or l.title ilike '%mousse%' then 'Nettoyage & purifiant'
+           when l.title ilike 'CC Cr%' or l.title ilike 'BB Cr%' or l.title ilike '%UV PROTECT%' or l.title ilike '%clat%'
+             or l.title ilike '%vitamin%' or l.title ilike '%bonne mine%' or l.title ilike '%teint%' then 'Éclat & teint'
+           when l.title ilike '%hydrat%' or l.title ilike '%source d%eau%' or l.title ilike '%hyal%' or l.title ilike '%sensi zen%'
+             or l.title ilike '%exquis%' or l.title ilike '%baume%' or l.title ilike '%d''eau%' or l.title ilike '%apais%' then 'Hydratation'
+           else 'Autre'
+         end need,
+         (l.title ilike '%coffret%' or l.title ilike 'kit %' or l.title ilike 'duo %' or l.title ilike '%soin duo%') is_set,
+         l.title ilike '%chantillon%' is_sample
+  from order_lines l
+  join bo b on b.id = l.order_id
+  where l.shop_id = :shop
+),
+bp as (  -- paid product lines only (samples and 100%-gifted lines dropped)
+  select * from bl where net_ht > 0.01 and not is_sample
+)

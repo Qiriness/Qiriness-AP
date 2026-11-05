@@ -1,0 +1,117 @@
+product_a,product_b,pair_orders,orders_a,orders_b,support_pct,conf_a_to_b,conf_b_to_a,lift
+Kit Rituel Hydratant,Kit Rituel Purifiant,21,66,49,0.41,31.8,42.9,33.60
+Kit Rituel Purifiant,"Kit Rituel Éclat - Spa, Gommage, Masque",25,49,80,0.48,51.0,31.3,33.00
+Masque Pieds Enveloppant Hydratant - Wrap Pieds Hydra-Repair,Masque Mains Hydratant - Wrap Hydra-Repair,23,92,50,0.44,25.0,46.0,25.87
+Kit Rituel Hydratant,"Kit Rituel Éclat - Spa, Gommage, Masque",23,66,80,0.44,34.8,28.8,22.54
+Sérum Anti-Âge Global - Élixir d'Exception,Crème Yeux Anti-Âge Regard d’Exception,16,60,73,0.31,26.7,21.9,18.90
+Caresse d'Exception,Crème Yeux Anti-Âge Regard d’Exception,29,129,73,0.56,22.5,39.7,15.93
+Sérum Anti-Âge Global - Élixir d'Exception,Caresse d'Exception,23,60,129,0.44,38.3,17.8,15.37
+Gel Nettoyant Anti-imperfections - Ginger Gel Purifiant,Lotion Kéfir Purifiante,51,149,131,0.99,34.2,38.9,13.52
+Masque Visage Hydratant Enveloppant - Wrap Apaisant,Masque Visage Matifiant - Wrap Purifiant,70,205,133,1.35,34.1,52.6,13.28
+Crème Anti-Âge Homme,Baume Hydratant,18,99,77,0.35,18.2,23.4,12.22
+Fluide Hydratant Acide Hyaluronique - Homme,Nettoyant Visage Purifiant Homme - Protection Quotidienne,17,96,78,0.33,17.7,21.8,11.75
+Crème Anti-Âge Homme,Nettoyant Visage Purifiant Homme - Protection Quotidienne,17,99,78,0.33,17.2,21.8,11.39
+Élixir Éclat Parfait,Lotion Tonique & Hydratante - Éclat Parfait,15,87,79,0.29,17.2,19.0,11.29
+Crème Hydratante Niacinamide Protection Anti-tâches  - Caresse Éclat Parfait,Élixir Éclat Parfait,32,172,87,0.62,18.6,36.8,11.06
+Crème Anti-Âge Homme,Fluide Hydratant Acide Hyaluronique - Homme,20,99,96,0.39,20.2,20.8,10.89
+Lotion Hydratante Peau Sèche - Lotion Exquise,Lait Démaquillant Amande Douce - Fluide Lacté Exquis,15,131,57,0.29,11.5,26.3,10.39
+Masque Hydratant - Wrap Hyal-Aqua,Masque Visage Hydratant - Wrap Éclat,49,139,176,0.95,35.3,27.8,10.36
+Sérum Anti-âge Liftant Acide Hyaluronique & Rétinol - Élixir Temps Sublime,Crème Contour des Yeux Anti-âge - Caresse Regard Sublime,16,88,111,0.31,18.2,14.4,8.48
+Masque Visage Hydratant Enveloppant - Wrap Apaisant,Masque Visage Hydratant - Wrap Éclat,58,205,176,1.12,28.3,33.0,8.32
+Crème Anti-Âge - Acide Hyaluronique - Caresse Active Énergie Lift,Sérum Anti-Âge - Élixir Active Énergie Lift,39,213,117,0.75,18.3,33.3,8.10
+Masque Visage Matifiant - Wrap Purifiant,Masque Visage Hydratant - Wrap Éclat,36,133,176,0.70,27.1,20.5,7.96
+Masque Visage Hydratant Enveloppant - Wrap Apaisant,Masque Hydratant - Wrap Hyal-Aqua,43,205,139,0.83,21.0,30.9,7.81
+Masque Exfoliant Hydratant - Grenade Citron - Wrap Vitamine A & E,Masque Argile Thermo-Purifiant - Huile de Pépins de Raisin- Wrap Terre d'Orient,14,106,89,0.27,13.2,15.7,7.68
+Gommage Grains Purifiant - Riz & Hibiscus- Wrap Exfolys,Masque Argile Thermo-Purifiant - Huile de Pépins de Raisin- Wrap Terre d'Orient,12,92,89,0.23,13.0,13.5,7.58
+Élixir Source d'Eau,Caresse Source d'Eau Riche,23,152,104,0.44,15.1,22.1,7.53
+Crème Hydratante Niacinamide Protection Anti-tâches  - Caresse Éclat Parfait,Lotion Tonique & Hydratante - Éclat Parfait,19,172,79,0.37,11.0,24.1,7.23
+Masque Mains Hydratant - Wrap Hydra-Repair,Masque Visage Hydratant - Wrap Éclat,12,50,176,0.23,24.0,6.8,7.06
+Lotion Tonique & Hydratante - Éclat Parfait,Gel Nettoyant Anti-imperfections - Ginger Gel Purifiant,16,79,149,0.31,20.3,10.7,7.03
+Masque Hydratant - Wrap Hyal-Aqua,Masque Visage Matifiant - Wrap Purifiant,25,139,133,0.48,18.0,18.8,7.00
+Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,Masque Hydratant - Wrap Hyal-Aqua,36,207,139,0.70,17.4,25.9,6.47
+Élixir Source d'Eau,Masque Hydratant - Sleeping Mask Peau Sèche,28,152,158,0.54,18.4,17.7,6.03
+Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,Masque Exfoliant Hydratant - Grenade Citron - Wrap Vitamine A & E,19,156,106,0.37,12.2,17.9,5.94
+Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,Sérum Anti-Âge - Élixir Active Énergie Lift,31,235,117,0.60,13.2,26.5,5.83
+Masque Pieds Enveloppant Hydratant - Wrap Pieds Hydra-Repair,Masque Visage Hydratant - Wrap Éclat,18,92,176,0.35,19.6,10.2,5.75
+Masque Pieds Enveloppant Hydratant - Wrap Pieds Hydra-Repair,Masque Visage Matifiant - Wrap Purifiant,13,92,133,0.25,14.1,9.8,5.50
+Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,Crème Anti-Âge - Acide Hyaluronique - Caresse Active Énergie Lift,53,235,213,1.02,22.6,24.9,5.48
+Caresse Source d'Eau,Élixir Source d'Eau,43,273,152,0.83,15.8,28.3,5.36
+Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,Masque Argile Thermo-Purifiant - Huile de Pépins de Raisin- Wrap Terre d'Orient,14,156,89,0.27,9.0,15.7,5.22
+Mousse Divine,Eau Micellaire Démaquillante 3 en 1 - Eau Micellaire Divine,12,157,76,0.23,7.6,15.8,5.20
+Kit 4 Masques Hydratants Acide Hyaluronique - Hyal-Aqua,Masque Visage Hydratant - Wrap Éclat,38,218,176,0.73,17.4,21.6,5.12
+Masque Pieds Enveloppant Hydratant - Wrap Pieds Hydra-Repair,Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,28,92,321,0.54,30.4,8.7,4.91
+CC Crème Homme - Acide Hyaluronique - Soin Bonne Mine,Nettoyant Visage Purifiant Homme - Protection Quotidienne,28,380,78,0.54,7.4,35.9,4.89
+Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,Masque Visage Hydratant - Wrap Éclat,34,207,176,0.66,16.4,19.3,4.83
+Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,Masque Visage Hydratant - Wrap Éclat,52,321,176,1.01,16.2,29.5,4.76
+Masque Argile Thermo-Purifiant - Huile de Pépins de Raisin- Wrap Terre d'Orient,Gel Nettoyant Anti-imperfections - Ginger Gel Purifiant,12,89,149,0.23,13.5,8.1,4.68
+Kit 4 Masques Hydratants Acide Hyaluronique - Hyal-Aqua,Masque Visage Matifiant - Wrap Purifiant,26,218,133,0.50,11.9,19.5,4.64
+Kit 4 Masques Hydratants Acide Hyaluronique - Hyal-Aqua,Masque Pieds Enveloppant Hydratant - Wrap Pieds Hydra-Repair,18,218,92,0.35,8.3,19.6,4.64
+Crème Hydratante et Matifiante - Voile Source d'Eau,Gel Nettoyant Anti-imperfections - Ginger Gel Purifiant,27,203,149,0.52,13.3,18.1,4.62
+Masque Pieds Enveloppant Hydratant - Wrap Pieds Hydra-Repair,Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,17,92,207,0.33,18.5,8.2,4.62
+Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,Masque Visage Matifiant - Wrap Purifiant,38,321,133,0.73,11.8,28.6,4.61
+Masque Mains Hydratant - Wrap Hydra-Repair,Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,14,50,321,0.27,28.0,4.4,4.51
+Crème Hydratante et Matifiante - Voile Source d'Eau,Lotion Kéfir Purifiante,22,203,131,0.43,10.8,16.8,4.28
+Masque Hydratant - Sleeping Mask Peau Sèche,Gommage Grains Purifiant - Riz & Hibiscus- Wrap Exfolys,12,158,92,0.23,7.6,13.0,4.27
+Kit 4 Masques Hydratants Acide Hyaluronique - Hyal-Aqua,Masque Visage Hydratant Enveloppant - Wrap Apaisant,36,218,205,0.70,16.5,17.6,4.17
+Kit 4 Masques Hydratants Acide Hyaluronique - Hyal-Aqua,Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,55,218,321,1.06,25.2,17.1,4.07
+Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,Masque Visage Hydratant Enveloppant - Wrap Apaisant,49,321,205,0.95,15.3,23.9,3.85
+Masque Pieds Enveloppant Hydratant - Wrap Pieds Hydra-Repair,Masque Visage Hydratant Enveloppant - Wrap Apaisant,14,92,205,0.27,15.2,6.8,3.84
+Masque Exfoliant Hydratant - Grenade Citron - Wrap Vitamine A & E,Exfoliant sans grains -  Wrap Exfolys,12,106,153,0.23,11.3,7.8,3.83
+Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,Masque Hydratant - Wrap Hyal-Aqua,32,321,139,0.62,10.0,23.0,3.71
+Sérum Booster Anti-âge Vitamine C - Temps Sublime,Sérum Anti-Âge - Élixir Active Énergie Lift,13,157,117,0.25,8.3,11.1,3.66
+Caresse Active Énergie,Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,15,95,235,0.29,15.8,6.4,3.48
+Sérum Booster Anti-âge Vitamine C - Temps Sublime,Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,16,157,156,0.31,10.2,10.3,3.38
+Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,43,207,321,0.83,20.8,13.4,3.35
+Kit 4 Masques Hydratants Acide Hyaluronique - Hyal-Aqua,Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,29,218,207,0.56,13.3,14.0,3.33
+Mousse Divine,Lotion Kéfir Purifiante,13,157,131,0.25,8.3,9.9,3.27
+Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,Exfoliant sans grains -  Wrap Exfolys,15,156,153,0.29,9.6,9.8,3.25
+Mousse Divine,Crème Hydratante et Matifiante - Voile Source d'Eau,19,157,203,0.37,12.1,9.4,3.08
+Masque Hydratant - Sleeping Mask Peau Sèche,Exfoliant sans grains -  Wrap Exfolys,14,158,153,0.27,8.9,9.2,3.00
+Kit 4 Masques Hydratants Acide Hyaluronique - Hyal-Aqua,Masque Exfoliant Hydratant - Grenade Citron - Wrap Vitamine A & E,13,218,106,0.25,6.0,12.3,2.91
+Crème Hydratante Niacinamide Protection Anti-tâches  - Caresse Éclat Parfait,Gel Nettoyant Anti-imperfections - Ginger Gel Purifiant,14,172,149,0.27,8.1,9.4,2.83
+Mousse Divine,Gel Nettoyant Anti-imperfections - Ginger Gel Purifiant,12,157,149,0.23,7.6,8.1,2.65
+Sérum Booster Anti-âge Vitamine C - Temps Sublime,Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,18,157,235,0.35,11.5,7.7,2.52
+Mousse Divine,Masque Hydratant - Sleeping Mask Peau Sèche,12,157,158,0.23,7.6,7.6,2.50
+Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,Crème Anti-Âge - Acide Hyaluronique - Caresse Active Énergie Lift,16,156,213,0.31,10.3,7.5,2.49
+Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,Masque Visage Matifiant - Wrap Purifiant,13,207,133,0.25,6.3,9.8,2.44
+Caresse Source d'Eau,Masque Hydratant - Sleeping Mask Peau Sèche,20,273,158,0.39,7.3,12.7,2.40
+Crème Anti-Âge Homme,CC Crème Homme - Acide Hyaluronique - Soin Bonne Mine,17,99,380,0.33,17.2,4.5,2.34
+Sérum Booster Anti-âge Vitamine C - Temps Sublime,Crème Anti-Âge - Acide Hyaluronique - Caresse Active Énergie Lift,15,157,213,0.29,9.6,7.0,2.32
+CC Crème Homme - Acide Hyaluronique - Soin Bonne Mine,Baume Hydratant,13,380,77,0.25,3.4,16.9,2.30
+Caresse Source d'Eau,Caresse Source d'Eau Riche,12,273,104,0.23,4.4,11.5,2.19
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,51,377,321,0.99,13.5,15.9,2.18
+Gommage Grains Purifiant - Riz & Hibiscus- Wrap Exfolys,Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,12,92,321,0.23,13.0,3.7,2.10
+Caresse Source d'Eau,Crème Hydratante Niacinamide Protection Anti-tâches  - Caresse Éclat Parfait,19,273,172,0.37,7.0,11.0,2.09
+Sérum Booster Anti-âge Vitamine C - Temps Sublime,Sérum Yeux Caféine + Niacinamide Vitamine B3 - Élixir Regard Éclat,12,157,190,0.23,7.6,6.3,2.08
+Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,Lotion Kéfir Purifiante,12,235,131,0.23,5.1,9.2,2.02
+Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,14,156,235,0.27,9.0,6.0,1.98
+Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,Masque Visage Hydratant Enveloppant - Wrap Apaisant,16,207,205,0.31,7.7,7.8,1.95
+Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,Masque Visage Hydratant Enveloppant - Wrap Apaisant,12,156,205,0.23,7.7,5.9,1.94
+Mousse Divine,BB Crème,12,157,204,0.23,7.6,5.9,1.94
+Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,18,156,321,0.35,11.5,5.6,1.86
+Sérum Yeux Caféine + Niacinamide Vitamine B3 - Élixir Regard Éclat,Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,14,190,207,0.27,7.4,6.8,1.84
+Kit 4 Masques Hydratants Acide Hyaluronique - Hyal-Aqua,Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),29,218,377,0.56,13.3,7.7,1.83
+Mousse Divine,Caresse Source d'Eau,15,157,273,0.29,9.6,5.5,1.81
+BB Crème,CC Crème - Soin Bonne Mine Gel Teinté,25,204,374,0.48,12.3,6.7,1.70
+Caresse Source d'Eau,Exfoliant sans grains -  Wrap Exfolys,13,273,153,0.25,4.8,8.5,1.61
+Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,Exfoliant sans grains -  Wrap Exfolys,15,321,153,0.29,4.7,9.8,1.58
+Crème Hydratante et Matifiante - Voile Source d'Eau,Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,14,203,235,0.27,6.9,6.0,1.52
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),Masque Hydratant - Wrap Hyal-Aqua,15,377,139,0.29,4.0,10.8,1.48
+Caresse Source d'Eau,Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,18,273,235,0.35,6.6,7.7,1.45
+Masque Hydratant - Sleeping Mask Peau Sèche,Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,14,158,321,0.27,8.9,4.4,1.43
+Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,13,207,235,0.25,6.3,5.5,1.38
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),Masque Visage Hydratant - Wrap Éclat,17,377,176,0.33,4.5,9.7,1.33
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),Masque Anti-âge Vitamine C & Acide Hyaluronique - Wrap Temps Sublime,15,377,156,0.29,4.0,9.6,1.32
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,18,377,207,0.35,4.8,8.7,1.19
+Sérum Yeux Caféine + Niacinamide Vitamine B3 - Élixir Regard Éclat,Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,14,190,321,0.27,7.4,4.4,1.19
+Caresse Source d'Eau,Crème Anti-Âge - Acide Hyaluronique - Caresse Active Énergie Lift,13,273,213,0.25,4.8,6.1,1.16
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),Masque Visage Hydratant Enveloppant - Wrap Apaisant,15,377,205,0.29,4.0,7.3,1.00
+Sérum Yeux Caféine + Niacinamide Vitamine B3 - Élixir Regard Éclat,CC Crème - Soin Bonne Mine Gel Teinté,13,190,374,0.25,6.8,3.5,0.95
+Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,Crème Hydratante et Matifiante - Voile Source d'Eau,12,321,203,0.23,3.7,5.9,0.95
+Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,13,321,235,0.25,4.0,5.5,0.89
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),Contour des Yeux Anti-Fatigue - Acide Hyaluronique - Caresse Regard Énergie,15,377,235,0.29,4.0,6.4,0.88
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),Sérum Yeux Caféine + Niacinamide Vitamine B3 - Élixir Regard Éclat,12,377,190,0.23,3.2,6.3,0.87
+Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat,CC Crème - Soin Bonne Mine Gel Teinté,12,207,374,0.23,5.8,3.2,0.80
+Caresse Source d'Eau,Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or,13,273,321,0.25,4.8,4.0,0.77
+CC Crème - Soin Bonne Mine Gel Teinté,CC Crème Homme - Acide Hyaluronique - Soin Bonne Mine,14,374,380,0.27,3.7,3.7,0.51
+Regard d’Or – Patchs yeux éclat anti-âge (60 patchs),CC Crème - Soin Bonne Mine Gel Teinté,12,377,374,0.23,3.2,3.2,0.44

@@ -1,0 +1,11 @@
+reason,orders,subtotal_ttc,refunded_ttc
+in: qualifying DTC order,5174,389536.93,254.68
+out: channel Amazon,624,22808.95,125.09
+out: channel Mirakl Connect,417,8703.27,32.03
+out: Nov 2026 (partial month),52,4877.91,0.00
+"in base, not qualifying: fully refunded",31,2640.93,2736.01
+out: internal/test code,12,1055.48,0.00
+out: zero merchandise,7,0.00,15.71
+out: channel Draft Orders,6,319.00,299.10
+out: before 2025-03 (pre-launch strays),6,556.85,0.00
+out: cancelled/voided,3,104.66,36.80

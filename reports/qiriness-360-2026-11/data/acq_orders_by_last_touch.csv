@@ -1,0 +1,29 @@
+order_type,last_touch_channel,orders,net_ht,aov_ht
+first (legacy),Unknown (no journey),333,21749,65.31
+first (legacy),Email (Klaviyo),179,11679,65.25
+first (legacy),Direct / untracked,166,13547,81.61
+first (legacy),Search (organic),101,6275,62.13
+first (legacy),Google Shopping (free listings),18,620,34.42
+first (legacy),Referral,12,1038,86.48
+first (legacy),Social (organic/unknown),2,116,57.83
+first (legacy),Paid social,2,103,51.3
+first (legacy),Other tagged,1,98,97.8
+first (new),Unknown (no journey),1043,59980,57.51
+first (new),Search (organic),623,36012,57.8
+first (new),Direct / untracked,438,29823,68.09
+first (new),Google Shopping (free listings),257,10262,39.93
+first (new),Email (Klaviyo),176,10976,62.36
+first (new),Paid social,78,2651,33.98
+first (new),Referral,27,1872,69.32
+first (new),AI assistants,14,552,39.42
+first (new),Social (organic/unknown),7,836,119.45
+first (new),Other tagged,1,71,70.68
+repeat,Unknown (no journey),690,47662,69.08
+repeat,Email (Klaviyo),375,24970,66.59
+repeat,Direct / untracked,342,24126,70.54
+repeat,Search (organic),226,15865,70.2
+repeat,Google Shopping (free listings),44,2261,51.38
+repeat,Referral,14,943,67.37
+repeat,Paid social,2,142,71.13
+repeat,AI assistants,2,145,72.42
+repeat,Other tagged,1,32,31.97

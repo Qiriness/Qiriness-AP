@@ -1,0 +1,18 @@
+ctype,first_touch_channel,customers,first_aov_ht,pct_first_on_promo,matured_180,pct_2nd_180d,value_180d
+legacy,Unknown (no journey),333,65.31,52.3,306,30.4,94.04
+legacy,Email (Klaviyo),239,70.09,53.6,217,27.6,101.42
+legacy,Search (organic),110,65.91,61.8,95,37.9,87.6
+legacy,Direct / untracked,106,78.46,41.5,95,34.7,113.5
+legacy,Google Shopping (free listings),21,44.85,42.9,19,31.6,65.65
+legacy,Social (organic/unknown),2,57.83,50,2,0,57.83
+legacy,Referral,2,39.6,50,2,0,39.6
+legacy,Paid social,1,20.36,100,1,0,20.36
+new,Unknown (no journey),1043,57.51,47.8,779,20.5,75.5
+new,Search (organic),716,61.49,49,513,16.4,80.8
+new,Direct / untracked,324,66.41,50.3,248,19,95.33
+new,Google Shopping (free listings),298,41.27,36.9,225,20.4,56.82
+new,Email (Klaviyo),136,65.32,55.9,91,31.9,101.3
+new,Paid social,99,36.19,33.3,99,7.1,44.94
+new,Referral,21,55.45,85.7,12,0,42.47
+new,AI assistants,18,37.36,44.4,9,0,28.56
+new,Social (organic/unknown),9,100.83,55.6,9,0,100.83

@@ -1,0 +1,5 @@
+band,customers,avg_orders,avg_value,aov_ht,avg_discount_rate
+a never promo,178,2.33,135.07,58.98,0.0
+b <50% promo,130,4.08,271.33,66.30,8.5
+c 50-99% promo,389,3.01,215.74,68.96,13.7
+d always promo,194,2.43,169.63,69.26,21.3

@@ -1,0 +1,71 @@
+range_a,range_b,pair_orders,orders_a,orders_b,conf_a_to_b,conf_b_to_a,lift
+Corps,Qi (corps & bien-être),43,396,207,10.9,20.8,2.71
+Nettoyage & lotions,Sensi Zen,38,625,127,6.1,29.9,2.48
+Autre,Nettoyage & lotions,18,66,625,27.3,2.9,2.26
+Éclat Parfait,Nettoyage & lotions,67,281,625,23.8,10.7,1.97
+Active Énergie,Sensi Zen,23,572,127,4.0,18.1,1.64
+Corps,"Masques, wraps & patchs",162,396,1428,40.9,11.3,1.48
+Corps,Nettoyage & lotions,71,396,625,17.9,11.4,1.48
+Exception,Regard (Éclat / Sublime),46,249,688,18.5,6.7,1.39
+Nettoyage & lotions,Source d'Eau,160,625,960,25.6,16.7,1.38
+Active Énergie,Éclat Parfait,42,572,281,7.3,14.9,1.35
+Nettoyage & lotions,Qi (corps & bien-être),33,625,207,5.3,15.9,1.32
+Sensi Zen,Source d'Eau,29,127,960,22.8,3.0,1.23
+Sensi Zen,Teint & solaire (CC/BB/UV),18,127,628,14.2,2.9,1.17
+"Masques, wraps & patchs",Sensi Zen,41,1428,127,2.9,32.3,1.17
+Active Énergie,Nettoyage & lotions,79,572,625,13.8,12.6,1.14
+"Masques, wraps & patchs",Nettoyage & lotions,186,1428,625,13.0,29.8,1.08
+Regard (Éclat / Sublime),Sensi Zen,18,688,127,2.6,14.2,1.07
+"Masques, wraps & patchs",Regard (Éclat / Sublime),192,1428,688,13.4,27.9,1.01
+Éclat Parfait,Source d'Eau,52,281,960,18.5,5.4,1.00
+Appareils & SPA,"Masques, wraps & patchs",66,241,1428,27.4,4.6,0.99
+Active Énergie,Corps,42,572,396,7.3,10.6,0.96
+Active Énergie,Temps Sublime,121,572,1138,21.2,10.6,0.96
+"Masques, wraps & patchs",Qi (corps & bien-être),55,1428,207,3.9,26.6,0.96
+Éclat Parfait,"Masques, wraps & patchs",73,281,1428,26.0,5.1,0.94
+Nettoyage & lotions,Temps Sublime,129,625,1138,20.6,11.3,0.94
+Corps,Éclat Parfait,20,396,281,5.1,7.1,0.93
+Autre,"Masques, wraps & patchs",17,66,1428,25.8,1.2,0.93
+Nettoyage & lotions,Teint & solaire (CC/BB/UV),70,625,628,11.2,11.1,0.92
+"Masques, wraps & patchs",Source d'Eau,242,1428,960,16.9,25.2,0.91
+Active Énergie,Source d'Eau,97,572,960,17.0,10.1,0.91
+Corps,Exception,17,396,249,4.3,6.8,0.89
+Appareils & SPA,Nettoyage & lotions,25,241,625,10.4,4.0,0.86
+Corps,Regard (Éclat / Sublime),45,396,688,11.4,6.5,0.85
+Regard (Éclat / Sublime),Temps Sublime,129,688,1138,18.8,11.3,0.85
+Qi (corps & bien-être),Teint & solaire (CC/BB/UV),21,207,628,10.1,3.3,0.84
+Corps,Source d'Eau,61,396,960,15.4,6.4,0.83
+Corps,Temps Sublime,71,396,1138,17.9,6.2,0.82
+Qi (corps & bien-être),Regard (Éclat / Sublime),22,207,688,10.6,3.2,0.80
+Exception,Temps Sublime,43,249,1138,17.3,3.8,0.79
+Active Énergie,Regard (Éclat / Sublime),60,572,688,10.5,8.7,0.79
+Active Énergie,"Masques, wraps & patchs",123,572,1428,21.5,8.6,0.78
+Qi (corps & bien-être),Temps Sublime,35,207,1138,16.9,3.1,0.77
+Nettoyage & lotions,Regard (Éclat / Sublime),63,625,688,10.1,9.2,0.76
+"Masques, wraps & patchs",Temps Sublime,232,1428,1138,16.2,20.4,0.74
+Éclat Parfait,Temps Sublime,45,281,1138,16.0,4.0,0.73
+Qi (corps & bien-être),Source d'Eau,28,207,960,13.5,2.9,0.73
+Appareils & SPA,Regard (Éclat / Sublime),23,241,688,9.5,3.3,0.72
+Corps,Teint & solaire (CC/BB/UV),34,396,628,8.6,5.4,0.71
+Exception,Nettoyage & lotions,21,249,625,8.4,3.4,0.70
+Sensi Zen,Temps Sublime,19,127,1138,15.0,1.7,0.68
+Éclat Parfait,Regard (Éclat / Sublime),24,281,688,8.5,3.5,0.64
+Éclat Parfait,Teint & solaire (CC/BB/UV),21,281,628,7.5,3.3,0.62
+Regard (Éclat / Sublime),Teint & solaire (CC/BB/UV),50,688,628,7.3,8.0,0.60
+Exception,"Masques, wraps & patchs",41,249,1428,16.5,2.9,0.60
+Active Énergie,Teint & solaire (CC/BB/UV),42,572,628,7.3,6.7,0.60
+Corps,Homme,28,396,607,7.1,4.6,0.60
+Homme,Nettoyage & lotions,38,607,625,6.3,6.1,0.52
+"Masques, wraps & patchs",Teint & solaire (CC/BB/UV),89,1428,628,6.2,14.2,0.51
+Regard (Éclat / Sublime),Source d'Eau,64,688,960,9.3,6.7,0.50
+Source d'Eau,Temps Sublime,106,960,1138,11.0,9.3,0.50
+Source d'Eau,Teint & solaire (CC/BB/UV),56,960,628,5.8,8.9,0.48
+Teint & solaire (CC/BB/UV),Temps Sublime,65,628,1138,10.4,5.7,0.47
+Homme,Teint & solaire (CC/BB/UV),28,607,628,4.6,4.5,0.38
+Appareils & SPA,Source d'Eau,17,241,960,7.1,1.8,0.38
+Appareils & SPA,Temps Sublime,18,241,1138,7.5,1.6,0.34
+Active Énergie,Homme,21,572,607,3.7,3.5,0.31
+Homme,"Masques, wraps & patchs",50,607,1428,8.2,3.5,0.30
+Homme,Regard (Éclat / Sublime),24,607,688,4.0,3.5,0.30
+Homme,Temps Sublime,32,607,1138,5.3,2.8,0.24
+Homme,Source d'Eau,26,607,960,4.3,2.7,0.23

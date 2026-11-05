@@ -1,0 +1,135 @@
+m,first_touch_channel,new_customers,net_ht
+2025-03,Search (organic),30,1482
+2025-03,Unknown (no journey),14,788
+2025-03,Direct / untracked,8,386
+2025-03,Referral,1,74
+2025-04,Search (organic),23,1725
+2025-04,Unknown (no journey),22,1244
+2025-04,Direct / untracked,16,1503
+2025-04,Email (Klaviyo),12,1016
+2025-04,Referral,1,44
+2025-04,AI assistants,1,43
+2025-04,Social (organic/unknown),1,141
+2025-05,Search (organic),35,2055
+2025-05,Unknown (no journey),32,1984
+2025-05,Direct / untracked,15,978
+2025-05,Email (Klaviyo),5,447
+2025-06,Unknown (no journey),22,1133
+2025-06,Search (organic),20,917
+2025-06,Direct / untracked,9,483
+2025-06,Email (Klaviyo),7,466
+2025-06,Paid social,1,82
+2025-06,AI assistants,1,63
+2025-07,Unknown (no journey),56,2494
+2025-07,Search (organic),20,906
+2025-07,Google Shopping (free listings),16,838
+2025-07,Direct / untracked,16,1051
+2025-07,Email (Klaviyo),9,573
+2025-07,Paid social,1,74
+2025-08,Unknown (no journey),65,3482
+2025-08,Search (organic),32,1530
+2025-08,Google Shopping (free listings),26,830
+2025-08,Direct / untracked,10,652
+2025-08,Email (Klaviyo),6,544
+2025-08,Referral,2,21
+2025-08,AI assistants,1,7
+2025-09,Unknown (no journey),24,1150
+2025-09,Search (organic),15,1110
+2025-09,Direct / untracked,8,316
+2025-09,Google Shopping (free listings),5,148
+2025-09,Email (Klaviyo),2,105
+2025-09,Referral,1,42
+2025-09,AI assistants,1,27
+2025-10,Unknown (no journey),24,1509
+2025-10,Search (organic),23,1548
+2025-10,Google Shopping (free listings),9,401
+2025-10,Direct / untracked,7,430
+2025-10,Email (Klaviyo),4,425
+2025-11,Unknown (no journey),128,8257
+2025-11,Search (organic),78,5777
+2025-11,Direct / untracked,42,2940
+2025-11,Google Shopping (free listings),40,1394
+2025-11,Email (Klaviyo),14,1094
+2025-11,Referral,3,117
+2025-11,Social (organic/unknown),1,19
+2025-11,Paid social,1,46
+2025-11,AI assistants,1,16
+2025-12,Unknown (no journey),130,7048
+2025-12,Search (organic),71,5687
+2025-12,Direct / untracked,42,2714
+2025-12,Google Shopping (free listings),38,1631
+2025-12,Paid social,26,881
+2025-12,Email (Klaviyo),5,280
+2025-12,Social (organic/unknown),3,135
+2025-12,AI assistants,2,68
+2025-12,Referral,1,58
+2026-01,Unknown (no journey),127,7670
+2026-01,Search (organic),82,3964
+2026-01,Paid social,53,1873
+2026-01,Google Shopping (free listings),38,1909
+2026-01,Direct / untracked,37,2556
+2026-01,Email (Klaviyo),12,517
+2026-01,AI assistants,2,34
+2026-01,Social (organic/unknown),2,452
+2026-01,Referral,1,20
+2026-02,Unknown (no journey),48,3737
+2026-02,Search (organic),33,1999
+2026-02,Google Shopping (free listings),16,454
+2026-02,Paid social,16,599
+2026-02,Direct / untracked,14,801
+2026-02,Email (Klaviyo),3,119
+2026-02,Social (organic/unknown),2,161
+2026-02,Referral,1,67
+2026-03,Unknown (no journey),38,2491
+2026-03,Search (organic),24,2155
+2026-03,Direct / untracked,13,1428
+2026-03,Google Shopping (free listings),11,445
+2026-03,Email (Klaviyo),5,307
+2026-03,Paid social,1,29
+2026-03,Referral,1,65
+2026-04,Unknown (no journey),40,1913
+2026-04,Google Shopping (free listings),22,887
+2026-04,Search (organic),22,1646
+2026-04,Direct / untracked,7,435
+2026-04,Email (Klaviyo),6,496
+2026-05,Unknown (no journey),65,3414
+2026-05,Search (organic),63,3314
+2026-05,Google Shopping (free listings),26,1107
+2026-05,Direct / untracked,17,1127
+2026-05,Email (Klaviyo),10,393
+2026-05,AI assistants,2,170
+2026-05,Referral,1,83
+2026-06,Unknown (no journey),33,1623
+2026-06,Search (organic),28,1501
+2026-06,Google Shopping (free listings),15,560
+2026-06,Email (Klaviyo),10,681
+2026-06,Direct / untracked,10,652
+2026-06,Referral,2,188
+2026-06,AI assistants,1,37
+2026-07,Unknown (no journey),76,4630
+2026-07,Search (organic),48,2955
+2026-07,Google Shopping (free listings),19,945
+2026-07,Direct / untracked,19,1018
+2026-07,Email (Klaviyo),11,598
+2026-07,Referral,3,135
+2026-07,AI assistants,1,14
+2026-08,Unknown (no journey),30,1408
+2026-08,Search (organic),23,1188
+2026-08,Direct / untracked,8,475
+2026-08,Google Shopping (free listings),5,226
+2026-08,Email (Klaviyo),2,131
+2026-08,AI assistants,1,18
+2026-09,Unknown (no journey),38,1815
+2026-09,Search (organic),23,1138
+2026-09,Direct / untracked,15,1064
+2026-09,Google Shopping (free listings),10,366
+2026-09,Email (Klaviyo),8,318
+2026-09,Referral,1,73
+2026-09,AI assistants,1,20
+2026-10,Unknown (no journey),31,2189
+2026-10,Search (organic),23,1430
+2026-10,Direct / untracked,11,509
+2026-10,Email (Klaviyo),5,376
+2026-10,AI assistants,3,156
+2026-10,Referral,2,176
+2026-10,Google Shopping (free listings),2,158

@@ -1,0 +1,6 @@
+stage,orders,net_ht,aov_ht,pct_promo,discount_rate_pct
+1 first (legacy),814,55224,67.84,52.3,15.2
+1 first (new),2664,153033,57.44,47.4,11.3
+2 second,891,59675,66.98,47.6,12.2
+3 third,386,26618,68.96,51.8,11.2
+4 fourth+,419,29852,71.24,58.9,13.4

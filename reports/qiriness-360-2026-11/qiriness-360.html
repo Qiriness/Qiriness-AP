@@ -1,0 +1,307 @@
+<title>Qiriness 360° Diagnosis</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single reading column (max 1040px) of numbered deliverables; charts sit full-column, tables scroll inside their own box. */
+:root {
+  --bg: #f6f7f8; --surface: #ffffff; --fg: #15181c; --muted: #5a6068; --faint: #8a9097;
+  --rule: #e2e5e9; --accent: #1f5f73; --accent-soft: #e3eef1;
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --base: #9aa1a8;
+  --good: #0ca30c; --warn: #b77f00; --crit: #d03b3b;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121416; --surface: #1a1d20; --fg: #eceef0; --muted: #a8afb6; --faint: #7d848b;
+  --rule: #2c3135; --accent: #7cc3d6; --accent-soft: #1d3038;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --base: #6c737a;
+  --good: #3cc23c; --warn: #e0a520; --crit: #e66767; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #121416; --surface: #1a1d20; --fg: #eceef0; --muted: #a8afb6; --faint: #7d848b;
+  --rule: #2c3135; --accent: #7cc3d6; --accent-soft: #1d3038;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --base: #6c737a;
+  --good: #3cc23c; --warn: #e0a520; --crit: #e66767; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 16px/1.55 var(--body); }
+.wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 80px; display: grid; gap: 56px; }
+header { display: grid; gap: 14px; }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 700 clamp(30px, 5vw, 46px)/1.08 var(--display); margin: 0; text-wrap: balance; letter-spacing: -.01em; }
+h2 { font: 700 26px/1.2 var(--display); margin: 0; text-wrap: balance; }
+h3 { font: 600 17px/1.3 var(--body); margin: 0; }
+p { margin: 0; max-width: 68ch; }
+.lede { font-size: 18px; color: var(--muted); }
+.scope { font-size: 14px; color: var(--muted); border-left: 3px solid var(--accent); padding: 6px 0 6px 14px; max-width: 80ch; }
+section { display: grid; gap: 20px; }
+.sec-head { display: grid; gap: 6px; }
+.num { font: 500 12px/1 var(--mono); color: var(--faint); letter-spacing: .06em; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; }
+.kpi b { font: 600 26px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 13px; color: var(--muted); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.cols > * { min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 18px; display: grid; gap: 10px; min-width: 0; }
+ul.find { margin: 0; padding-left: 18px; display: grid; gap: 6px; max-width: 70ch; }
+.chart { position: relative; min-width: 0; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart text { fill: var(--muted); font: 11px var(--mono); }
+.chart .grid { stroke: var(--rule); stroke-width: 1; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.cap { font-size: 13px; color: var(--faint); max-width: 80ch; }
+.tip { position: absolute; pointer-events: none; background: var(--fg); color: var(--bg); font: 12px/1.4 var(--mono); padding: 6px 8px; border-radius: 4px; white-space: nowrap; transform: translate(-50%, calc(-100% - 10px)); z-index: 2; }
+.tbl { overflow-x: auto; border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font: 600 12px/1.3 var(--body); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; background: var(--accent-soft); position: sticky; top: 0; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+.pill { display: inline-block; font: 600 11px/1 var(--body); padding: 4px 8px; border-radius: 99px; letter-spacing: .03em; white-space: nowrap; }
+.p-high { background: color-mix(in srgb, var(--crit) 16%, transparent); color: var(--crit); }
+.p-med { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.p-low { background: color-mix(in srgb, var(--faint) 20%, transparent); color: var(--muted); }
+.conf { font: 500 12px var(--mono); color: var(--muted); }
+details { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 16px; }
+summary { cursor: pointer; font-weight: 600; }
+summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+a { color: var(--accent); }
+footer { font-size: 13px; color: var(--faint); display: grid; gap: 6px; }
+@media (max-width: 520px) { .wrap { gap: 44px; padding-block: 24px 60px; } th, td { padding: 7px 9px; } }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Qiriness · own-site DTC · Mar 2025 – Oct 2026</div>
+  <h1>Where Qiriness wins and loses customers</h1>
+  <p class="lede">The business is growing on repeat orders, but three in four first-time buyers never come back, almost nothing sells at list price, and email effort sits in daily blasts instead of lifecycle flows.</p>
+  <p class="scope">Qiriness only (Barbara Gould excluded). 5,174 qualifying Online Store orders, 3,478 buyers. Amazon and Yves Rocher excluded. Revenue is net product revenue ex-VAT (after discounts and refunds, no shipping). Reconciles with Shopify's ShopifyQL sales to −0.4% over 20 months.</p>
+  <div class="kpis">
+    <div class="kpi"><b>€237k</b><span>Net ex-VAT, last 12 months</span></div>
+    <div class="kpi"><b>+36%</b><span>Mar–Oct 2026 vs 2025; last 3 months only +3.6%</span></div>
+    <div class="kpi"><b>18.8%</b><span>New customers buying again within 180 days</span></div>
+    <div class="kpi"><b>−36.7%</b><span>Net revenue vs list value (markdowns + codes)</span></div>
+    <div class="kpi"><b>~31</b><span>Klaviyo campaigns a month; 0 post-purchase flows</span></div>
+  </div>
+</header>
+
+<section>
+  <div class="sec-head"><span class="num">1 · DIAGNOSIS</span><h2>Executive commercial diagnosis</h2></div>
+  <div class="cols">
+    <div class="panel"><h3>Strengths</h3><ul class="find">
+      <li>Once customers order twice they stay: 52% reach a 3rd order and 71% a 4th. The 26% of buyers with 2+ orders produce 54% of revenue.</li>
+      <li>Temps Sublime entrants rebuy at 30.4% within 180 days (baseline 18.8%); Exception and Éclat Parfait at about 25%.</li>
+      <li>Free channels acquire well: organic search, Google Shopping free listings (20% rebuy), email.</li>
+      <li>The €70 free-shipping threshold visibly lifts baskets (364 orders at €70–75 vs 188 at €65–70).</li>
+    </ul></div>
+    <div class="panel"><h3>Weaknesses</h3><ul class="find">
+      <li>75% of new customers never place a second order.</li>
+      <li>Cohort quality is falling: orders per new customer within 180 days went from 1.47 to 1.21. The Nov–Jan holiday cohorts rebuy at only 13–18%.</li>
+      <li>About 95% of orders carry a markdown or code. The Temps Sublime Duo is listed at €179 and sells at €89.50.</li>
+      <li>Paid social cost about €59–98 per new customer, who were worth €45 at 180 days.</li>
+    </ul></div>
+  </div>
+  <div class="panel"><h3>Top five recommendations</h3><ul class="find">
+    <li><b>A 0–180-day second-purchase programme</b> (post-purchase flows by entry range, with a 15% holdout). Base case: +€13k a year.</li>
+    <li><b>Always-on replenishment and routine completion</b> at measured reorder windows. About 380 customers are due now; 428 Temps Sublime buyers lack the eye cream.</li>
+    <li><b>Lead Black Friday and acquisition with retention-quality entry products</b> (TS Duo, Regard Sublime, Exception, Éclat Parfait), not wraps or LED devices.</li>
+    <li><b>Fewer, segmented campaigns</b> (8–12 a month instead of about 31). Move effort into flows, which earn €6.8 per delivered email against €0.05 for campaigns.</li>
+    <li><b>Test promotions with holdouts</b>: the welcome code shows no retention advantage. Prefer gift-with-purchase thresholds to extra percentage discounts.</li>
+  </ul></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">2 · PERFORMANCE</span><h2>Monthly net revenue by customer type</h2>
+  <p>Growth came from repeat orders as the base matured. Legacy customers from the April 2025 platform import faded out, and new-customer inflow has stalled since the summer.</p></div>
+  <div class="panel">
+    <div class="legend"><span><i style="background:var(--s1)"></i>New customers' first orders</span><span><i style="background:var(--s2)"></i>Legacy customers' first Shopify order</span><span><i style="background:var(--s3)"></i>Repeat orders</span></div>
+    <div class="chart" id="c-monthly"></div>
+    <p class="cap">Net product revenue ex-VAT (€), Europe/Paris months. Hover a bar for values. Shopify recorded little VAT before July 2026, so admin "net sales" before then includes VAT. This series is consistent across the whole period.</p>
+  </div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">3 · RETENTION</span><h2>The leak is between the first and second order</h2></div>
+  <div class="cols">
+    <div class="panel"><h3>Cumulative repurchase after the first order</h3>
+      <div class="legend"><span><i style="background:var(--s1)"></i>New customers</span><span><i style="background:var(--s2)"></i>Legacy (imported) customers</span></div>
+      <div class="chart" id="c-km"></div>
+      <p class="cap">Kaplan–Meier, censored at 1 Nov 2026. 2,664 new and 814 legacy customers.</p></div>
+    <div class="panel"><h3>Share who place the next order (ever)</h3>
+      <div class="chart" id="c-ladder"></div>
+      <p class="cap">New customers whose order k is at least 180 days old. Median gap: 99 d (1→2), 86 d (2→3), 83 d (3→4).</p></div>
+  </div>
+  <div class="panel"><h3>Entry range predicts loyalty</h3>
+    <div class="legend"><span><i style="background:var(--s1)"></i>2nd order within 180 days</span><span><i style="background:var(--base);height:2px;vertical-align:3px"></i>Baseline 18.8%</span></div>
+    <div class="chart" id="c-entry"></div>
+    <p class="cap">New customers whose first order is at least 180 days old, by the range of the largest line in that order. A correlation: high-intent buyers choose treatments.</p></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">4 · SEGMENTS</span><h2>Lifecycle segments as of 1 Nov 2026</h2>
+  <p>Thresholds come from observed gaps: the natural window for a one-time buyer runs to 180 days (the 1→2 p75); a repeat buyer is active to 150 days and lapsed after 270.</p></div>
+  <div class="tbl"><table id="t-seg"></table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">5 · PRICE</span><h2>Almost nothing sells at list price</h2>
+  <p>Markdowns (crossed-out prices) do not appear as discounts in Shopify. Counting them, 92–100% of orders carried a price incentive in nine of the last twelve months.</p></div>
+  <div class="panel">
+    <div class="legend"><span><i style="background:var(--s1)"></i>Orders with any price incentive</span><span><i style="background:var(--s2)"></i>Orders with a discount code or automatic offer</span></div>
+    <div class="chart" id="c-promo"></div>
+    <p class="cap">Share of qualifying orders. Incentive = discount application (excluding free shipping) or a line priced at least 3% below the product's highest observed price.</p>
+  </div>
+  <div class="tbl"><table id="t-md"></table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">6 · ACQUISITION & CRM</span><h2>Where new customers come from, and what email does</h2></div>
+  <div class="tbl"><table id="t-acq"></table></div>
+  <p class="cap">First-touch channel from Shopify's customer journey (58–64% of orders have one). Meta spend was €9,690 for Nov 2025–Feb 2026: about €98 per tracked new customer, or about €59 scaled for untracked orders.</p>
+  <div class="tbl"><table id="t-flows"></table></div>
+  <p class="cap">Klaviyo-attributed value incl. VAT. Klaviyo claims 24–61% of monthly DTC revenue; Shopify's last-touch data gives email 14% of orders. Treat this as attribution, not incrementality.</p>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">7 · OPPORTUNITIES</span><h2>Prioritised opportunity register</h2>
+  <p>Scored impact × confidence × ease (1–5 each). Annual net ex-VAT. The de-duplicated total is about €13k / €23k / €36k (+5% / +10% / +15% on the last 12 months). These are estimates to confirm with holdouts.</p></div>
+  <div class="tbl"><table id="t-opp"></table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">8 · CALENDAR</span><h2>Preliminary 12-month commercial calendar</h2>
+  <p>One primary objective per month. Always-on flows carry retention underneath. At most two price-led events a quarter. Seasonality rests on one year of data.</p></div>
+  <div class="tbl"><table id="t-cal"></table></div>
+</section>
+
+<section>
+  <div class="sec-head"><span class="num">9 · NEXT 90 DAYS</span><h2>First 90-day roadmap</h2></div>
+  <div class="cols">
+    <div class="panel"><h3>Now, around Black Friday</h3><ul class="find">
+      <li>Feature TS Duo, Regard Sublime, Exception and Éclat Parfait as entry products; keep LED for gifting.</li>
+      <li>Post-purchase flow v1 (TS / Source d'Eau / other) live before the BF cohort lands, with a 15% holdout.</li>
+      <li>Cap campaigns at 3 a week per profile; suppress profiles not engaged for 90 days.</li>
+      <li>Pause cold paid social until a test design exists.</li>
+    </ul></div>
+    <div class="panel"><h3>Experiments, weeks 2–12</h3><ul class="find">
+      <li>Replenishment reminder at p25: 50/50 split; success is ≥ +3 pts reorder within 60 days.</li>
+      <li>TS → eye cream completion: 80/20 holdout among the 428.</li>
+      <li>Welcome incentive: 15% code vs gift vs 10%, judged on 180-day value.</li>
+      <li>Cart add-on and win-back of at-risk repeaters, each with a holdout.</li>
+    </ul></div>
+    <div class="panel"><h3>Data to add</h3><ul class="find">
+      <li>Holdout groups in Klaviyo (no new system needed).</li>
+      <li>COGS per SKU, so discount decisions use margin.</li>
+      <li>Klaviyo unsubscribes, bounces and list size; Smile.io points and tiers (absent today).</li>
+      <li>Journey coverage: 40% of orders have no source.</li>
+    </ul></div>
+  </div>
+</section>
+
+<footer>
+  <span>Source: Qiriness production database (read-only) and read-only Shopify Admin and ShopifyQL calls, 5 Nov 2026.</span>
+  <span>Full report with every table, definition and SQL: reports/qiriness-360-2026-11/REPORT.md in the support app repository.</span>
+</footer>
+</div>
+
+<script>
+const D = {"monthly":[{"m":"2025-03","new":2730,"legacy":0,"repeat":71},{"m":"2025-04","new":5716,"legacy":2038,"repeat":306},{"m":"2025-05","new":5464,"legacy":4218,"repeat":979},{"m":"2025-06","new":3143,"legacy":8382,"repeat":3340},{"m":"2025-07","new":5935,"legacy":8466,"repeat":4943},{"m":"2025-08","new":7067,"legacy":3379,"repeat":3240},{"m":"2025-09","new":2897,"legacy":2502,"repeat":2740},{"m":"2025-10","new":4313,"legacy":1850,"repeat":3658},{"m":"2025-11","new":19660,"legacy":8646,"repeat":13950},{"m":"2025-12","new":18502,"legacy":3169,"repeat":6921},{"m":"2026-01","new":18994,"legacy":3672,"repeat":11432},{"m":"2026-02","new":7936,"legacy":1163,"repeat":4076},{"m":"2026-03","new":6920,"legacy":968,"repeat":4639},{"m":"2026-04","new":5377,"legacy":1254,"repeat":8587},{"m":"2026-05","new":9608,"legacy":1451,"repeat":8792},{"m":"2026-06","new":5241,"legacy":1145,"repeat":8761},{"m":"2026-07","new":10296,"legacy":839,"repeat":12234},{"m":"2026-08","new":3446,"legacy":324,"repeat":4109},{"m":"2026-09","new":4794,"legacy":1253,"repeat":9093},{"m":"2026-10","new":4995,"legacy":505,"repeat":4272}],"km":[{"name":"New customers","pts":[[30,4.8],[45,6.5],[60,8],[90,11.1],[120,14],[180,17.9],[270,22.4],[365,25.2],[450,27.3],[540,29]]},{"name":"Legacy customers","pts":[[30,5.2],[45,6.9],[60,9.4],[90,13.7],[120,18.6],[180,29.9],[270,38.4],[365,43],[450,44.9],[540,47.5]]}],"ladder":[{"label":"Order 1 → next","v":25.1,"n":1985,"extra":"within 180 d: 18.8%"},{"label":"Order 2 → next","v":52.4,"n":349,"extra":"within 180 d: 42.7%"},{"label":"Order 3 → next","v":70.9,"n":117,"extra":"within 180 d: 64.1%"},{"label":"Order 4 → next","v":67.9,"n":53,"extra":"within 180 d: 64.2%"},{"label":"Order 5+ → next","v":82.7,"n":52,"extra":"within 180 d: 82.7%"}],"entry":[{"label":"Temps Sublime","v":30.4,"n":303,"extra":"value 180 d €119 · 1st AOV €87"},{"label":"Exception","v":24.7,"n":73,"extra":"value 180 d €157 · 1st AOV €105"},{"label":"Éclat Parfait","v":24.6,"n":61,"extra":"value 180 d €98 · 1st AOV €62"},{"label":"Corps","v":22.4,"n":49,"extra":"value 180 d €57 · 1st AOV €35"},{"label":"Active Énergie","v":22,"n":123,"extra":"value 180 d €83 · 1st AOV €67"},{"label":"Source d'Eau","v":19.1,"n":225,"extra":"value 180 d €73 · 1st AOV €54"},{"label":"Qi (corps & bien-être)","v":18.6,"n":43,"extra":"value 180 d €77 · 1st AOV €53"},{"label":"Nettoyage & lotions","v":17.6,"n":51,"extra":"value 180 d €59 · 1st AOV €40"},{"label":"Homme","v":17.4,"n":213,"extra":"value 180 d €49 · 1st AOV €39"},{"label":"Regard (Éclat / Sublime)","v":16.3,"n":178,"extra":"value 180 d €51 · 1st AOV €38"},{"label":"Teint & solaire (CC/BB/UV)","v":14.7,"n":191,"extra":"value 180 d €47 · 1st AOV €38"},{"label":"Masques, wraps & patchs","v":14.2,"n":324,"extra":"value 180 d €44 · 1st AOV €33"},{"label":"Appareils & SPA","v":7.2,"n":125,"extra":"value 180 d €147 · 1st AOV €138"}],"promo":[{"m":"2025-03","any":18.5,"app":16.7},{"m":"2025-04","any":72.1,"app":71.2},{"m":"2025-05","any":93.1,"app":74.2},{"m":"2025-06","any":87.9,"app":81.2},{"m":"2025-07","any":97,"app":37.4},{"m":"2025-08","any":94.2,"app":57.2},{"m":"2025-09","any":84.7,"app":62.1},{"m":"2025-10","any":78.6,"app":53.6},{"m":"2025-11","any":99.8,"app":17.6},{"m":"2025-12","any":92.4,"app":39.7},{"m":"2026-01","any":98.1,"app":20.3},{"m":"2026-02","any":83.6,"app":42.7},{"m":"2026-03","any":87.3,"app":36.1},{"m":"2026-04","any":97.8,"app":67.8},{"m":"2026-05","any":97.1,"app":69.4},{"m":"2026-06","any":98,"app":71},{"m":"2026-07","any":99.2,"app":68.9},{"m":"2026-08","any":88.7,"app":46.5},{"m":"2026-09","any":98.7,"app":67.1},{"m":"2026-10","any":95.4,"app":84.2}],"segments":[{"seg":"Nouveaux (1 achat, <=60 j)","customers":186,"rev":"3.4","aov":60,"orders":"1.00","subs":146,"action":"Post-purchase series by entry range"},{"seg":"1 achat, fenêtre naturelle (61-180 j)","customers":503,"rev":"8.3","aov":54,"orders":"1.00","subs":312,"action":"Replenishment and routine step now"},{"seg":"1 achat, à risque (181-365 j)","customers":1252,"rev":"23.0","aov":60,"orders":"1.00","subs":737,"action":"One targeted win-back (mostly BF/Christmas 2025)"},{"seg":"1 achat, perdus (>365 j)","customers":646,"rev":"10.9","aov":55,"orders":"1.00","subs":332,"action":"Campaigns only; low priority"},{"seg":"Champions (4+ achats, actifs <=150 j)","customers":151,"rev":"17.7","aov":70,"orders":"5.32","subs":141,"action":"Early access and recognition, no extra discount"},{"seg":"Réachat actifs (2-3 achats, <=150 j)","customers":309,"rev":"14.4","aov":63,"orders":"2.38","subs":251,"action":"Push the 3rd order"},{"seg":"Réachat à risque (151-270 j)","customers":172,"rev":"9.1","aov":67,"orders":"2.52","subs":139,"action":"Best win-back target: favourite range + gift"},{"seg":"Réachat inactifs (>270 j)","customers":259,"rev":"13.1","aov":69,"orders":"2.37","subs":187,"action":"Two-touch win-back, then suppress from blasts"}],"markdown":[{"p":"Masque Repulpant Anti-âge Acide Hyaluronique - Wrap d'Or","u":"569","list":"€8.90","paid":"€6.59","red":"26.0%"},{"p":"Soin Bonne Mine Homme - Acide Hyaluronique","u":"527","list":"€33.50","paid":"€18.86","red":"43.7%"},{"p":"Regard d’Or – Patchs yeux éclat anti-âge (60 patchs)","u":"424","list":"€34.90","paid":"€25.84","red":"26.0%"},{"p":"Patchs Yeux Lissants Acide Hyaluronique - Hyal-Éclat","u":"349","list":"€5.90","paid":"€5.14","red":"12.9%"},{"p":"CC Crème - Soin Bonne Mine Gel Teinté","u":"346","list":"€34.90","paid":"€25.41","red":"27.2%"},{"p":"Masque Visage Hydratant Enveloppant - Wrap Apaisant","u":"332","list":"€5.90","paid":"€3.48","red":"41.1%"},{"p":"Masque Visage Hydratant - Wrap Éclat","u":"259","list":"€5.90","paid":"€4.97","red":"15.8%"},{"p":"Crème Hydratante Acide Hyaluronique - Aloe Vera Niacinamid…","u":"247","list":"€51.90","paid":"€37.38","red":"28.0%"},{"p":"Masque Hydratant - Wrap Hyal-Aqua","u":"244","list":"€5.90","paid":"€4.53","red":"23.2%"},{"p":"Soins Crèmes Anti-âge Duo Jour & Nuit Temps Sublime","u":"233","list":"€179.00","paid":"€92.69","red":"48.2%"}],"acq":[{"ch":"Unknown (no journey)","n":1043,"aov":58,"r":"20.5","v":76},{"ch":"Search (organic)","n":716,"aov":61,"r":"16.4","v":81},{"ch":"Direct / untracked","n":324,"aov":66,"r":"19","v":95},{"ch":"Google Shopping (free listings)","n":298,"aov":41,"r":"20.4","v":57},{"ch":"Email (Klaviyo)","n":136,"aov":65,"r":"31.9","v":101},{"ch":"Paid social","n":99,"aov":36,"r":"7.1","v":45}],"flows":[{"f":"All campaigns (Sep 2025 – Oct 2026)","d":"2,495,306","v":"€126,723","pd":"€0.05"},{"f":"Flow · Rappel de panier abandonné","d":"1,599","v":"€10,899","pd":"€6.82"},{"f":"Flow · Abandon de navigation - Standard","d":"610","v":"€2,634","pd":"€4.32"},{"f":"Flow · Serie Abandon de Checkout","d":"137","v":"€925","pd":"€6.75"},{"f":"Flow · Serie Abandon de Panier","d":"121","v":"€214","pd":"€1.77"},{"f":"Flow · Happy Birthday Email - FR","d":"3,720","v":"€111","pd":"€0.03"},{"f":"Flow · Serie Bienvenue","d":"96","v":"€65","pd":"€0.68"},{"f":"Flow · Serie Avis Reçu + Promo","d":"14","v":"€0","pd":"€0.00"},{"f":"Flow · Happy Birthday Email - EN","d":"1,362","v":"€0","pd":"€0.00"}],"opps":[{"i":1,"o":"Second-purchase programme","ev":"18.8% rebuy within 180 d; repeaters worth +€130 after the 1st order","val":"€7.8k / €13k / €21k","act":"Post-purchase flows by entry range, on-site routine step, 15% holdout","ice":60,"p":"High"},{"i":2,"o":"Holiday-cohort rescue","ev":"Nov–Jan cohorts 12.9–17.9% at 180 d; about 1,000 customers a season","val":"inside #1","act":"Jan–Mar \"your routine continues\" sequence","ice":64,"p":"High"},{"i":3,"o":"Stop or redesign paid social","ev":"€9.7k → 99 tracked new customers; CAC €59–98 vs €45 value at 180 d","val":"avoided loss ≈ €2–3k a month","act":"Pause cold; retest hero-product creative with a holdout","ice":60,"p":"High"},{"i":4,"o":"Campaign rationalisation","ev":"~31 campaigns a month; €0.05 per delivered; attribution 2–3× inflated","val":"not quantifiable (no unsubscribe data)","act":"8–12 segmented sends a month, engagement suppression","ice":45,"p":"High"},{"i":5,"o":"Retention-quality entry products","ev":"Temps Sublime entrants 30% vs masks 14% and devices 7%","val":"€2.0k / €4.0k / €6.0k","act":"Lead BF and Shopping feed with TS Duo, Regard Sublime, Exception","ice":36,"p":"High"},{"i":6,"o":"Replenishment reminders (11 SKUs)","ev":"15–23% reorder naturally at measured windows; ≈380 due now","val":"€2.0k / €3.3k / €5.2k (half overlaps #1)","act":"Flow at each product’s p25 interval","ice":36,"p":"High"},{"i":7,"o":"Routine completion","ev":"Only 7.2% of Temps Sublime buyers own the eye cream; within-range lift 7–19","val":"€1.4k / €2.4k / €3.9k","act":"Flows + PDP/cart bundles; advisor routines","ice":36,"p":"Medium"},{"i":8,"o":"Basket building","ev":"51% single-product orders; +€16.7 for a 2nd product","val":"€1.6k / €3.2k / €4.8k","act":"Cart add-ons (Kéfir, eye serum, wraps), threshold bar","ice":36,"p":"Medium"},{"i":9,"o":"Repeat-customer win-back","ev":"431 at-risk/lapsed repeaters, 326 subscribed, €168 average history","val":"€1.3k / €2.2k / €3.4k","act":"Two-touch win-back with favourite range","ice":30,"p":"Medium"},{"i":10,"o":"Device owners → consumables","ev":"LED/sauna buyers rebuy 7–9%; 42% of their next orders are masks","val":"€0.8k / €1.4k / €2.1k","act":"Device onboarding flow","ice":30,"p":"Medium"},{"i":11,"o":"Promotion discipline","ev":"36.7% below list; welcome code shows no retention edge","val":"€1.3k / €2.6k / €3.9k margin","act":"Holdouts; gifts with purchase instead of %","ice":24,"p":"Medium"},{"i":12,"o":"VIP / Champions","ev":"151 customers = 18% of revenue; no Smile.io data","val":"protects ≈ €57k","act":"Early access; connect Smile.io first","ice":18,"p":"Medium"},{"i":13,"o":"Benelux and Italy CRM","ev":"AOV €72–89, higher repeat","val":"< €2k","act":"Localised flows","ice":12,"p":"Low"}],"calendar":[{"m":"Jan","p":"Convert the holiday cohort to a 2nd order","s":"Soldes without deeper %","prod":"Wraps for device owners; TS and Source d’Eau full sizes","ev":"Holiday cohorts 12.9–17.9% at 180 d; Jan €34k","c":"H"},{"m":"Feb","p":"Eye-care routine completion","s":"Win back at-risk repeaters","prod":"Caresse Regard Sublime, Élixir Regard Éclat","ev":"Eyes 17.7% of Feb revenue; 7.2% attach","c":"M"},{"m":"Mar","p":"Replenishment month, low promotion","s":"Device owners → consumables","prod":"The 11 replenishment SKUs; wraps","ev":"Repeat demand only 5–9 per 100 due in Feb–May","c":"L"},{"m":"Apr","p":"Anti-ageing acquisition with Temps Sublime","s":"AOV via €65 gift","prod":"TS Duo, Vitamin C serum, Élixir TS","ev":"Anti-ageing 40.5% share; TS rebuy 30.4%","c":"M"},{"m":"May","p":"Mother’s Day gifting and radiance","s":"New-customer volume","prod":"Coffrets, Éclat Parfait, CC/BB, UV","ev":"184 new customers in May 2026","c":"M"},{"m":"Jun","p":"Hydration routine (crème → élixir)","s":"Father’s Day Homme trio","prod":"Source d’Eau; Homme","ev":"Hydration 20.4% share; Homme loop 74%","c":"M"},{"m":"Jul","p":"Summer sales with routine sets","s":"Repeat customers’ promo-timed buying","prod":"Summer coffrets, eye care","ev":"Sets 34% of Jul 2025 revenue","c":"M"},{"m":"Aug","p":"Protect margin: flows only","s":"Prepare back-to-school list","prod":"—","ev":"Aug 2026 −42% YoY","c":"M"},{"m":"Sep","p":"Post-summer repair (hydration + anti-ageing)","s":"Reactivate spring/summer one-timers","prod":"Source d’Eau, Temps Sublime","ev":"Hydration 20.9%, anti-ageing 36.7%","c":"M"},{"m":"Oct","p":"Pre-BF list building + Exception","s":"Octobre Rose (BB/CC)","prod":"Exception trio; BB/CC","ev":"Exception €157 value at 180 d","c":"L"},{"m":"Nov","p":"Black Friday acquisition with retention-quality entry products","s":"Device gifting","prod":"TS Duo, Exception, Regard Sublime; LED as gift","ev":"Nov €42k, 308 new; best campaign yield","c":"H"},{"m":"Dec","p":"Gifting: coffrets and SPA","s":"Capture gift buyers for January","prod":"Coffrets, LED, Sauna","ev":"Sets 27.8% of revenue; devices 18.2%","c":"H"}]};
+const NS = 'http://www.w3.org/2000/svg';
+const fmtE = (v) => '€' + Math.round(v).toLocaleString('en-GB');
+const mon = (m) => { const [y, mm] = m.split('-'); return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+mm - 1] + ' ' + y.slice(2); };
+function el(tag, attrs, parent) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function tipper(box) { const t = document.createElement('div'); t.className = 'tip'; t.hidden = true; box.appendChild(t);
+  return { show(html, x, y) { t.innerHTML = html; t.hidden = false; t.style.left = x + 'px'; t.style.top = y + 'px'; }, hide() { t.hidden = true; } }; }
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); return Math.ceil(v / p / 2) * 2 * p; }
+
+function stacked(id, rows, keys, colors) {
+  const box = document.getElementById(id), W = 960, H = 320, L = 56, R = 8, T = 10, B = 34;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Monthly net revenue stacked by customer type' }, box);
+  const max = niceMax(Math.max(...rows.map(r => keys.reduce((s, k) => s + r[k], 0))));
+  const y = (v) => T + (H - T - B) * (1 - v / max);
+  for (let i = 0; i <= 4; i++) { const v = max * i / 4; el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'grid' }, svg);
+    el('text', { x: L - 8, y: y(v) + 4, 'text-anchor': 'end' }, svg).textContent = (v / 1000) + 'k'; }
+  const bw = (W - L - R) / rows.length, tip = tipper(box);
+  rows.forEach((r, i) => {
+    let acc = 0; const x = L + i * bw + bw * 0.18, w = bw * 0.64;
+    keys.forEach((k, j) => { const v = r[k]; if (v <= 0) return; const y0 = y(acc), y1 = y(acc + v); acc += v;
+      el('rect', { x, y: y1 + (acc - v > 0 ? 0 : 0), width: w, height: Math.max(0, y0 - y1 - 2), fill: colors[j], rx: j === keys.length - 1 ? 3 : 0 }, svg); });
+    const hit = el('rect', { x: L + i * bw, y: T, width: bw, height: H - T - B, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', () => { const bb = box.getBoundingClientRect(), sc = bb.width / W;
+      tip.show(`<b>${mon(r.m)}</b><br>New ${fmtE(r.new)}<br>Legacy ${fmtE(r.legacy)}<br>Repeat ${fmtE(r.repeat)}<br>Total ${fmtE(r.new + r.legacy + r.repeat)}`, (x + w / 2) * sc, y(acc) * sc); });
+    hit.addEventListener('mouseleave', () => tip.hide());
+    if (i % 2 === 0 || rows.length < 13) el('text', { x: x + w / 2, y: H - 12, 'text-anchor': 'middle' }, svg).textContent = mon(r.m);
+  });
+}
+
+function lines(id, series, colors, xmax, ymax, xlabel) {
+  const box = document.getElementById(id), W = 480, H = 260, L = 40, R = 14, T = 10, B = 34;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Cumulative repurchase curves' }, box);
+  const x = (v) => L + (W - L - R) * v / xmax, y = (v) => T + (H - T - B) * (1 - v / ymax);
+  for (let v = 0; v <= ymax; v += 10) { el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'grid' }, svg);
+    el('text', { x: L - 6, y: y(v) + 4, 'text-anchor': 'end' }, svg).textContent = v + '%'; }
+  [0, 90, 180, 270, 365, 450, 540].forEach(v => el('text', { x: x(v), y: H - 14, 'text-anchor': 'middle' }, svg).textContent = v + 'd');
+  el('text', { x: W - R, y: H - 1, 'text-anchor': 'end' }, svg).textContent = xlabel;
+  const tip = tipper(box);
+  series.forEach((s, j) => {
+    const pts = [[0, 0], ...s.pts];
+    el('polyline', { points: pts.map(p => `${x(p[0])},${y(p[1])}`).join(' '), fill: 'none', stroke: colors[j], 'stroke-width': 2, 'stroke-linejoin': 'round' }, svg);
+    s.pts.forEach(p => { const c = el('circle', { cx: x(p[0]), cy: y(p[1]), r: 4, fill: colors[j], stroke: 'var(--surface)', 'stroke-width': 2 }, svg);
+      const hit = el('circle', { cx: x(p[0]), cy: y(p[1]), r: 10, fill: 'transparent' }, svg);
+      hit.addEventListener('mousemove', () => { const sc = box.getBoundingClientRect().width / W; tip.show(`${s.name}<br>${p[0]} d: <b>${p[1]}%</b>`, x(p[0]) * sc, y(p[1]) * sc); });
+      hit.addEventListener('mouseleave', () => tip.hide()); });
+    const last = s.pts[s.pts.length - 1];
+    el('text', { x: x(last[0]) - 4, y: y(last[1]) - 10, 'text-anchor': 'end', style: 'fill:var(--fg)' }, svg).textContent = last[1] + '%';
+  });
+}
+
+function hbars(id, rows, color, baseline, label) {
+  const box = document.getElementById(id), rowH = 28, L = 190, R = 70, W = 960, T = 4, H = T + rows.length * rowH + 22;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': label }, box);
+  const max = Math.max(...rows.map(r => r.v), baseline || 0) * 1.08, x = (v) => L + (W - L - R) * v / max, tip = tipper(box);
+  rows.forEach((r, i) => { const yy = T + i * rowH;
+    el('text', { x: L - 10, y: yy + rowH / 2 + 4, 'text-anchor': 'end', style: 'fill:var(--fg);font-family:var(--body);font-size:13px' }, svg).textContent = r.label;
+    el('rect', { x: L, y: yy + 6, width: Math.max(2, x(r.v) - L), height: rowH - 12, fill: color, rx: 3 }, svg);
+    el('text', { x: x(r.v) + 6, y: yy + rowH / 2 + 4 }, svg).textContent = r.v + '%' + (r.n ? `  n=${r.n}` : '');
+    const hit = el('rect', { x: 0, y: yy, width: W, height: rowH, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', () => { const sc = box.getBoundingClientRect().width / W; tip.show(`${r.label}: <b>${r.v}%</b>${r.extra ? '<br>' + r.extra : ''}`, x(r.v) * sc, (yy + 6) * sc); });
+    hit.addEventListener('mouseleave', () => tip.hide()); });
+  if (baseline) { el('line', { x1: x(baseline), x2: x(baseline), y1: 0, y2: H - 18, stroke: 'var(--base)', 'stroke-width': 2, 'stroke-dasharray': '4 3' }, svg);
+    el('text', { x: x(baseline), y: H - 4, 'text-anchor': 'middle' }, svg).textContent = 'baseline ' + baseline + '%'; }
+}
+
+function table(id, cols, rows) {
+  const t = document.getElementById(id);
+  t.innerHTML = '<thead><tr>' + cols.map(c => `<th class="${c.n ? 'n' : ''}">${c.h}</th>`).join('') + '</tr></thead><tbody>' +
+    rows.map(r => '<tr>' + cols.map(c => `<td class="${c.n ? 'n' : ''}">${c.f ? c.f(r[c.k], r) : (r[c.k] ?? '')}</td>`).join('') + '</tr>').join('') + '</tbody>';
+}
+const pill = (p) => `<span class="pill ${p === 'High' ? 'p-high' : p === 'Low' ? 'p-low' : 'p-med'}">${p}</span>`;
+
+stacked('c-monthly', D.monthly, ['new', 'legacy', 'repeat'], ['var(--s1)', 'var(--s2)', 'var(--s3)']);
+lines('c-km', D.km, ['var(--s1)', 'var(--s2)'], 540, 50, 'days since first order');
+hbars('c-ladder', D.ladder, 'var(--s1)', null, 'Next-order rate by order number');
+hbars('c-entry', D.entry, 'var(--s1)', 18.8, 'Second-order rate within 180 days by entry range');
+lines2();
+function lines2() {
+  const box = document.getElementById('c-promo'), W = 960, H = 240, L = 44, R = 10, T = 10, B = 30, rows = D.promo;
+  const svg = el('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Share of orders with a price incentive by month' }, box);
+  const x = (i) => L + (W - L - R) * i / (rows.length - 1), y = (v) => T + (H - T - B) * (1 - v / 100), tip = tipper(box);
+  for (let v = 0; v <= 100; v += 25) { el('line', { x1: L, x2: W - R, y1: y(v), y2: y(v), class: 'grid' }, svg); el('text', { x: L - 6, y: y(v) + 4, 'text-anchor': 'end' }, svg).textContent = v + '%'; }
+  [['any', 'var(--s1)'], ['app', 'var(--s2)']].forEach(([k, c]) => el('polyline', { points: rows.map((r, i) => `${x(i)},${y(r[k])}`).join(' '), fill: 'none', stroke: c, 'stroke-width': 2 }, svg));
+  rows.forEach((r, i) => { if (i % 2 === 0) el('text', { x: x(i), y: H - 10, 'text-anchor': 'middle' }, svg).textContent = mon(r.m);
+    const hit = el('rect', { x: x(i) - 20, y: T, width: 40, height: H - T - B, fill: 'transparent' }, svg);
+    hit.addEventListener('mousemove', () => { const sc = box.getBoundingClientRect().width / W; tip.show(`<b>${mon(r.m)}</b><br>Any incentive ${r.any}%<br>Code/offer ${r.app}%`, x(i) * sc, y(r.any) * sc); });
+    hit.addEventListener('mouseleave', () => tip.hide()); });
+}
+
+table('t-seg', [
+  { h: 'Segment', k: 'seg' }, { h: 'Customers', k: 'customers', n: 1 }, { h: '% revenue', k: 'rev', n: 1, f: v => v + '%' },
+  { h: 'AOV', k: 'aov', n: 1, f: v => '€' + v }, { h: 'Orders', k: 'orders', n: 1 }, { h: 'Subscribed', k: 'subs', n: 1 }, { h: 'What to do', k: 'action' }], D.segments);
+table('t-md', [{ h: 'Product (last 12 months)', k: 'p' }, { h: 'Units', k: 'u', n: 1 }, { h: 'List TTC', k: 'list', n: 1 }, { h: 'Avg paid TTC', k: 'paid', n: 1 }, { h: 'Reduction', k: 'red', n: 1 }], D.markdown);
+table('t-acq', [{ h: 'First touch', k: 'ch' }, { h: 'New customers', k: 'n', n: 1 }, { h: '1st AOV', k: 'aov', n: 1, f: v => '€' + v }, { h: '2nd within 180 d', k: 'r', n: 1, f: v => v + '%' }, { h: 'Value 180 d', k: 'v', n: 1, f: v => '€' + v }], D.acq);
+table('t-flows', [{ h: 'Klaviyo programme', k: 'f' }, { h: 'Delivered', k: 'd', n: 1 }, { h: 'Attributed value', k: 'v', n: 1 }, { h: 'Per delivered', k: 'pd', n: 1 }], D.flows);
+table('t-opp', [{ h: '#', k: 'i', n: 1 }, { h: 'Opportunity', k: 'o', f: (v, r) => `<b>${v}</b><br><span class="cap">${r.ev}</span>` },
+  { h: 'Annual value (cons / base / opt)', k: 'val' }, { h: 'Action', k: 'act' }, { h: 'ICE', k: 'ice', n: 1 }, { h: 'Priority', k: 'p', f: pill }], D.opps);
+table('t-cal', [{ h: 'Month', k: 'm' }, { h: 'Primary objective', k: 'p', f: v => `<b>${v}</b>` }, { h: 'Secondary', k: 's' }, { h: 'Products', k: 'prod' }, { h: 'Evidence', k: 'ev' }, { h: 'Conf.', k: 'c', f: v => `<span class="conf">${v}</span>` }], D.calendar);
+</script>

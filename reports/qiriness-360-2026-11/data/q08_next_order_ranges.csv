@@ -1,0 +1,148 @@
+from_range,to_range,next_orders,n_next_orders,pct_of_next_orders,same_range
+Active Énergie,Active Énergie,93,219,42.5,true
+Active Énergie,Temps Sublime,59,219,26.9,false
+Active Énergie,Source d'Eau,57,219,26.0,false
+Active Énergie,"Masques, wraps & patchs",45,219,20.5,false
+Active Énergie,Nettoyage & lotions,31,219,14.2,false
+Active Énergie,Regard (Éclat / Sublime),27,219,12.3,false
+Active Énergie,Teint & solaire (CC/BB/UV),25,219,11.4,false
+Active Énergie,Éclat Parfait,22,219,10.0,false
+Active Énergie,Corps,20,219,9.1,false
+Active Énergie,Sensi Zen,10,219,4.6,false
+Active Énergie,Exception,9,219,4.1,false
+Active Énergie,Homme,9,219,4.1,false
+Appareils & SPA,"Masques, wraps & patchs",21,50,42.0,false
+Appareils & SPA,Regard (Éclat / Sublime),12,50,24.0,false
+Appareils & SPA,Nettoyage & lotions,10,50,20.0,false
+Appareils & SPA,Source d'Eau,9,50,18.0,false
+Appareils & SPA,Temps Sublime,8,50,16.0,false
+Autre,Temps Sublime,9,27,33.3,false
+Corps,"Masques, wraps & patchs",47,133,35.3,false
+Corps,Temps Sublime,42,133,31.6,false
+Corps,Corps,37,133,27.8,true
+Corps,Nettoyage & lotions,29,133,21.8,false
+Corps,Source d'Eau,28,133,21.1,false
+Corps,Regard (Éclat / Sublime),21,133,15.8,false
+Corps,Teint & solaire (CC/BB/UV),19,133,14.3,false
+Corps,Qi (corps & bien-être),14,133,10.5,false
+Corps,Éclat Parfait,13,133,9.8,false
+Corps,Active Énergie,11,133,8.3,false
+Corps,Homme,9,133,6.8,false
+Corps,Exception,8,133,6.0,false
+Éclat Parfait,Éclat Parfait,36,101,35.6,true
+Éclat Parfait,"Masques, wraps & patchs",33,101,32.7,false
+Éclat Parfait,Nettoyage & lotions,26,101,25.7,false
+Éclat Parfait,Source d'Eau,22,101,21.8,false
+Éclat Parfait,Temps Sublime,22,101,21.8,false
+Éclat Parfait,Active Énergie,16,101,15.8,false
+Éclat Parfait,Corps,14,101,13.9,false
+Éclat Parfait,Regard (Éclat / Sublime),11,101,10.9,false
+Éclat Parfait,Teint & solaire (CC/BB/UV),10,101,9.9,false
+Éclat Parfait,Qi (corps & bien-être),8,101,7.9,false
+Exception,Exception,67,114,58.8,true
+Exception,Temps Sublime,35,114,30.7,false
+Exception,"Masques, wraps & patchs",23,114,20.2,false
+Exception,Regard (Éclat / Sublime),18,114,15.8,false
+Exception,Active Énergie,12,114,10.5,false
+Exception,Nettoyage & lotions,10,114,8.8,false
+Exception,Source d'Eau,9,114,7.9,false
+Homme,Homme,136,185,73.5,true
+Homme,"Masques, wraps & patchs",18,185,9.7,false
+Homme,Teint & solaire (CC/BB/UV),16,185,8.6,false
+Homme,Temps Sublime,15,185,8.1,false
+Homme,Source d'Eau,15,185,8.1,false
+Homme,Nettoyage & lotions,13,185,7.0,false
+Homme,Regard (Éclat / Sublime),13,185,7.0,false
+Homme,Corps,10,185,5.4,false
+Homme,Active Énergie,9,185,4.9,false
+"Masques, wraps & patchs","Masques, wraps & patchs",212,439,48.3,true
+"Masques, wraps & patchs",Source d'Eau,109,439,24.8,false
+"Masques, wraps & patchs",Temps Sublime,97,439,22.1,false
+"Masques, wraps & patchs",Regard (Éclat / Sublime),69,439,15.7,false
+"Masques, wraps & patchs",Nettoyage & lotions,65,439,14.8,false
+"Masques, wraps & patchs",Active Énergie,49,439,11.2,false
+"Masques, wraps & patchs",Corps,49,439,11.2,false
+"Masques, wraps & patchs",Teint & solaire (CC/BB/UV),43,439,9.8,false
+"Masques, wraps & patchs",Exception,21,439,4.8,false
+"Masques, wraps & patchs",Éclat Parfait,21,439,4.8,false
+"Masques, wraps & patchs",Qi (corps & bien-être),20,439,4.6,false
+"Masques, wraps & patchs",Sensi Zen,20,439,4.6,false
+"Masques, wraps & patchs",Appareils & SPA,16,439,3.6,false
+"Masques, wraps & patchs",Homme,15,439,3.4,false
+"Masques, wraps & patchs",Autre,9,439,2.1,false
+Nettoyage & lotions,Nettoyage & lotions,117,236,49.6,true
+Nettoyage & lotions,Source d'Eau,70,236,29.7,false
+Nettoyage & lotions,Temps Sublime,63,236,26.7,false
+Nettoyage & lotions,"Masques, wraps & patchs",54,236,22.9,false
+Nettoyage & lotions,Regard (Éclat / Sublime),37,236,15.7,false
+Nettoyage & lotions,Corps,36,236,15.3,false
+Nettoyage & lotions,Active Énergie,28,236,11.9,false
+Nettoyage & lotions,Éclat Parfait,22,236,9.3,false
+Nettoyage & lotions,Teint & solaire (CC/BB/UV),20,236,8.5,false
+Nettoyage & lotions,Qi (corps & bien-être),18,236,7.6,false
+Nettoyage & lotions,Sensi Zen,14,236,5.9,false
+Nettoyage & lotions,Homme,14,236,5.9,false
+Qi (corps & bien-être),Temps Sublime,23,66,34.8,false
+Qi (corps & bien-être),"Masques, wraps & patchs",19,66,28.8,false
+Qi (corps & bien-être),Qi (corps & bien-être),16,66,24.2,true
+Qi (corps & bien-être),Nettoyage & lotions,12,66,18.2,false
+Qi (corps & bien-être),Source d'Eau,11,66,16.7,false
+Qi (corps & bien-être),Corps,10,66,15.2,false
+Qi (corps & bien-être),Regard (Éclat / Sublime),9,66,13.6,false
+Regard (Éclat / Sublime),Regard (Éclat / Sublime),78,216,36.1,true
+Regard (Éclat / Sublime),Temps Sublime,72,216,33.3,false
+Regard (Éclat / Sublime),"Masques, wraps & patchs",61,216,28.2,false
+Regard (Éclat / Sublime),Nettoyage & lotions,38,216,17.6,false
+Regard (Éclat / Sublime),Active Énergie,35,216,16.2,false
+Regard (Éclat / Sublime),Source d'Eau,32,216,14.8,false
+Regard (Éclat / Sublime),Exception,22,216,10.2,false
+Regard (Éclat / Sublime),Corps,19,216,8.8,false
+Regard (Éclat / Sublime),Teint & solaire (CC/BB/UV),17,216,7.9,false
+Regard (Éclat / Sublime),Éclat Parfait,13,216,6.0,false
+Regard (Éclat / Sublime),Homme,11,216,5.1,false
+Regard (Éclat / Sublime),Qi (corps & bien-être),10,216,4.6,false
+Regard (Éclat / Sublime),Autre,9,216,4.2,false
+Regard (Éclat / Sublime),Sensi Zen,8,216,3.7,false
+Sensi Zen,Sensi Zen,14,42,33.3,true
+Sensi Zen,"Masques, wraps & patchs",13,42,31.0,false
+Sensi Zen,Source d'Eau,13,42,31.0,false
+Sensi Zen,Nettoyage & lotions,10,42,23.8,false
+Sensi Zen,Teint & solaire (CC/BB/UV),8,42,19.0,false
+Source d'Eau,Source d'Eau,237,360,65.8,true
+Source d'Eau,"Masques, wraps & patchs",90,360,25.0,false
+Source d'Eau,Nettoyage & lotions,64,360,17.8,false
+Source d'Eau,Temps Sublime,59,360,16.4,false
+Source d'Eau,Active Énergie,45,360,12.5,false
+Source d'Eau,Regard (Éclat / Sublime),31,360,8.6,false
+Source d'Eau,Éclat Parfait,25,360,6.9,false
+Source d'Eau,Corps,24,360,6.7,false
+Source d'Eau,Teint & solaire (CC/BB/UV),22,360,6.1,false
+Source d'Eau,Qi (corps & bien-être),15,360,4.2,false
+Source d'Eau,Sensi Zen,13,360,3.6,false
+Source d'Eau,Exception,11,360,3.1,false
+Source d'Eau,Homme,9,360,2.5,false
+Teint & solaire (CC/BB/UV),Teint & solaire (CC/BB/UV),91,186,48.9,true
+Teint & solaire (CC/BB/UV),Temps Sublime,37,186,19.9,false
+Teint & solaire (CC/BB/UV),Source d'Eau,34,186,18.3,false
+Teint & solaire (CC/BB/UV),"Masques, wraps & patchs",28,186,15.1,false
+Teint & solaire (CC/BB/UV),Nettoyage & lotions,25,186,13.4,false
+Teint & solaire (CC/BB/UV),Active Énergie,20,186,10.8,false
+Teint & solaire (CC/BB/UV),Regard (Éclat / Sublime),17,186,9.1,false
+Teint & solaire (CC/BB/UV),Éclat Parfait,13,186,7.0,false
+Teint & solaire (CC/BB/UV),Corps,13,186,7.0,false
+Teint & solaire (CC/BB/UV),Homme,11,186,5.9,false
+Temps Sublime,Temps Sublime,307,476,64.5,true
+Temps Sublime,"Masques, wraps & patchs",91,476,19.1,false
+Temps Sublime,Source d'Eau,74,476,15.5,false
+Temps Sublime,Regard (Éclat / Sublime),71,476,14.9,false
+Temps Sublime,Nettoyage & lotions,61,476,12.8,false
+Temps Sublime,Active Énergie,55,476,11.6,false
+Temps Sublime,Corps,40,476,8.4,false
+Temps Sublime,Teint & solaire (CC/BB/UV),37,476,7.8,false
+Temps Sublime,Éclat Parfait,33,476,6.9,false
+Temps Sublime,Exception,32,476,6.7,false
+Temps Sublime,Qi (corps & bien-être),23,476,4.8,false
+Temps Sublime,Homme,14,476,2.9,false
+Temps Sublime,Autre,11,476,2.3,false
+Temps Sublime,Appareils & SPA,10,476,2.1,false
+Temps Sublime,Sensi Zen,9,476,1.9,false

@@ -54,6 +54,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # [app_proxy] in the root shopify.app.toml
 |-- data/advisor/qiriness.json  # the brand's advisory playbooks + mappings + merchandising;
 |                    # npm run advisor:load loads it, npm run eval:advisory checks it
+|-- reports/         # one-off read-only analyses (qiriness-360-2026-11/: REPORT.md, sql/, run.mjs
+|                    # read-only runner pinned to the Qiriness shop id, data/ aggregates only)
 |-- agent/           # always-on worker (own package.json; reuses scripts/lib/). src/: mail
 |                    # (provider boundary) · ingestion · pipeline (categorise) · retrieval ·
 |                    # investigation · resolution · routing · drafting · cases · casework ·

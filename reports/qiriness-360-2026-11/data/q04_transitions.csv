@@ -1,0 +1,6 @@
+from_order,eligible_180d,pct_next_within_180d,pct_next_ever,median_gap_days
+1,1985,18.8,25.1,99
+2,349,42.7,52.4,86
+3,117,64.1,70.9,83
+4,53,64.2,67.9,55
+5+,52,82.7,82.7,50

@@ -1,0 +1,19 @@
+dim,val,customers,first_aov_ht,pct_2nd_180d,value_180d,subsequent_value_180d
+first_aov_band,a <35,809,22.51,11.7,29.52,7.01
+first_aov_band,b 35-50,331,41.88,23.0,59.68,17.80
+first_aov_band,c 50-70,348,60.59,21.3,79.90,19.31
+first_aov_band,d 70-100,226,81.19,26.1,113.27,32.08
+first_aov_band,e 100+,271,164.23,25.5,202.93,38.69
+first_promo,automatic offer,256,57.17,21.5,79.57,22.40
+first_promo,code,554,57.92,20.2,77.23,19.31
+first_promo,full price,1175,58.97,17.5,75.64,16.67
+has_device,false,1825,52.22,19.7,71.38,19.16
+has_device,true,160,129.45,8.8,136.05,6.60
+has_set,false,1518,57.37,19.1,75.39,18.02
+has_set,true,467,61.94,17.8,80.50,18.56
+n_products,1,1136,46.32,16.2,58.99,12.67
+n_products,2,396,61.22,19.9,83.30,22.08
+n_products,3+,453,86.42,24.3,114.86,28.44
+n_ranges,1,1328,47.42,16.7,61.38,13.97
+n_ranges,2,430,69.24,21.9,92.22,22.98
+n_ranges,3+,227,102.50,25.1,135.94,33.44
