@@ -751,8 +751,10 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
         const [top] = ranked;
         if (shown.has(top.x.id)) { skipped.push({ slot, kind, part, reason: SKIPPED.ALSO_IN_DAY_ROUTINE, product_id: top.x.id, handle: top.x.handle, type: top.x.k.functional_type, ...(top.x.k.ritual_stage ? { stage: top.x.k.ritual_stage } : {}), reason_codes: top.codes }); continue; }
         shown.add(top.x.id);
-        // The serum's range is the routine's: the eye care and the cream follow it.
-        if (step.chosen_by.includes('range') && top.x.k.range) current = top.x.k.range;
+        // The serum's range is the routine's: the eye care and the cream follow it. Only when the main
+        // concern gives none (owner, 2026-11-05): the Éclat Parfait serum out of stock, the Active Énergie
+        // one stood in, and its range replaced the in-stock Éclat Parfait cream and eye care.
+        if (step.chosen_by.includes('range') && top.x.k.range && !range) current = top.x.k.range;
         steps.push({
           slot, kind, type: top.x.k.functional_type, part, optional: false,
           // Its ritual stage (Products tab « Étape du rituel »): the reply names the step by it (owner, 2026-10-17).

@@ -10,6 +10,10 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## A stand-in serum no longer changes the routine's range (2026-11-05)
+
+- « Taches et teint terne » with the Niacinamide serum out of stock: the Active Énergie serum stood in and brought its eye care and cream, replacing the in-stock Éclat Parfait ones. The serum's range now carries over only when the main concern gives none (`timed` in foundations.mjs). Test in day-night.test.mjs; 3981/3981. **Not deployed.**
+
 ## « Non merci » to the routine offer: one reply, one treat per conversation (2026-11-05)
 
 - **One bubble, no model call** (`model_skipped: 'offer_no'`): the treat's sentence and its card. It was the model's « Bien sûr… je reste à votre écoute » then the treat's « Très bien… ».

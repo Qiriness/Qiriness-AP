@@ -421,3 +421,17 @@ test('a routine or ritual asked for starts the builder, FR and EN; one described
   for (const m of ['I would like a routine', 'can you suggest a skincare ritual', 'I need a new regimen', 'do you have a routine for dry skin', 'je veux une routine', 'proposez-moi un rituel', "j'aimerais une routine de soin complète", 'avez-vous une routine pour les rides ?']) assert.equal(extractProfile(m).routineBuilder, true, m);
   for (const m of ['my routine is a cleanser and a cream', 'what is in my routine', 'ma routine actuelle est un nettoyant', 'what spa treatments would you recommend']) assert.equal(extractProfile(m).routineBuilder, false, m);
 });
+
+test('the main concern\'s range stays when its serum is out of stock (owner, 2026-11-05)', () => {
+  // « Taches et teint terne », normal skin, 25–34, the day: the Niacinamide serum out of stock. The Active Énergie
+  // serum stood in, and its range replaced the in-stock Éclat Parfait cream and eye care.
+  const out = 'serum-anti-taches-niacinamide-eclat-parfait';
+  const catalogue = { ...CATALOGUE, products: CATALOGUE.products.map((p) => (p.handle === out ? { ...p, inStock: false } : p)) };
+  const stocked = createAdvisor(read('data/advisor/qiriness.json'), catalogue, { knowledge: KNOWLEDGE, routines: built.routines });
+  for (const skin of ['normal', 'dry']) {
+    const a = stocked.advise({ profile: { primary_concern: q('dullness'), secondary_concerns: q(['dark_spots']), skin_type: q(skin), age_band: q('25_34'), routine_time: q('day') }, mode: 'routine_builder', asked: ALL });
+    assert.equal(a.playbook.preferred_family, 'Eclat Parfait', skin);
+    assert.ok(handles(a).includes('creme-hydratante-visage-caresse-eclat-parfait'), skin);
+    assert.ok(!handles(a).some((h) => /active-energie|regard-energie/.test(h) && !/serum/.test(h)), `${skin}: ${handles(a).join(', ')}`);
+  }
+});
