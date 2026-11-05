@@ -131,6 +131,8 @@ export function assembleRoutines({ routines, rules, products, settings }) {
       modules,
       questions: settings.questions ?? {},
       treats: settings.treats ?? {},
+      // A face step no product meets: this product, by the step's type (owner, 2026-11-05: the backup serum).
+      step_backup: Object.fromEntries(Object.entries(settings.step_backup ?? {}).filter(([k, v]) => !k.startsWith('_') && typeof v === 'string' && v)),
       // Nothing for the need on the hands or lips: the face's product for it (owner's notes v4).
       area_fallback: Object.fromEntries(Object.entries(settings.area_fallback ?? {}).filter(([k, v]) => !k.startsWith('_') && v?.to)),
       // The code a finished routine's « add to cart » applies (owner, 2026-10-17), never named to the customer.

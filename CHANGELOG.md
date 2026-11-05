@@ -10,6 +10,12 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## A backup serum when none fits: « Imperfections » (2026-11-05)
+
+- `step_backup` in the routine settings (serum → Active Énergie Lift): a face step with no eligible product takes it (`step_fallback`), the range unchanged. Assembled into the routines (`assemble-routines.mjs`); live after `npm run advisor:load`.
+- `scripts/advisor/inspect-live-routine.mjs`: read-only, the routine production builds from the active knowledge and the live catalogue.
+- Tests 3982/3982. **Not deployed.**
+
 ## A stand-in serum no longer changes the routine's range (2026-11-05)
 
 - « Taches et teint terne » with the Niacinamide serum out of stock: the Active Énergie serum stood in and brought its eye care and cream, replacing the in-stock Éclat Parfait ones. The serum's range now carries over only when the main concern gives none (`timed` in foundations.mjs). Test in day-night.test.mjs; 3981/3981. **Not deployed.**

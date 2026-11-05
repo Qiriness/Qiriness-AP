@@ -739,6 +739,10 @@ export function createFoundationAdvisor({ routines, catalogue, knowledge, allowe
             .map((x) => ({ x, ...timedKey(x, step, part, f, c, current) }))
             .sort(byKey);
           if (!ranked.length && step.product) ranked = [stepProduct(step, FIT.STEP_FALLBACK, skip, c)].filter(Boolean);
+          // Still none, on the face: the brand's backup for that type (settings `step_backup`; owner, 2026-11-05:
+          // « Imperfections » had no serum with the Niacinamide one out of stock). It leaves the range as it is.
+          const backup = !ranked.length && step.area === 'face' ? routines.step_backup?.[step.types[0]] : null;
+          if (backup) ranked = [stepProduct({ product: backup }, FIT.STEP_FALLBACK, skip, c)].filter(Boolean);
         }
         // The product they came for takes its step when it may.
         const pin = wanted.find((x) => !shown.has(x.id) && !placed.some((p) => p.product_id === x.id) && ranked.some((r) => r.x.id === x.id));

@@ -435,3 +435,20 @@ test('the main concern\'s range stays when its serum is out of stock (owner, 202
     assert.ok(!handles(a).some((h) => /active-energie|regard-energie/.test(h) && !/serum/.test(h)), `${skin}: ${handles(a).join(', ')}`);
   }
 });
+
+test('« Imperfections » with the Niacinamide serum out of stock: the backup serum, the range kept (owner, 2026-11-05)', () => {
+  const out = 'serum-anti-taches-niacinamide-eclat-parfait';
+  const catalogue = { ...CATALOGUE, products: CATALOGUE.products.map((p) => (p.handle === out ? { ...p, inStock: false } : p)) };
+  const stocked = createAdvisor(read('data/advisor/qiriness.json'), catalogue, { knowledge: KNOWLEDGE, routines: built.routines });
+  for (const skin of ['oily', 'combination', 'normal']) {
+    const a = stocked.advise({ profile: { primary_concern: q('imperfections'), skin_type: q(skin), age_band: q('25_34'), routine_time: q('day') }, mode: 'routine_builder', asked: ALL });
+    const serum = a.steps.find((s) => s.slot === 'day_2');
+    assert.equal(serum?.handle, 'serum-anti-age-elixir-active-energie-lift', skin);
+    assert.ok(serum.reason_codes.includes('step_fallback'), skin);
+    assert.equal(a.playbook.preferred_family, 'Eclat Parfait', skin);
+    assert.ok(handles(a).includes('creme-hydratante-visage-caresse-eclat-parfait'), skin);
+  }
+  // In stock, the Niacinamide serum is still the one.
+  const a = build({ primary_concern: q('imperfections'), skin_type: q('oily'), age_band: q('25_34'), routine_time: q('day') });
+  assert.equal(a.steps.find((s) => s.slot === 'day_2')?.handle, out);
+});
