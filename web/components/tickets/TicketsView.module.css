@@ -1031,14 +1031,25 @@
 
 .draftPanel {
   flex: none;
-  max-height: 35%;
-  min-height: 180px;
   display: grid;
   align-content: start;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
   background: var(--surface);
   overflow: auto;
+}
+
+/* Collapsed: the panel is a strip, the mode switch and the To line; the
+   draft, its buttons and the composers wait for the arrow. */
+.detailFrame:not(.detailFrameDraftExpanded) .draftContent {
+  display: none;
+}
+
+.draftContent {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
 }
 
 /* Expanded: the conversation steps aside and the draft, its text uncapped,
@@ -1619,10 +1630,6 @@
   .ticketHeaderText {
     flex-basis: 100%;
     order: 2;
-  }
-
-  .draftPanel {
-    max-height: 42%;
   }
 }
 

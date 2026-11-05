@@ -1514,8 +1514,9 @@ function TicketDetailWorkspace({
   onForwardChanged: (forward: TicketForward) => void;
 }) {
   const t = useT();
-  // The draft either keeps its default share of the pane or takes all of it
-  // below the header. Kept while switching tickets.
+  // Collapsed, the draft panel is a strip (mode switch and To line) and the
+  // conversation has the pane; expanded, the draft takes all of it below the
+  // header. Kept while switching tickets.
   const [draftExpanded, setDraftExpanded] = useState(false);
   const [middleTab, setMiddleTab] = useState<"conversation" | "notes" | "activity" | "linked">("conversation");
   const [composeMode, setComposeMode] = useState<ComposeMode>("reply");
@@ -1544,6 +1545,12 @@ function TicketDetailWorkspace({
       live = false;
     };
   }, [ticket.id]);
+
+  // A note or a forward is something to type, so choosing one opens the panel.
+  function changeComposeMode(mode: ComposeMode) {
+    setComposeMode(mode);
+    if (mode !== "reply") setDraftExpanded(true);
+  }
 
   // Choosing a tab while the draft fills the pane means wanting to read it.
   function showMiddleTab(tab: "conversation" | "notes" | "activity" | "linked") {
@@ -1640,7 +1647,7 @@ function TicketDetailWorkspace({
             notes={notes}
             error={notesError}
             onDelete={noteDeleted}
-            onAdd={() => setComposeMode("note")}
+            onAdd={() => changeComposeMode("note")}
           />
         ) : middleTab === "linked" && thread && linkedThreads.length > 0 ? (
           <LinkedThreads threads={linkedThreads} parcels={thread.parcels} />
@@ -1673,7 +1680,7 @@ function TicketDetailWorkspace({
         detail={detail}
         detailError={detailError}
         mode={composeMode}
-        onModeChange={setComposeMode}
+        onModeChange={changeComposeMode}
         onNoteAdded={noteAdded}
         onForwarded={(forward, names) => {
           onForwardChanged(forward);
@@ -2465,10 +2472,17 @@ function DraftResponsePanel({
         )}
       </div>
 
+      {/* COLLAPSED, ONLY THE LINES ABOVE SHOW (the mode switch and, for a reply,
+          the To line with its alert icons). Everything in .draftContent is
+          hidden by CSS rather than unmounted, so an edit in progress survives. */}
       {mode === "forward" ? (
-        <ForwardComposer ticket={ticket} thread={thread} onForwarded={onForwarded} />
+        <div className={styles.draftContent}>
+          <ForwardComposer ticket={ticket} thread={thread} onForwarded={onForwarded} />
+        </div>
       ) : mode === "note" ? (
-        <NoteComposer ticketId={ticket.id} onAdded={onNoteAdded} />
+        <div className={styles.draftContent}>
+          <NoteComposer ticketId={ticket.id} onAdded={onNoteAdded} />
+        </div>
       ) : (
         <>
           <div className={styles.addressLine}>
@@ -2496,6 +2510,7 @@ function DraftResponsePanel({
             </span>
           </div>
 
+          <div className={styles.draftContent}>
           {error ? (
             <p className={styles.inlineError} role="alert">{error}</p>
           ) : !thread ? (
@@ -2599,6 +2614,7 @@ function DraftResponsePanel({
           )}
 
           {detailError && <p className={styles.inlineError} role="alert">{detailError}</p>}
+          </div>
         </>
       )}
     </section>
