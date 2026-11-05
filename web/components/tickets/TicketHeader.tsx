@@ -133,14 +133,23 @@ export function TicketHeader({
       <p className={styles.subline}>
         <span className={styles.who}>{requesterName(ticket, t)}</span>
         {email && <span className={styles.email}>{email}</span>}
-        {ticket.lastMessageAt && (
-          <span>{t("tickets.panels.header.lastMessage", { when: formatRelativeTime(ticket.lastMessageAt, t) })}</span>
-        )}
-        {ticket.waitingSince && !closed && (
-          <span className={styles.waiting}>
+        {/* ONE TIME, NOT TWO. While the customer is waiting, how long is what
+            matters (the last message, when different, is in the tooltip);
+            otherwise the last message. Side by side they usually read the same. */}
+        {ticket.waitingSince && !closed ? (
+          <span
+            className={styles.waiting}
+            title={
+              ticket.lastMessageAt && ticket.lastMessageAt !== ticket.waitingSince
+                ? t("tickets.panels.header.lastMessage", { when: formatRelativeTime(ticket.lastMessageAt, t) })
+                : undefined
+            }
+          >
             {t("tickets.panels.header.waitingSince", { when: formatRelativeTime(ticket.waitingSince, t) })}
           </span>
-        )}
+        ) : ticket.lastMessageAt ? (
+          <span>{t("tickets.panels.header.lastMessage", { when: formatRelativeTime(ticket.lastMessageAt, t) })}</span>
+        ) : null}
         {ticket.orderNumber && (
           <button type="button" className={styles.orderLink} onClick={onOpenContext} title={t("tickets.panels.header.orderInPanel")}>
             <OrdersIcon size={13} />
