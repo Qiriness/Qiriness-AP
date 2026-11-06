@@ -1,7 +1,6 @@
 /*
- * Storefront advisor — the loader (Theme Check caps it at 10 KB). Draws the launcher; the panel
- * (advisor-panel.js) is fetched on first open, or at once if left open on the previous page.
- * Everything shop-specific is in the embed's JSON config: no backend URL, shop or key here.
+ * Storefront advisor loader (Theme Check cap: 10 KB): the launcher; advisor-panel.js on first open.
+ * All shop-specific values come from the embed's JSON config.
  */
 (function () {
   'use strict';
@@ -9,7 +8,7 @@
   var ROOT_ID = 'storefront-advisor';
   var STORAGE_KEY = 'storefront-advisor:v1';
   var BANNER_KEY = 'storefront-advisor:banner-closed';
-  var BANNER_DELAY_MS = 1200;
+  var SEEN_KEY = 'storefront-advisor:since';
   var MOBILE_QUERY = '(max-width: 640px)';
   var SPARK = [
     'M12 3.5c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5 3.9-.6 5.9-2.6 6.5-6.5Z',
@@ -28,7 +27,7 @@
     }
     root.setAttribute('data-ready', 'true');
     decodeConfigText(config);
-    // Another language than Shopify's (Weglot): our own words in it (advisor-strings.js).
+    // A language other than Shopify's (Weglot): advisor-strings.js.
     var shopLang = String((config.context || {}).locale || '').slice(0, 2);
     var pageLang = String((location.pathname.match(/^\/([a-z]{2})(\/|$)/) || [])[1] || document.documentElement.lang || '').slice(0, 2);
     if (config.stringsScript && (window.Weglot || (pageLang && pageLang !== shopLang))) {
@@ -67,7 +66,7 @@
     var mounted = false;
     var advisor = null;
 
-    // `start`: a quick action run once the panel is open (the banner's « Construire ma routine »).
+    // `start`: a quick action run once open (the banner's).
     function mount(openNow, start) {
       if (mounted) {
         if (start && advisor) advisor.start(start);
@@ -96,10 +95,8 @@
   }
 
   /*
-   * THE ROUTINE BANNER (owner, 2026-10-19): a bar across the bottom of the screen inviting the
-   * visitor to build their routine for the shop's offer. Its button opens the advisor and starts
-   * the routine builder; its × hides it for `hours` hours (this browser only). Hidden while the
-   * panel is open; the launcher sits above it.
+   * THE ROUTINE BANNER (owner, 2026-10-19): a bottom bar; its button starts the routine builder,
+   * its × hides it for `hours` hours. Shown `delay` s into the visit (this tab), not each page.
    */
   function routineBanner(root, config, start) {
     var banner = config.banner || {};
@@ -126,7 +123,7 @@
     bar.appendChild(go);
     bar.appendChild(close);
 
-    // Other widgets pinned to the bottom (Klaviyo's teaser…): lifted above the bar while it shows (theme setting).
+    // Other widgets pinned to the bottom (Klaviyo's teaser): lifted above the bar (theme setting).
     var lifted = [];
     var watch = null;
     function lift() {
@@ -164,17 +161,23 @@
       measure();
       root.classList.add('sa-root--banner');
       window.addEventListener('resize', measure);
-      // They often arrive after the page: lifted as they appear.
+      // Lifted as they appear.
       if (banner.lift && window.MutationObserver) {
         watch = new MutationObserver(lift);
         watch.observe(document.body, { childList: true, subtree: true });
       }
-      // Next frame: slide up from the bottom edge.
+      // Next frame: slide up.
       window.requestAnimationFrame(function () { bar.classList.add('sa-banner--in'); });
-    }, BANNER_DELAY_MS);
+    }, bannerWait(banner.delay));
   }
 
-  /* The advisor's web fonts (theme setting), only once something of ours is drawn: never on every page. */
+  function bannerWait(s) {
+    var at = Date.now();
+    try { at = Number(sessionStorage.getItem(SEEN_KEY)) || at; sessionStorage.setItem(SEEN_KEY, at); } catch (error) { /* this page */ }
+    return Math.max(1200, (typeof s === 'number' ? s : 30) * 1000 + at - Date.now());
+  }
+
+  /* The web fonts (theme setting), only once something of ours is drawn. */
   function loadFonts(url) {
     if (typeof url !== 'string' || url.indexOf('https://') !== 0 || document.getElementById('sa-fonts')) return;
     var link = document.createElement('link');
@@ -193,7 +196,7 @@
     }
   }
 
-  /* Liquid's `t` HTML-escapes (« m&#39;en »); we write textContent, so decode once. DOMParser runs nothing. */
+  /* Liquid's `t` HTML-escapes (« m&#39;en »); we write textContent: decoded once. */
   function decodeConfigText(config) {
     var parser = typeof DOMParser === 'function' ? new DOMParser() : null;
     function decode(value) {
