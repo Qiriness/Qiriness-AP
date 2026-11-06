@@ -176,7 +176,7 @@
   function visitWait(s) {
     var at = Date.now();
     try { at = Number(sessionStorage.getItem(SEEN_KEY)) || at; sessionStorage.setItem(SEEN_KEY, at); } catch (error) { /* this page */ }
-    return Math.max(0, (typeof s === 'number' ? s : 30) * 1000 + at - Date.now());
+    return Math.max(0, (typeof s === 'number' ? s : 15) * 1000 + at - Date.now());
   }
 
   /* The web fonts (theme setting), only once something of ours is drawn. */
