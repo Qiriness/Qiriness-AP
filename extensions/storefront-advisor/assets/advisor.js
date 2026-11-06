@@ -60,7 +60,6 @@
     label.className = 'sa-launcher__label';
     label.textContent = strings.launcher || '';
     launcher.appendChild(label);
-    root.appendChild(launcher);
 
     var loading = null;
     var mounted = false;
@@ -90,15 +89,18 @@
       if (!mounted) mount(true);
     });
 
-    if (wasLeftOpen()) mount(false);
-    routineBanner(root, config, function (start) { mount(true, start); });
+    // Launcher and banner wait `delay` s into the visit, clear of the cookie banner (owner, 2026-11-06).
+    var wait = visitWait((config.banner || {}).delay);
+    if (wasLeftOpen()) { wait = 0; mount(false); }
+    setTimeout(function () { root.insertBefore(launcher, root.firstChild); }, wait);
+    routineBanner(root, config, function (start) { mount(true, start); }, wait);
   }
 
   /*
    * THE ROUTINE BANNER (owner, 2026-10-19): a bottom bar; its button starts the routine builder,
-   * its × hides it for `hours` hours. Shown `delay` s into the visit (this tab), not each page.
+   * its × hides it for `hours` hours. Shown with the launcher.
    */
-  function routineBanner(root, config, start) {
+  function routineBanner(root, config, start, wait) {
     var banner = config.banner || {};
     if (!banner.enabled || !banner.text || !banner.button || bannerClosed(banner.hours)) return;
     loadFonts(config.fontsUrl);
@@ -168,13 +170,13 @@
       }
       // Next frame: slide up.
       window.requestAnimationFrame(function () { bar.classList.add('sa-banner--in'); });
-    }, bannerWait(banner.delay));
+    }, Math.max(1200, wait));
   }
 
-  function bannerWait(s) {
+  function visitWait(s) {
     var at = Date.now();
     try { at = Number(sessionStorage.getItem(SEEN_KEY)) || at; sessionStorage.setItem(SEEN_KEY, at); } catch (error) { /* this page */ }
-    return Math.max(1200, (typeof s === 'number' ? s : 30) * 1000 + at - Date.now());
+    return Math.max(0, (typeof s === 'number' ? s : 30) * 1000 + at - Date.now());
   }
 
   /* The web fonts (theme setting), only once something of ours is drawn. */
