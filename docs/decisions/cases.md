@@ -82,3 +82,7 @@ Every decision is a `case_links` row, a new case included, with the candidates a
   - first reply measured across threads.
 
   The unread `support_by_*` views stay per thread. The fulfilment contact rate stays per order.
+
+### A defect is its own family, DEFECT (2026-11-06)
+
+`defective_product`, PR-38 and PR-26 were `PRODUCT` (PR-38 was in no family at all), so a defect thread could link to an advice thread on the same order and to nothing else. They are `DEFECT` now, with two transitions: `DELIVERY → DEFECT` (the parcel arrived, then the product inside is broken) and `DEFECT → REFUND_RETURN` (a defect settled by a refund). Configuration, like every family: migration `01_defective_product_subject` for the configured shops, `supabase/seeds/issue_families.sql` for new ones.

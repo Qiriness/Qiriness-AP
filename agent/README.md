@@ -117,7 +117,7 @@ next poll with no manual step.
 The categoriser classifies and nothing else: no tools, no order lookup, no database access.
 Its prompt carries the ticket subject and the first + latest inbound bodies, never the
 sender's address or name. The allowed values come from `scripts/lib/support-taxonomy.mjs`,
-so the model picks 1-of-14 subjects plus 1-of-4 request kinds; `level` and `responsible_team`
+so the model picks 1-of-15 subjects plus 1-of-4 request kinds; `level` and `responsible_team`
 are then *derived* from that pair, and the model can only escalate the level, never lower it.
 
 **Level 4 is a severity judgement, not a subject.** No (subject, kind) pair derives it: it is

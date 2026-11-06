@@ -23,7 +23,7 @@ import { ENABLED_SUBJECTS, TOOL_NAMES, allowedTools, openingMoves, requiredEvide
 // its own vocabulary or its own tools. Every task is clamped to the existing
 // (subject, kind) taxonomy here, so it routes through the same
 // `allowedTools`/`openingMoves` table as any other ticket — a table tested
-// across all 14 subjects × 4 kinds whose outside the model never sees. That is
+// across all 15 subjects × 4 kinds whose outside the model never sees. That is
 // the project's rule that guardrails are code and only guidelines are prose; a
 // planner emitting a free-form task graph would quietly undo it.
 

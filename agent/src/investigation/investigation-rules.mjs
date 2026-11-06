@@ -88,6 +88,9 @@ const T = TOOL_NAMES;
  */
 export const ENABLED_SUBJECTS = [
   'product',
+  // ADDED 2026-11-06 with the subject itself: PR-38 and PR-26 were already
+  // investigated under `product`, so this keeps their case files, not adds one.
+  'defective_product',
   'product_stock',
   'promotions',
   'account',
@@ -164,6 +167,25 @@ const TOOLS_BY_SUBJECT = {
   ],
   account: [T.LOOKUP_CUSTOMER, T.SEARCH_KNOWLEDGE],
   other: [T.SEARCH_KNOWLEDGE],
+
+  // A DEFECT IS ABOUT A PRODUCT ON AN ORDER, then the photos. Split out of
+  // `product` on 2026-11-06 with exactly the tools its situations (PR-38,
+  // PR-26) read: the order (`order_identity`), which product, whether it was
+  // bought from us, and the photos. None of the advice tools
+  // (`recommendProducts`, `lookupStock`, `lookupProductOffer`): a defect report
+  // is never answered with a recommendation or an offer, and least privilege is
+  // the rule. `searchKnowledge` stays for the product's own articles.
+  //
+  // `product` KEEPS `getOrderContext` and the photo tool for now: a defect the
+  // categoriser still files `product` would otherwise lose them, which is worse
+  // than today. Taking them off is a measurement, not a guess.
+  defective_product: [
+    T.GET_ORDER_CONTEXT,
+    T.LOOKUP_PRODUCT,
+    T.VERIFY_PURCHASE,
+    T.CHECK_PHOTO_EVIDENCE,
+    T.SEARCH_KNOWLEDGE
+  ],
 
   // Defined and tested, dormant until ENABLED_SUBJECTS includes them.
   // `lookupAbandonedCheckout` ADDED 2026-09-16 for P-17 (« le masque offert ne
@@ -315,6 +337,9 @@ const ANSWER_SET_BY_SUBJECT = {
   return_exchange: 'returns',
   promotions: 'promotions',
   product: 'products',
+  // The PR-38 and PR-26 rules were written in `products` and stay there: a set
+  // is a family of rules, not a category, so no rule had to move.
+  defective_product: 'products',
   product_stock: 'products',
   payment: 'payments',
   account: 'accounts',
@@ -381,6 +406,13 @@ const EVIDENCE_BY_SUBJECT = {
   product: [
     { key: 'product_identified', label: 'le produit concerné est identifié' },
     { key: 'product_answer', label: 'la fiche produit ou un article approuvé répond à la question' }
+  ],
+  // Whether the defect is real and what is owed are a person's call, after the
+  // photos; nothing here asks the case file to judge either.
+  defective_product: [
+    { key: 'order_identified', label: 'la commande concernée est identifiée, ou le lieu d’achat est précisé' },
+    { key: 'product_identified', label: 'le produit défectueux est identifié' },
+    { key: 'photo_received', label: 'les photos du défaut sont jointes, ou leur absence est constatée' }
   ],
   product_stock: [
     { key: 'product_identified', label: 'le produit concerné est identifié' },
@@ -465,6 +497,13 @@ export function openingMoves(ticket = {}) {
       break;
     case 'product_stock':
       add(T.LOOKUP_STOCK, { question: text });
+      break;
+    // All three are what PR-38 asks for in order — the order, the product, the
+    // photos — and none needs the model's reading, so none is worth a turn.
+    case 'defective_product':
+      add(T.GET_ORDER_CONTEXT, {});
+      add(T.LOOKUP_PRODUCT, { question: text });
+      add(T.CHECK_PHOTO_EVIDENCE, {});
       break;
     case 'promotions':
       // Codes AND described offers. Its arguments are filled by `planMoves`

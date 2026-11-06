@@ -828,7 +828,7 @@ commerciale, prise par une personne.
 ---
 
 ### PR-26 · Mon masque LED ne se recharge plus / la batterie ne tient pas.
-`product` · `problem` · **2 msgs** · 🟢
+`defective_product` · `problem` · **2 msgs** · 🟢 · _moved from product 2026-11-06 (migration 01_defective_product_subject)_
 **choose_rule** Choose when the LED mask has a charging, battery or power-related malfunction. Do not choose for questions about how a mask feature works or its technical specifications.
 
 **Variantes réelles**
@@ -845,7 +845,7 @@ commerciale, prise par une personne.
 ---
 
 ### PR-38 · Mon produit est arrivé cassé, ou il est défectueux / ne fonctionne pas.
-`product` · `problem` · _from 3 tickets with no situation, 2026-10-04 (3e28483f, 2aa6604e, a0465150), and 34 more found by searching the mail_ · 🟢
+`defective_product` · `problem` · _moved from product 2026-11-06 (migration 01_defective_product_subject); from 3 tickets with no situation, 2026-10-04 (3e28483f, 2aa6604e, a0465150), and 34 more found by searching the mail_ · 🟢
 **choose_rule** Choose when a product the customer has is broken, damaged, leaking or opened on arrival, or defective: a pump that delivers nothing, a missing or detached part, a device or remote that does not work, a texture or smell unlike usual. Do not choose when the product received is not the one ordered (D-08), when an item is missing from the parcel (D-02), when the skin reacted to the product (CV-01), or when the LED mask will not charge or its battery does not hold (PR-26).
 
 **Variantes réelles**
@@ -878,6 +878,10 @@ commerciale, prise par une personne.
 >
 > **`getOrderContext` was added to the `product` tools for this situation** (2026-10-04):
 > these tickets are filed `product`, and without it the order could never be identified.
+>
+> **Its own subject since 2026-11-06.** PR-38 and PR-26 are `defective_product`, and
+> the situation is matched only against tickets the categoriser files there — no
+> longer against advice questions. Its rules stay in the `products` answer set.
 
 **Contenu stable** _(à rédiger)_
 >

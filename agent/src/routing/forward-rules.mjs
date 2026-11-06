@@ -130,6 +130,7 @@ const CATEGORY_PHRASING = {
   delivery: 'une demande concernant une livraison',
   return_exchange: 'une demande de retour ou d\'échange',
   product: 'une question produit',
+  defective_product: 'un signalement de produit défectueux',
   product_stock: 'une question de disponibilité',
   account: 'une question sur un compte',
   other: 'un message'

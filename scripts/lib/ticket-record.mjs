@@ -323,6 +323,21 @@ export function createTicketRecord(supabase, { shopId, transport = REST_TRANSPOR
     },
 
     /**
+     * A subject backfill's labels (agent `npm run tickets:relabel-subject`).
+     *
+     * NO FLAG MOVES, which is the whole difference from `complete`: nothing
+     * new arrived on these threads, so nothing is re-investigated, re-drafted
+     * or re-routed because of it. The superseded labels and the reading go to
+     * `metadata.categorisation`, the same trail the pass writes.
+     */
+    async relabel(ticket, { columns = {}, trail = {} } = {}) {
+      return patch(ticket.id, {
+        ...columns,
+        metadata: withTrail(ticket.metadata, PASSES.categorisation.trail, trail)
+      });
+    },
+
+    /**
      * Forgets which customer a ticket belongs to.
      *
      * The other half of `setRequester`, and for the same reconcile tool only.

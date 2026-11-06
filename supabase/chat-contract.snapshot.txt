@@ -156,7 +156,7 @@ chat.ticket_reply_times — First-response time per ticket: first customer messa
 chat.tickets — One row per customer-support email thread. Coverage starts when the mailbox sync began: use min(first_message_at) as the start of the data and never report a period before it. Join orders on shopify_order_number = orders.order_name or the order number as text.
   ticket_id uuid
   status text — open, awaiting_customer, awaiting_human, resolved, closed.
-  category text — Subject: order, delivery, product, product_stock, return_exchange, promotions, payment, account, b2b, careers, partner_collaboration, legal_privacy, cosmetovigilance, other. Null when not yet categorised.
+  category text — Subject: order, delivery, product (information and advice), defective_product (a product broken, leaking or not working), product_stock, return_exchange, promotions, payment, account, b2b, careers, partner_collaboration, legal_privacy, cosmetovigilance, other. Null when not yet categorised.
   secondary_category text
   request_kind text
   level smallint — 1 (simple) to 4 (serious, e.g. a skin reaction). Severity, not subject.

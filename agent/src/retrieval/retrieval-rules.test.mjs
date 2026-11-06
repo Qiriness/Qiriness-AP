@@ -12,8 +12,14 @@ import {
 } from './retrieval-rules.mjs';
 
 test('a ticket searches its own subject plus the cross-subject ones', () => {
-  assert.deepEqual(categoriesToSearch('product'), ['product', 'faq', 'brand_story']);
+  assert.deepEqual(categoriesToSearch('product'), ['product', 'defective_product', 'faq', 'brand_story']);
   assert.deepEqual(categoriesToSearch('account'), ['account', 'faq', 'brand_story']);
+});
+
+test('a defective product reads the product articles, own subject first', () => {
+  // Split out of `product` on 2026-11-06; every article about a product was
+  // written under `product`, so a defect filtered to itself would see none.
+  assert.deepEqual(categoriesToSearch('defective_product'), ['defective_product', 'product', 'faq', 'brand_story']);
 });
 
 test('the always-searched categories are not duplicated when they ARE the subject', () => {

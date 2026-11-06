@@ -386,6 +386,16 @@ export const FlaskIcon = (p: IconProps) => (
   </Base>
 );
 
+/** A pump bottle with a crack: a product that is itself broken or not working. */
+export const BrokenBottleIcon = (p: IconProps) => (
+  <Base {...p}>
+    <path d="M9 3.5h4.5l2 1.5M11.25 3.5v3" />
+    <path d="M9.5 6.5h3.5v2.5H9.5z" />
+    <path d="M7.5 11a2 2 0 0 1 2-2h3.5a2 2 0 0 1 2 2v8.5a1 1 0 0 1-1 1H8.5a1 1 0 0 1-1-1z" />
+    <path d="M11.5 11.5l-1.5 2.75 2.25 1.25-1.5 3" />
+  </Base>
+);
+
 export const BuildingIcon = (p: IconProps) => (
   <Base {...p}>
     <path d="M5 20.5V4.5a1 1 0 0 1 1-1h8a1 1 0 0 1 1 1v16" />

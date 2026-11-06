@@ -209,6 +209,44 @@ test('contact is coerced to question on a subject it cannot describe', () => {
   );
 });
 
+test('a defect report is never a question: raised to problem, level 3', () => {
+  // The five `product · question` tickets near PR-38 were polite defect
+  // reports or lot-date questions; the subject now separates them, and a defect
+  // report phrased as a question still needs the case looked at.
+  const result = normaliseCategorisation(answer({ category: 'defective_product', request_kind: 'question', level: 1 }));
+  assert.equal(result.request_kind, 'problem');
+  assert.equal(result.level, 3);
+  assert.equal(result.responsible_team, 'contact');
+  // A complaint stands: dissatisfaction with nothing asked for.
+  assert.equal(
+    normaliseCategorisation(answer({ category: 'defective_product', request_kind: 'complaint' })).request_kind,
+    'complaint'
+  );
+  // The same rule on the secondary pair, including its unusable-kind default.
+  const secondary = normaliseCategorisation(
+    answer({ category: 'order', secondary_category: 'defective_product', secondary_request_kind: 'question' })
+  );
+  assert.equal(secondary.secondary_request_kind, 'problem');
+  assert.equal(secondary.level, 3);
+  assert.equal(
+    normaliseCategorisation(answer({ category: 'order', secondary_category: 'defective_product', secondary_request_kind: null }))
+      .secondary_request_kind,
+    'problem'
+  );
+  // A product question is untouched.
+  assert.equal(normaliseCategorisation(answer({ category: 'product', request_kind: 'question' })).request_kind, 'question');
+});
+
+test('the prompt separates a defective product from advice, a parcel and a reaction', async () => {
+  const captured = {};
+  await createCategoriser(fakeOpenAI(answer(), captured), { model: 'm' }).categorise(input());
+  assert.match(captured.system, /- defective_product : un produit reçu ou utilisé qui est lui-même défectueux/);
+  assert.match(captured.system, /Un produit qui pose lui-même problème n'est PAS product : c'est defective_product/);
+  assert.match(captured.system, /Le PRODUIT reçu est lui-même cassé ou défectueux : defective_product/);
+  assert.match(captured.system, /aucun effet sur la peau n'est PAS de la cosmétovigilance : c'est defective_product/);
+  assert.match(captured.system, /defective_product n'est JAMAIS une question/);
+});
+
 test('a secondary repeating the primary is dropped', () => {
   const result = normaliseCategorisation(
     answer({ secondary_category: 'order', secondary_request_kind: 'problem' })

@@ -8,6 +8,7 @@ import {
   TICKET_ONLY_SUBJECTS,
   TICKET_SUBJECTS,
   REQUEST_KINDS,
+  NEVER_QUESTION_SUBJECTS,
   CONFIDENCE_LEVELS,
   REPLY_LANGUAGES,
   HAPPINESS_SCORES,
@@ -25,13 +26,13 @@ import {
 } from './support-taxonomy.mjs';
 
 test('subjects and kinds are the agreed vocabulary', () => {
-  assert.equal(SUBJECTS.length, 14);
+  assert.equal(SUBJECTS.length, 15);
   assert.deepEqual(REQUEST_KINDS, ['question', 'problem', 'complaint', 'contact']);
   assert.deepEqual(KNOWLEDGE_ONLY_SUBJECTS, ['faq', 'brand_story']);
 });
 
 test('knowledge categories are the subjects but the catch-all, plus the knowledge-only shapes', () => {
-  assert.equal(KNOWLEDGE_CATEGORIES.length, 15);
+  assert.equal(KNOWLEDGE_CATEGORIES.length, 16);
   // The shared-vocabulary guarantee: every named ticket subject is a valid
   // knowledge category, so a ticket's subject is always a usable retrieval filter.
   for (const subject of TICKET_SUBJECTS.filter((s) => !TICKET_ONLY_SUBJECTS.includes(s))) {
@@ -98,6 +99,17 @@ test('problems on non-lookup subjects still floor at 3', () => {
   // Nothing to look up, so the only way to satisfy them is to change something.
   assert.equal(defaultLevel('return_exchange', 'problem'), 3);
   assert.equal(defaultLevel('product', 'problem'), 3);
+});
+
+test('a defective product is its own subject: level 3, the contact team, never a question', () => {
+  // Photos go to a person, who decides on a replacement, a re-shipment or a
+  // refund: something changes, so the generic problem floor holds.
+  assert.ok(isSubject('defective_product'));
+  assert.ok(isKnowledgeCategory('defective_product'));
+  assert.equal(defaultLevel('defective_product', 'problem'), 3);
+  assert.equal(defaultLevel('defective_product', 'complaint'), 3);
+  assert.equal(defaultTeam('defective_product'), 'contact');
+  assert.deepEqual(NEVER_QUESTION_SUBJECTS, ['defective_product']);
 });
 
 test('complaints are always 3, contact is a forward', () => {

@@ -373,3 +373,37 @@ test('only a retailer entry makes a sender trade mail', () => {
   assert.equal(isTradeSender(null), false, 'an unlisted sender is a consumer');
   assert.equal(isTradeSender(undefined), false);
 });
+
+test('a defective product gets the order, the product, the purchase and the photos — no advice tools', () => {
+  // Split out of `product` on 2026-11-06: exactly what PR-38 and PR-26 read.
+  assert.ok(ENABLED_SUBJECTS.includes('defective_product'));
+  assert.deepEqual(allowedTools('defective_product', 'problem', 3), [
+    TOOL_NAMES.GET_ORDER_CONTEXT,
+    TOOL_NAMES.LOOKUP_PRODUCT,
+    TOOL_NAMES.VERIFY_PURCHASE,
+    TOOL_NAMES.CHECK_PHOTO_EVIDENCE,
+    TOOL_NAMES.SEARCH_KNOWLEDGE
+  ]);
+  const tools = allowedTools('defective_product', 'problem', 3);
+  for (const advice of [TOOL_NAMES.RECOMMEND_PRODUCTS, TOOL_NAMES.LOOKUP_STOCK, TOOL_NAMES.LOOKUP_PRODUCT_OFFER]) {
+    assert.ok(!tools.includes(advice), advice);
+  }
+  // Its rules were written in `products` and stay there.
+  assert.equal(answerSetFor('defective_product'), 'products');
+  assert.ok(requiredEvidence('defective_product').length > 0);
+  assert.ok(isInvestigable({ category: 'defective_product', request_kind: 'problem', level: 3 }));
+});
+
+test('a defective product opens on the order, the product and the photos', () => {
+  const moves = openingMoves({
+    category: 'defective_product',
+    request_kind: 'problem',
+    level: 3,
+    text: 'La pompe ne fonctionne plus.'
+  });
+  assert.deepEqual(
+    moves.map((m) => m.tool),
+    [TOOL_NAMES.GET_ORDER_CONTEXT, TOOL_NAMES.LOOKUP_PRODUCT, TOOL_NAMES.CHECK_PHOTO_EVIDENCE]
+  );
+  assert.deepEqual(moves[1].args, { question: 'La pompe ne fonctionne plus.' });
+});

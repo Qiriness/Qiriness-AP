@@ -135,9 +135,70 @@ export const CASES = [
     id: 'product-quality-complaint',
     subject: 'Flacon à moitié vide',
     body: "J'ai ouvert mon flacon et il était à moitié vide. Pour ce prix je trouve ça vraiment décevant.",
-    expect: { category: 'product', request_kind: 'complaint', level: 3 },
-    accept: { category: ['order', 'delivery'] },
-    note: 'dissatisfaction about the product itself'
+    expect: { category: 'defective_product', request_kind: 'complaint', level: 3 },
+    accept: { category: ['order', 'delivery'], request_kind: ['problem'] },
+    note: 'an under-filled bottle is a defect of the product itself (was product before 2026-11-06). Nothing is asked for, so complaint; problem accepted since 2026-11-06 because a defect is fixable (photos, then a replacement) and the model reads it so 4/4 — same level either way'
+  },
+  {
+    id: 'product-lot-date',
+    subject: 'Date de fabrication',
+    body: "Bonjour, j'ai une crème de nuit avec le numéro de lot B215KQA sous le pot. Pourriez-vous m'indiquer sa date de fabrication et jusqu'à quand je peux l'utiliser ?",
+    expect: { category: 'product', request_kind: 'question', level: 1 },
+    note: 'a lot number is not a defect: nothing has gone wrong with the product (the #1100 / #1102 shape)'
+  },
+
+  // --- defective product (its own subject since 2026-11-06) ------------------
+  {
+    id: 'defect-pump-polite',
+    subject: 'Pompe du sérum',
+    body: "Bonjour, il me reste encore plus de la moitié du flacon mais la pompe ne fonctionne plus, plus rien ne sort. Que pouvons-nous faire dans ce cas ?",
+    expect: { category: 'defective_product', request_kind: 'problem', level: 3 },
+    note: 'phrased as a question, still a defect report: never question (NEVER_QUESTION_SUBJECTS)'
+  },
+  {
+    id: 'defect-opened-in-box',
+    subject: 'Produit endommagé',
+    body: "En ouvrant la boîte ce matin, le pot de crème était ouvert et il y en avait partout. Je vous joins les photos.",
+    expect: { category: 'defective_product', request_kind: 'problem', level: 3 },
+    accept: { category: ['delivery'] },
+    note: 'the product inside arrived broken: defective_product, though a reviewer may read the parcel'
+  },
+  {
+    id: 'defect-texture-smell',
+    subject: 'Crème différente',
+    body: "Bonjour, j'ai racheté ma crème habituelle mais la texture et l'odeur ne sont pas du tout les mêmes que d'habitude. Référence sous le pot : T167YHA.",
+    expect: { category: 'defective_product', request_kind: 'problem', level: 3 },
+    note: 'a changed texture or smell, no effect on the skin: a defect, not cosmetovigilance'
+  },
+  {
+    id: 'defect-led-battery',
+    subject: 'Masque LED',
+    body: "Mon masque LED ne se recharge plus depuis une semaine, le voyant reste éteint. Il est encore sous garantie ?",
+    expect: { category: 'defective_product', request_kind: 'problem', level: 3 },
+    note: 'a device that stopped working (PR-26)'
+  },
+  {
+    id: 'defect-retailer',
+    subject: 'Flacon qui fuit',
+    body: "J'ai acheté votre parfum chez un revendeur, le flacon fuit et il ne sent presque rien. Je souhaiterais connaître la marche à suivre.",
+    expect: { category: 'defective_product', request_kind: 'problem', level: 3 },
+    note: "bought elsewhere is still a defect of our product; the retailer answer is PR-38's job, not the subject's"
+  },
+  {
+    id: 'defect-refund-request',
+    subject: 'Remboursement produit défectueux',
+    body: "Bonjour, le bouchon de mon contour des yeux s'est cassé à la première utilisation. Je voudrais être remboursée.",
+    expect: { category: 'defective_product', request_kind: 'problem', level: 3 },
+    accept: { category: ['return_exchange'] },
+    note: 'a refund asked BECAUSE the product is defective is a defect, not a return'
+  },
+  {
+    id: 'defect-not-reaction',
+    subject: 'Rougeurs',
+    body: "Depuis que j'utilise le nouveau sérum, j'ai des rougeurs et ça brûle. Le flacon a aussi une odeur bizarre.",
+    expect: { category: 'cosmetovigilance', request_kind: 'problem', level: 2 },
+    accept: { level: [3] },
+    note: 'an effect on the PERSON wins over the product: cosmetovigilance, even with a smell mentioned'
   },
 
   // --- stock ---------------------------------------------------------------
@@ -296,10 +357,10 @@ export const CASES = [
     id: 'secondary-delivery-stock',
     subject: 'Colis abîmé + question',
     body: "Bonjour, mon colis est arrivé avec le flacon cassé et de la crème partout dans la boîte. Par ailleurs, savez-vous si le sérum vitamine C sera bientôt réapprovisionné ? J'aimerais le commander.",
-    expect: { category: 'delivery', request_kind: 'problem', level: 3 },
+    expect: { category: 'defective_product', request_kind: 'problem', level: 3 },
     expectSecondary: { category: 'product_stock', request_kind: 'question' },
-    accept: { category: ['order'], level: [2] },
-    note: 'the secondary pair: two subjects, two different kinds'
+    accept: { category: ['delivery', 'order'], level: [2] },
+    note: 'the secondary pair: two subjects, two different kinds. The bottle itself is broken, so defective_product since 2026-11-06 (delivery accepted)'
   },
   {
     id: 'secondary-order-advice',

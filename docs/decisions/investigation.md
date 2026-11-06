@@ -85,7 +85,7 @@ A test asserts the general property across every tool at once — no `promptText
 
 ### Guardrails are code; only guidelines are prose
 
-What a ticket's agent may call is `allowedTools(category, request_kind, level)` — a table, tested across all 14 subjects × 4 kinds, that the model never sees the outside of. Level 4 and the `contact` kind get an empty registry and no model call at all. The distinction matters because this agent never contacts a customer: its rules are operational (what it may read, what it may spend), not editorial.
+What a ticket's agent may call is `allowedTools(category, request_kind, level)` — a table, tested across all 15 subjects × 4 kinds, that the model never sees the outside of. Level 4 and the `contact` kind get an empty registry and no model call at all. The distinction matters because this agent never contacts a customer: its rules are operational (what it may read, what it may spend), not editorial.
 
 **`requiredEvidence` is a guideline only, and this file used to claim otherwise.** That per-subject checklist is rendered into the prompt (`planEvidence`) and never referenced again. It is also *static* — keyed on the category, so two `product` tickets asking completely different things get the same list, and the `other` entry is *"the knowledge base was consulted"*, which is satisfied by having searched, whatever came back. It cannot fail. Read it as prompt text.
 
@@ -771,6 +771,8 @@ Without the carrier feed nothing ever reports a scan, so every dispatched parcel
 This is also why three proposed condition-only parcel rules were NOT written: two would have been dead on arrival and the third would have fired on one order in two thousand.
 
 ### A broken or defective product is its own situation, filed under product (2026-10-04)
+
+**Superseded in part 2026-11-06:** defects are their own subject, `defective_product` (Taxonomy § *A defective product is a subject*). PR-38 and PR-26 moved there; their rules stay in `products`. The subject has its own tools — `getOrderContext`, `lookupProduct`, `verifyPurchase`, `checkPhotoEvidence`, `searchKnowledge`, no advice tools — opens on the order, the product and the photos, and floors on `order_identity` + `product_identity`. `product` keeps `getOrderContext` and the photo tool until a measurement says a defect no longer lands there.
 
 PR-38 exists because three tickets matched nothing: a pot open in its box (3e28483f), a pump with no tube (2aa6604e), a cream whose texture and smell had changed (a0465150). Searching the mail found 34 more, mostly pumps that stop delivering mid-bottle. D-08 (wrong product) and D-02 (missing item) are `delivery` situations, and these tickets are filed `product`. Situations are matched only within the ticket's own subject, so a delivery situation could never reach them.
 

@@ -9,7 +9,7 @@
 //                   material, neither a question nor a problem.
 //
 // So "order_problem" is not a stored value: it is (subject: order, kind: problem).
-// Keeping them apart is what lets knowledge stay at 15 categories while tickets
+// Keeping them apart is what lets knowledge stay at 16 categories while tickets
 // express every question/problem/contact variant.
 
 /** What the email or article is about. Shared by tickets and knowledge. */
@@ -18,6 +18,14 @@ export const SUBJECTS = [
   'delivery',
   'return_exchange',
   'product',
+  // A product the customer has that is broken, damaged, leaking, opened on
+  // arrival or not working, or whose texture or smell has changed. Its own
+  // subject since 2026-11-06: filed under `product`, it shared a subject with
+  // advice questions, so its situations, tools and forwarding destination had
+  // to be told apart from them by similarity or by a destination description.
+  // An effect on the PERSON is cosmetovigilance; a damaged parcel or a missing
+  // or wrong item is delivery. DECISIONS.md § A defective product is a subject.
+  'defective_product',
   'product_stock',
   'payment',
   'account',
@@ -62,6 +70,17 @@ export const REQUEST_KINDS = ['question', 'problem', 'complaint', 'contact'];
 
 /** `contact` only makes sense for the inbound-relationship subjects. */
 export const CONTACT_ONLY_SUBJECTS = ['b2b', 'partner_collaboration', 'careers'];
+
+/**
+ * Subjects that are always about THIS customer's own case, so never a
+ * `question`. A defect report phrased as one (« que pouvons-nous faire ? »,
+ * « pourriez-vous me le confirmer ? ») still needs the order, the product and
+ * the photos looked at, which is what `problem` means. The categoriser reads
+ * politeness as a question often enough that the rule is enforced in code, the
+ * same way `contact` is restricted above. A general question about a product
+ * that has NOT gone wrong (a lot number's date, how to store it) is `product`.
+ */
+export const NEVER_QUESTION_SUBJECTS = ['defective_product'];
 
 // --- Per-ticket signals -----------------------------------------------------
 // Three more things the categoriser reads off the same email, in the same call.
@@ -217,6 +236,7 @@ const TEAM_BY_SUBJECT = {
   partner_collaboration: 'marketing',
   careers: 'contact',
   product: 'contact',
+  defective_product: 'contact',
   account: 'contact',
   cosmetovigilance: 'contact',
   legal_privacy: 'contact',

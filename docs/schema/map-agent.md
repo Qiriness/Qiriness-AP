@@ -54,7 +54,7 @@ The always-on worker package: ingestion, casework, investigation, drafting, life
 |   |   |                        # off a ticket a customer is on) ·
 |   |   |                        # spam-audit (rows, body cap/clock, retention purge) ·
 |   |   |                        # spam-body-backfill · attachment-backfill
-|   |   |-- pipeline/            # categorise (classify-only) · categorise-runner
+|   |   |-- pipeline/            # categorise (classify-only) · categorise-runner · relabel-subject (a new subject's backfill, pure)
 |   |   |-- retrieval/           # retrieval-rules (categoriesToSearch: the subject,
 |   |   |                        #   its search group — order/delivery/promotions —
 |   |   |                        #   then faq + brand_story for every subject) ·

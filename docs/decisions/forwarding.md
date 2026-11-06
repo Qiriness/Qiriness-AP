@@ -112,3 +112,7 @@ A person can forward a ticket from the ticket page: the composer's purple « Tra
 `ticket_messages.internal_only` marks outbound mail whose every To/Cc address is ours. It is set at ingestion, so every reader skips it with a column instead of re-deriving it. The same rule covers the automatic pass's forwards to internal destinations, and a forward made from Outlook. Rows from before 06 stay false, so no historical case folds differently.
 
 **Sending is the reply pipeline's.** It is gated by `OUTBOUND_SEND_ENABLED`, held in Drafts under `OUTBOUND_STOP_BEFORE_SEND`, and never retried blind: `send_requested` is written before the send, and a half-built draft is thrown away and rebuilt rather than sent with some files missing.
+
+### Defects route on their subject, not on a description (2026-11-06)
+
+`match_description` was added because « Produits défectueux » was the only destination on `product`, and `product` problems also held mail that was not a defect. With `defective_product` a subject, the destination takes that subject and loses the flag (migration `01_defective_product_subject`): a lone destination on its own subject is `fixed`, so the chooser is no longer asked. It stays switched off (`active_since` null) and `after_first_reply`; switching it on forwards only messages received after that moment. `match_description` remains for any other shop that needs it.

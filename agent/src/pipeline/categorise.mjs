@@ -33,6 +33,7 @@ import {
   TICKET_SUBJECTS,
   REQUEST_KINDS,
   CONTACT_ONLY_SUBJECTS,
+  NEVER_QUESTION_SUBJECTS,
   REPLY_LANGUAGES,
   HAPPINESS_SCORES,
   defaultLevel,
@@ -86,16 +87,17 @@ const CATEGORISATION_SCHEMA = {
 // English because they are code enums.
 const SUBJECT_GLOSSARY = [
   "- order : la commande AVANT son expédition — contenu, erreur de saisie, ajout ou retrait d'un article, annulation, prix ou quantité, confirmation de commande non reçue.",
-  "- delivery : tout ce qui suit l'expédition — suivi, numéro de suivi, retard, colis perdu ou endommagé, article manquant à la réception, changement d'adresse d'un colis déjà parti, problème transporteur.",
-  '- return_exchange : retour, échange, rétractation, remboursement.',
-  "- product : question ou conseil sur un produit (utilisation, ingrédients, routine, résultats attendus), OU un produit reçu défectueux, desséché, abîmé, moisi ou non conforme — le produit lui-même pose problème, pas la peau du client.",
+  "- delivery : tout ce qui suit l'expédition — suivi, numéro de suivi, retard, colis perdu ou endommagé, article manquant à la réception, article reçu qui n'est pas celui commandé, changement d'adresse d'un colis déjà parti, problème transporteur. Le COLIS ou son CONTENU (manquant, erroné) : delivery. Le PRODUIT reçu est lui-même cassé ou défectueux : defective_product.",
+  "- return_exchange : retour, échange, rétractation, remboursement, y compris les questions sur le délai ou les conditions de retour. Seule exception : un remboursement ou un échange demandé PARCE QUE le produit reçu est cassé ou défectueux, qui est defective_product.",
+  "- product : question ou conseil sur un produit (utilisation, ingrédients, routine, résultats attendus, conservation, date de fabrication d'un numéro de lot). Un produit qui pose lui-même problème n'est PAS product : c'est defective_product.",
+  "- defective_product : un produit reçu ou utilisé qui est lui-même défectueux — cassé, ouvert ou ayant coulé, qui fuit, pompe ou bouchon hors d'usage, appareil en panne ou batterie qui ne tient plus, sous-rempli, texture ou odeur inhabituelle. Pas la peau du client (cosmetovigilance), pas le colis ni un article manquant ou erroné (delivery).",
   '- product_stock : disponibilité, rupture de stock, réassort.',
   '- payment : paiement, moyen de paiement, débit, facture client.',
   "- account : compte client — connexion, mot de passe, newsletter, données du compte — Y COMPRIS " +
     "la demande de supprimer, désactiver ou fermer son compte. Une suppression demandée au titre du " +
     "RGPD, du droit à l'oubli ou par un avocat n'est PAS account : c'est legal_privacy.",
   '- promotions : codes promo, réductions, offres, fidélité.',
-  "- cosmetovigilance : un effet sur LA PERSONNE — réaction cutanée, rougeurs, boutons, allergie, irritation, brûlure — ou une question de santé liée à l'utilisation d'un produit. Un produit physiquement défectueux qui n'a causé aucun effet sur la peau n'est PAS de la cosmétovigilance : c'est product.",
+  "- cosmetovigilance : un effet sur LA PERSONNE — réaction cutanée, rougeurs, boutons, allergie, irritation, brûlure — ou une question de santé liée à l'utilisation d'un produit. Un produit physiquement défectueux qui n'a causé aucun effet sur la peau n'est PAS de la cosmétovigilance : c'est defective_product.",
   '- legal_privacy : RGPD, données personnelles, mentions légales, demande juridique.',
   '- b2b : revendeurs, grossistes, pharmacies, achats professionnels, facturation B2B.',
   '- partner_collaboration : influenceurs, partenariats, presse, collaborations marketing.',
@@ -121,7 +123,8 @@ const KIND_TIEBREAKER = [
   "- question : une réponse générale suffit, valable pour n'importe qui (« quel est le délai de rétractation ? », « ce produit convient-il aux peaux sensibles ? », « acceptez-vous PayPal ? »).",
   "- problem : il faut ouvrir le dossier DE CE CLIENT pour répondre (« où est mon colis ? », « mon code promo est refusé », « je n'ai pas reçu ma facture ») ou modifier quelque chose (remboursement, renvoi, annulation, changement d'adresse). Une demande polie ou tournée en question reste un problem.",
   "- complaint : réservé au mécontentement SANS demande traitable. « Colis perdu, remboursez-moi » écrit en colère est un problem, pas un complaint : la colère se traduit par le niveau, pas par le type. « Votre service est lamentable » sans autre demande est un complaint.",
-  "- Un compliment ou un remerciement n'est jamais un complaint : utilise question."
+  "- Un compliment ou un remerciement n'est jamais un complaint : utilise question.",
+  "- defective_product n'est JAMAIS une question : signaler un produit défectueux est un problem (ou un complaint s'il n'y a aucune demande), même tourné poliment (« que pouvons-nous faire ? », « pourriez-vous me le confirmer ? »)."
 ].join('\n');
 
 // The per-ticket signals. Kept as their own block because they answer
@@ -236,7 +239,7 @@ export function normaliseCategorisation(raw = {}) {
   // Fallback kind is `problem`, not `question`: an unusable answer should raise
   // the level floor (3 -> a human sees it), never lower it.
   let requestKind = REQUEST_KINDS.includes(raw.request_kind) ? raw.request_kind : 'problem';
-  requestKind = coerceContactKind(category, requestKind);
+  requestKind = coerceQuestionKind(category, coerceContactKind(category, requestKind));
 
   const { secondaryCategory, secondaryRequestKind } = normaliseSecondary(raw, category);
 
@@ -276,6 +279,18 @@ function coerceContactKind(subject, kind) {
   return kind;
 }
 
+/**
+ * A defect report is about this customer's own product, so it is never a
+ * general question (`NEVER_QUESTION_SUBJECTS`). Raised to `problem`, never
+ * lowered: the same direction as every other fallback here.
+ */
+function coerceQuestionKind(subject, kind) {
+  if (kind === 'question' && NEVER_QUESTION_SUBJECTS.includes(subject)) {
+    return 'problem';
+  }
+  return kind;
+}
+
 function normaliseSecondary(raw, primaryCategory) {
   const candidate = raw.secondary_category;
   // A secondary that repeats the primary carries no information, and a secondary
@@ -285,8 +300,8 @@ function normaliseSecondary(raw, primaryCategory) {
     return { secondaryCategory: null, secondaryRequestKind: null };
   }
   const kind = REQUEST_KINDS.includes(raw.secondary_request_kind)
-    ? coerceContactKind(candidate, raw.secondary_request_kind)
-    : 'question';
+    ? coerceQuestionKind(candidate, coerceContactKind(candidate, raw.secondary_request_kind))
+    : coerceQuestionKind(candidate, 'question');
   return { secondaryCategory: candidate, secondaryRequestKind: kind };
 }
 

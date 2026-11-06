@@ -24,6 +24,7 @@ cross join (values
   ('subject', 'promotions', 'PROMOTION'),
   ('subject', 'product', 'PRODUCT'),
   ('subject', 'product_stock', 'PRODUCT'),
+  ('subject', 'defective_product', 'DEFECT'),
   ('subject', 'account', 'ACCOUNT'),
   ('subject', 'cosmetovigilance', 'COSMETOVIGILANCE'),
   ('situation', 'D-01', 'DELIVERY'),
@@ -52,7 +53,8 @@ cross join (values
   ('situation', 'R-23', 'REFUND_RETURN'),
   ('situation', 'PR-24', 'PRODUCT'),
   ('situation', 'PR-25', 'PRODUCT'),
-  ('situation', 'PR-26', 'PRODUCT'),
+  ('situation', 'PR-26', 'DEFECT'),
+  ('situation', 'PR-38', 'DEFECT'),
   ('situation', 'PR-27', 'PRODUCT'),
   ('situation', 'PR-28', 'PRODUCT'),
   ('situation', 'PR-29', 'PRODUCT'),
@@ -78,6 +80,10 @@ cross join (values
   ('DELIVERY', 'REFUND_RETURN'),
   ('ORDER_CHANGE', 'REFUND_RETURN'),
   ('PAYMENT', 'ORDER_CHANGE'),
-  ('ORDER_CHANGE', 'PAYMENT')
+  ('ORDER_CHANGE', 'PAYMENT'),
+  -- A defect, 2026-11-06 (migration 01_defective_product_subject): the parcel arrived, then the product
+  -- inside turned out broken; and a defect settled by a refund.
+  ('DELIVERY', 'DEFECT'),
+  ('DEFECT', 'REFUND_RETURN')
 ) as v(from_family, to_family)
 on conflict (shop_id, from_family, to_family) do nothing;

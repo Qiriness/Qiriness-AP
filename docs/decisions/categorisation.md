@@ -31,3 +31,11 @@ It was, and answered `high` on 171 of 171 live tickets and 40 of 40 review cases
 Two review sets. **Synthetic** (`agent/eval/categorisation-cases.mjs`): 40 dummy emails, ~38–39/40 on all three axes — guards against regressions only. **Real** (`categorisation_review`): 30 hand-labelled emails from the live mailbox — subject 77%, kind 90%, level 73%.
 
 The real set is what drives the rules. The boundary definitions in the prompt (dispatch splits order/delivery; `complaint` only without an actionable request; `contact` only for a first approach; L3 = something must change) and the level floors all come from measured disagreements with human labelling, not from intuition.
+
+### The `defective_product` definition is short on purpose (2026-11-06)
+
+The first definition ended « que le défaut soit découvert à l'ouverture du colis ou après plusieurs semaines d'utilisation, et quel que soit le lieu d'achat (site ou revendeur) ». With it, `return-policy` (« quel est votre délai de rétractation ? Je voudrais offrir un coffret… ») came back `product/question` 3 of 3, on `gpt-4o-mini`, against `return_exchange` 3 of 3 on HEAD. Isolated line by line over 3 runs each: restoring the `product` and `return_exchange` lines to their HEAD wording changed nothing, moving the defect line elsewhere in the glossary fixed it 0–2 of 3, removing the defect line fixed it 3 of 3, and the short form now in the prompt fixed it 3 of 3 while keeping every defect case (pump, pot opened in the box, refund for a defect, retailer purchase) 3 of 3 and the lot-date question `product`.
+
+Synthetic set after the change, 48 cases: subject 48/48, kind 47/48, level 48/48. The kind miss is `product-quality-complaint` (an under-filled bottle, nothing asked): read `problem` 4 of 4, now accepted — a defect is fixable, and the level is 3 either way. `delivery-angry` misses on HEAD too.
+
+**Do not lengthen the definition without re-running `npm run eval:categorise` twice.** The purchase place and the moment of discovery are PR-38's business (`retailer_order_policy`), not the subject's.

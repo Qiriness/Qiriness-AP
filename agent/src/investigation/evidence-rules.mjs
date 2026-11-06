@@ -1709,6 +1709,10 @@ export function toolsForNeed(need) {
  */
 const RESPONSE_NEEDS_BY_SUBJECT = {
   product: ['product_identity', 'product_property'],
+  // The order and the product. `photo_evidence` is NOT on the floor: PR-38 adds
+  // it once both are known, and a floor carrying it would ask a retailer
+  // customer for photos before telling them to see the retailer.
+  defective_product: ['order_identity', 'product_identity'],
   product_stock: ['product_identity', 'product_availability'],
   promotions: ['promotion_identity', 'promotion_validity'],
   account: ['customer_identity'],

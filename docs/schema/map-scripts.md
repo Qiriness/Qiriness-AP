@@ -284,7 +284,7 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |-- dashboard-passwords.mjs      # the 12-character minimum (Supabase hashes)
 |       |-- dashboard-user-admin.mjs     # the only writer of auth.users; secret key,
 |       |                                # CLI only — never imported by the web app
-|       |-- support-taxonomy.mjs         # THE vocabulary: 14 subjects · 4 kinds ·
+|       |-- support-taxonomy.mjs         # THE vocabulary: 15 subjects · 4 kinds ·
 |       |                                # level + team derivation · signal enums
 |       |-- vip-rule.mjs                 # THE VIP RULE's reader: shops thresholds ->
 |       |                                # vip_customers/vip_tickets/vip_summary RPCs;

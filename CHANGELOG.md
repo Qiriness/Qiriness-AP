@@ -10,6 +10,20 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## A defective product is its own ticket category (2026-11-06)
+
+- **New subject `defective_product`** (« Produit défectueux » / « Defective product »), split out of `product`: a product that is itself broken, opened or leaking, with a pump, cap or device that does not work, a battery that no longer holds, under-filled, or with an unusual texture or smell. 15 subjects. A defect report is never a `question` (raised to `problem`, level 3); team `contact`. `DECISIONS.md` § A defective product is a subject.
+- **Categoriser**: new definition and boundaries (a skin effect → cosmetovigilance; parcel, missing or wrong item → delivery; refund because of a defect → defective_product; a lot date → product). Synthetic set 48 cases (8 new): subject 48/48, kind 47/48, level 48/48. A longer first definition pulled a returns question to `product` 3 of 3; isolated and shortened (`DECISIONS.md` § The `defective_product` definition is short on purpose).
+- **Downstream**, each keyed on the subject:
+  - investigation: enabled, its own tools (order, product, purchase, photos, knowledge; no advice tools), opening moves on the order, the product and the photos, evidence floor `order_identity` + `product_identity`, answer set `products`, so the PR-38 / PR-26 rules are unchanged;
+  - knowledge retrieval: `product` and `defective_product` search each other's articles;
+  - forwarding: the note phrase « un signalement de produit défectueux »; the « Produits défectueux » destination takes the subject and drops `match_description` (still switched off);
+  - cases: new family `DEFECT` (subject, PR-38, PR-26), `DELIVERY → DEFECT`, `DEFECT → REFUND_RETURN`;
+  - dashboard: the label in both languages, an article category, a broken-bottle icon, the order-first context strip.
+- **Migration `01_defective_product_subject.sql`**: widens the 8 subject check constraints, updates the chat column description, moves PR-38 and PR-26, the destination and the families. Rehearsed on PGlite, **applied to production 2026-11-06** (chat contract snapshot accepted, baseline regenerated and identical to production, file archived). Verified: PR-26/PR-38 on the new subject, the destination on it without `match_description`, DEFECT family and its two transitions on the configured shop.
+- **`tickets:relabel-subject[:dry-run] -- --subject=defective_product`** (agent): re-reads candidates with the live categoriser and writes only the new subject, with the old labels in `metadata.categorisation.history`. No flag moves, so nothing is re-investigated, re-drafted or re-routed. Dry run on production: 47 candidates, 19 primaries and 2 secondaries would move, all defects (#854 pump, #941/#942/#946/#1057/#1068 under-filled, #1016/#1017 pot opened in the box, #933/#984 LED masks, …). **Not run for real yet.**
+- Tests: root 3995/3995 after the baseline was regenerated; agent 2186/2186. `tsc` and `next lint` clean. Not checked in the browser. VALIDATION_LOG item 66.
+
 ## A backup serum when none fits: « Imperfections » (2026-11-05)
 
 - `step_backup` in the routine settings (serum → Active Énergie Lift): a face step with no eligible product takes it (`step_fallback`), the range unchanged. Assembled into the routines (`assemble-routines.mjs`); live after `npm run advisor:load`.

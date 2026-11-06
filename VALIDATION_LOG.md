@@ -42,6 +42,21 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 66. `defective_product`: the categoriser measured on the synthetic set and a dry run only; migration applied 2026-11-06, relabel not yet run — 2026-11-06
+
+**Pending, in this order** (the worker must not run the new code before step 1, or a `defective_product` label violates `tickets_category_check` and falls back to `other`):
+1. ~~Apply `01_defective_product_subject.sql`, regenerate the baseline, archive the file~~ — done 2026-11-06, baseline identical to production, `npm test` 3995/3995.
+2. Restart the worker on the new code.
+3. In `agent/`: `npm run tickets:relabel-subject -- --subject=defective_product` (the dry run moved 19 primaries and 2 secondaries of 47).
+
+**Then check, on new mail over the next weeks:**
+- Every defect lands `defective_product`, never `product` (search `product` tickets for « cassé », « pompe », « fuit », « défectueux »). A defect still filed `product` loses PR-38: situations are matched within the subject.
+- PR-38 and PR-26 still win on `defective_product` tickets (`ticket_investigations.exemplar_match->>exemplar_key`), and the opening moves (`getOrderContext`, `lookupProduct`, `checkPhotoEvidence`) settle `order_identity` / `product_identity` / `photo_evidence`.
+- No `return_exchange` question drifts to `product` (the measured regression of the first definition, `DECISIONS.md` § The `defective_product` definition is short on purpose).
+- Once no defect lands in `product` for a month, take `getOrderContext` and `checkPhotoEvidence` off the `product` tools.
+
+**Not done:** `categorisation_review` (the real hand-labelled set) is empty in production, so the real-mail accuracy figures in Categorisation § Measured were not re-measured. `ticket_clusters` subjects are stale until `npm run cluster:tickets` runs again.
+
 ## 65. Six languages: tested offline on the real sheet only; the Italian, German and Dutch not reviewed by a native speaker — 2026-10-30
 
 **Translations to review.** Everything in `scripts/lib/i18n/{it,de,nl,es}/` (messages, the word lists, the lexicons), the widget locales `storefront-app/extensions/storefront-advisor/locales/{it,de,nl,es}.json`, the Rules tab's `label_it/de/nl/es` columns, the routine settings' questions and buttons, and the config's labels. The owner reviews the Spanish (including « usted » or « tú »); Italian, German and Dutch need a native speaker before they count as done.

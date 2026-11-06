@@ -16,20 +16,20 @@ grep -rn "^### <heading>" docs/decisions/
 
 | Section | File | Entries | ~Tokens |
 | --- | --- | ---: | ---: |
-| Taxonomy | `docs/decisions/taxonomy.md` | 3 | 1,109 |
+| Taxonomy | `docs/decisions/taxonomy.md` | 4 | 1,700 |
 | Ingestion | `docs/decisions/ingestion.md` | 16 | 6,400 |
 | Spam gate | `docs/decisions/spam-gate.md` | 4 | 1,353 |
-| Categorisation | `docs/decisions/categorisation.md` | 5 | 918 |
+| Categorisation | `docs/decisions/categorisation.md` | 6 | 1,300 |
 | Customer resolution | `docs/decisions/customer-resolution.md` | 2 | 941 |
 | Order resolution | `docs/decisions/order-resolution.md` | 15 | 10,345 |
 | Human overrides | `docs/decisions/human-overrides.md` | 1 | 1,394 |
 | Investigation | `docs/decisions/investigation.md` | 123 | 59,966 |
-| Forwarding | `docs/decisions/forwarding.md` | 9 | 3,380 |
+| Forwarding | `docs/decisions/forwarding.md` | 10 | 3,550 |
 | Lifecycle | `docs/decisions/lifecycle.md` | 8 | 4,550 |
 | Embeddings | `docs/decisions/embeddings.md` | 4 | 1,200 |
 | Exemplars | `docs/decisions/exemplars.md` | 27 | 10,084 |
 | Deduplication | `docs/decisions/deduplication.md` | 11 | 5,676 |
-| Cases | `docs/decisions/cases.md` | 6 | 2,864 |
+| Cases | `docs/decisions/cases.md` | 7 | 3,000 |
 | Sending | `docs/decisions/sending.md` | 3 | 2,453 |
 | Drafting | `docs/decisions/drafting.md` | 23 | 11,175 |
 | Knowledge | `docs/decisions/knowledge.md` | 5 | 3,461 |

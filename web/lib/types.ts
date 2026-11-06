@@ -18,7 +18,7 @@ export type SyncState = "none" | "syncing" | "synced" | "error";
 /**
  * Knowledge category — the *subject* axis of the shared support taxonomy defined
  * in `scripts/lib/support-taxonomy.mjs` (kept in sync by
- * scripts/lib/knowledge-categories.test.mjs). The same 14 subjects are what the
+ * scripts/lib/knowledge-categories.test.mjs). The same 15 subjects are what the
  * ticket categoriser assigns, so a ticket's subject filters straight into the
  * matching knowledge chunks with no mapping in between.
  *
@@ -32,6 +32,7 @@ export type KnowledgeCategory =
   | "delivery"
   | "return_exchange"
   | "product"
+  | "defective_product"
   | "product_stock"
   | "payment"
   | "account"
@@ -50,6 +51,7 @@ export const CATEGORY_LABELS: Record<KnowledgeCategory, string> = {
   delivery: "Delivery",
   return_exchange: "Returns & exchanges",
   product: "Product information & advice",
+  defective_product: "Defective product",
   product_stock: "Product stock",
   payment: "Payments",
   account: "Accounts",
@@ -69,6 +71,7 @@ export const KNOWLEDGE_CATEGORIES: KnowledgeCategory[] = [
   "delivery",
   "return_exchange",
   "product",
+  "defective_product",
   "product_stock",
   "payment",
   "account",

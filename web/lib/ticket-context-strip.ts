@@ -48,6 +48,8 @@ export const STRIP_PROFILES: Partial<Record<KnowledgeCategory, Profile>> = {
   order: ORDER_PROFILE,
   payment: ORDER_PROFILE,
   product_stock: ORDER_PROFILE,
+  // A defect is about a product on an order: the order and its status lead.
+  defective_product: ORDER_PROFILE,
   delivery: DELIVERY_PROFILE,
   return_exchange: RETURN_PROFILE,
 };

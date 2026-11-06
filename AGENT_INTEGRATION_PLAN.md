@@ -145,7 +145,7 @@ database** — `VALIDATION_LOG.md` item 0b.
 
 ### Phase 3 — Categorising agent — **BUILT; accuracy partly proven**
 
-Two axes, never composed (`scripts/lib/support-taxonomy.mjs`): 14 subjects × 4 request kinds,
+Two axes, never composed (`scripts/lib/support-taxonomy.mjs`): 15 subjects × 4 request kinds,
 plus a secondary pair with its own kind. Level is derived from the pair and may only be
 escalated, never lowered. Level 4 is a severity judgement with three named triggers and no
 subject implies it — the corpus contains **zero** level 4, which is the intended shape.

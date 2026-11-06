@@ -9,7 +9,7 @@ import { isShopNotificationSubject } from '../../../scripts/lib/embeddings/embed
 const ALWAYS_SEARCHED = ['faq', 'brand_story'];
 
 /** Subjects whose FAQs answer each other's tickets. A subject sits in one group at most. */
-const SEARCH_GROUPS = [['order', 'delivery', 'promotions']];
+const SEARCH_GROUPS = [['order', 'delivery', 'promotions'], ['product', 'defective_product']];
 
 /**
  * Which categories are worth searching for a ticket of this subject.
@@ -57,6 +57,11 @@ const SEARCH_GROUPS = [['order', 'delivery', 'promotions']];
  * commande n'est pas arrivée » lands under either of the first two, and « mon code
  * promo n'a pas marché sur ma commande » under either of the last two. A strict
  * filter would hide an Order FAQ from a delivery ticket asking the same thing.
+ *
+ * PRODUCT AND DEFECTIVE_PRODUCT SEARCH EACH OTHER (2026-11-06). The defect
+ * subject was split out of `product`, and every article about a product (its
+ * pump, its texture, how it is stored) was written under `product`: a defect
+ * ticket filtered to its own subject alone would see none of them.
  */
 export function categoriesToSearch(subject) {
   const category = String(subject || '').trim();

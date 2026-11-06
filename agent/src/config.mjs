@@ -118,7 +118,7 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
     // without it, ingestion still runs and just skips the LLM filter.
     openaiApiKey: env.OPENAI_API_KEY,
     triageModel: env.AGENT_TRIAGE_MODEL || 'gpt-4o-mini',
-    // Categoriser: same cheap tier as triage — it picks 1-of-14 plus 1-of-4 with
+    // Categoriser: same cheap tier as triage — it picks 1-of-15 plus 1-of-4 with
     // the enums constrained by Structured Outputs, not free reasoning.
     categoriserModel: env.AGENT_CATEGORISER_MODEL || 'gpt-4o-mini',
     // Forwarding router: picks one of a few destinations from their descriptions,
@@ -153,7 +153,7 @@ export function loadAgentConfig(env = loadEnv(REPO_ROOT)) {
       env.AGENT_DECOMPOSER_MODEL === undefined ? 'gpt-4o-mini' : env.AGENT_DECOMPOSER_MODEL,
     // Drafting is the only stage whose output a customer reads, and the only
     // one producing prose rather than a constrained choice. The cheap tier is
-    // sized for picking 1-of-14, not for writing French a person will judge the
+    // sized for picking 1-of-15, not for writing French a person will judge the
     // brand by — and it is one call per ticket, so the difference is affordable.
     draftingModel: env.AGENT_DRAFTING_MODEL || 'gpt-4o',
     // Reading a finished thread and saying where the case stands. The mid tier,
