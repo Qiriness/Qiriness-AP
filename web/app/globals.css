@@ -64,6 +64,10 @@
   --cat-return_exchange-050: #fbf2e7;
   --cat-product: #9b6bab;
   --cat-product-050: #f7f0fa;
+  /* Slate navy: darker and greyer than delivery's blue, away from the
+     priority red/orange a defect might otherwise borrow. */
+  --cat-defective_product: #36597f;
+  --cat-defective_product-050: #edf2f8;
   --cat-product_stock: #5b8c5a;
   --cat-product_stock-050: #eff6ee;
   --cat-payment: #2f8f9d;
