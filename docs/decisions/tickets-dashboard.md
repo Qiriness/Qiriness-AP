@@ -318,7 +318,7 @@ The owner's brief was that the page showed a great deal that was not helping any
 
 **The right rail became a sheet at every width.** It was a permanent third column above 1440 px and a sheet below that. The rail held the facts a reviewer checks once per ticket, but it cost the conversation a third of the screen all the time. The facts a reviewer needs while reading moved into the header's context strip. The rest opens on demand: the panel button, « ] », or the order link in the header. **Focus** hides both the queue and the sheet.
 
-**The context strip replaces the « Next action » line and the per-message reference chips.** `contextStrip` in `web/lib/ticket-context-strip.ts` is pure and tested. It always shows the next action and how an approval leaves (sends / Outlook draft / records only), so the reviewer knows what « Approve » will do before reading the draft. What else it shows depends on the subject (`STRIP_PROFILES`):
+**The context strip replaces the « Next action » line and the per-message reference chips.** `contextStrip` in `web/lib/ticket-context-strip.ts` is pure and tested. It always shows how an approval leaves (sends / Outlook draft / records only), so the reviewer knows what « Approve » will do before reading the draft. The next action was shown here too until 2026-11-06; the owner removed it from the header because it took too much room and was never read (`contextStrip` still returns `action`). What else it shows depends on the subject (`STRIP_PROFILES`):
 - delivery: order, state and parcel;
 - order, payment and stock: order and state;
 - returns: order and state;

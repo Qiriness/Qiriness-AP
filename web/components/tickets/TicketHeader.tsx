@@ -4,9 +4,10 @@
  * The top of an open ticket: its number, the subject, who wrote and when, the
  * chips (category, priority, state, team), and the context strip.
  *
- * The category moved out of the title line into a coloured chip, the « Next
- * action » line and the references once chipped under every message moved into
- * the strip, and the right rail became a panel opened from here.
+ * The category moved out of the title line into a coloured chip, the references
+ * once chipped under every message moved into the strip, and the right rail
+ * became a panel opened from here. The « Next action » line is gone: it took a
+ * full row and nobody read it.
  * docs/decisions/tickets-dashboard.md § The ticket header.
  */
 import { useState } from "react";
@@ -20,7 +21,6 @@ import {
   PanelRightIcon,
   PencilIcon,
   SendIcon,
-  SparkleIcon,
   TagIcon,
   TruckIcon,
 } from "@/components/icons";
@@ -199,17 +199,10 @@ export function TicketHeader({
 function ContextStripBar({ ticket, detail, thread }: { ticket: TicketListItem; detail: TicketDetail | null; thread: TicketThread | null }) {
   const t = useT();
   const strip = contextStrip(ticket, detail, thread);
-  if (strip.pieces.length === 0 && !strip.action && !strip.approval) return null;
+  if (strip.pieces.length === 0 && !strip.approval) return null;
 
   return (
     <div className={styles.strip} aria-label={t("tickets.panels.strip.label")}>
-      {strip.action && (
-        <span className={styles.stripAction} title={strip.action}>
-          <SparkleIcon size={13} />
-          <strong>{t("tickets.panels.nextAction")}</strong>
-          <span className={styles.stripActionText}>{strip.action}</span>
-        </span>
-      )}
       {strip.pieces.map((piece, index) => (
         <StripItem key={`${piece.kind}-${index}`} piece={piece} parcels={thread?.parcels ?? []} />
       ))}

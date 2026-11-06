@@ -224,28 +224,6 @@
   cursor: copy;
 }
 
-.stripAction {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  flex: 1 1 260px;
-  color: var(--teal-ink);
-}
-
-.stripAction strong {
-  flex: none;
-  font-weight: var(--weight-semibold);
-}
-
-.stripActionText {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-default);
-}
-
 .approval {
   margin-left: auto;
   display: inline-flex;
