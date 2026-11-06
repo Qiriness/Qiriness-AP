@@ -1072,7 +1072,10 @@ a.sa-pick__title:hover { text-decoration: underline; text-underline-offset: 3px;
   .sa-pick__detail,
   .sa-pick--compact.sa-pick--open .sa-pick__detail { margin: 2px -10px -10px; }
   .sa-pick--compact .sa-pick__detail { margin: 0; }
-  .sa-routine__footer { bottom: -20px; margin: 0 -16px; padding: 10px 16px 30px; }
+  /* Only the button on a phone (owner, 2026-11-06: the strip was too tall): it already says the
+     price to pay, and the offer banner above states the rule. */
+  .sa-routine__footer { bottom: -20px; margin: 0 -16px; padding: 8px 16px 28px; }
+  .sa-routine__sum { display: none; }
   .sa-routine__add { flex: 1 1 100%; }
   .sa-routine__banner { flex-direction: column; align-items: flex-start; }
 }
