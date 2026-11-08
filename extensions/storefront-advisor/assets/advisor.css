@@ -70,6 +70,8 @@
   padding: 0;
   border: 0;
   border-radius: 50%;
+  /* A theme rule clipping buttons would hide the message above it. */
+  overflow: visible !important;
   background: var(--sa-accent);
   box-shadow: 0 10px 30px rgba(35, 32, 28, 0.18);
   transition: transform 0.25s var(--sa-ease), box-shadow 0.25s var(--sa-ease);
@@ -1119,6 +1121,67 @@ a.sa-pick__title:hover { text-decoration: underline; text-underline-offset: 3px;
 .sa-routine__add--done { background: #3c6e47; }
 .sa-panel:not(.sa-panel--wide) .sa-routine__add { flex: 1 1 100%; }
 .sa-routine__status { flex-basis: 100%; margin: 0; font-size: 13px; color: #3c6e47; }
+/* The button's phone label (« Ajouter au panier », the struck price, the price): shown on a phone only. */
+.sa-routine__add-phone { display: none; }
+.sa-routine__add-label { flex: 1; text-align: left; }
+.sa-routine__add-prices { display: inline-flex; align-items: baseline; gap: 8px; flex: none; letter-spacing: 0; text-transform: none; }
+.sa-routine__add-was { opacity: 0.7; font-weight: 400; font-size: 12px; }
+.sa-routine__add-was[hidden] { display: none; }
+.sa-routine__add-now { font-size: 15px; }
+
+/* ---------- the routine on a phone (owner, 2026-11-08): one moment at a time ---------- */
+.sa-flow { display: none; }
+.sa-flow__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.sa-flow__title { margin: 0; font-family: var(--sa-heading); font-size: 22px; font-weight: 500; line-height: 1.15; }
+.sa-flow__switches { flex: none; display: inline-flex; gap: 2px; padding: 3px; border: 1px solid var(--sa-line); border-radius: 999px; background: var(--sa-paper); }
+.sa-flow__switch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sa-ink) !important;
+  transition: background 0.2s var(--sa-ease), color 0.2s var(--sa-ease);
+}
+.sa-flow__switch svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.sa-flow__switch--on { background: var(--sa-ink); color: #ffffff !important; }
+.sa-flow__moment[hidden] { display: none; }
+.sa-flow__when { margin: 0 0 12px; font-size: 12px; color: var(--sa-muted); }
+.sa-flow__when strong { color: var(--sa-ink); font-weight: 600; }
+.sa-flow__steps { display: flex; flex-direction: column; gap: 12px; }
+/* The stage number on the left, a line joining the steps down to the next one. */
+.sa-flow__step { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: start; }
+.sa-flow__step:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: 34px;
+  bottom: -12px;
+  left: 14px;
+  width: 1px;
+  background: var(--sa-line);
+}
+.sa-flow__num {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin-top: 14px;
+  border: 1px solid var(--sa-accent);
+  border-radius: 50%;
+  background: var(--sa-paper);
+  color: var(--sa-accent);
+  font-size: 13px;
+  font-weight: 500;
+}
+.sa-flow__step--on .sa-flow__num { background: var(--sa-accent); color: #ffffff; }
+.sa-flow__step:not(.sa-flow__step--on) .sa-flow__num { opacity: 0.6; }
+.sa-flow__moment:not(.sa-flow__moment--muted) .sa-time__complete { background: transparent; color: var(--sa-ink) !important; }
 .sa-routine__status[hidden] { display: none; }
 
 /* ---------- phone: a full-screen sheet ---------- */
@@ -1175,7 +1238,12 @@ a.sa-pick__title:hover { text-decoration: underline; text-underline-offset: 3px;
      price to pay, and the offer banner above states the rule. */
   .sa-routine__footer { bottom: -20px; margin: 0 -16px; padding: 8px 16px 28px; }
   .sa-routine__sum { display: none; }
-  .sa-routine__add { flex: 1 1 100%; }
+  .sa-routine__add { flex: 1 1 100%; letter-spacing: 0.08em !important; }
+  .sa-routine__add-wide { display: none; }
+  .sa-routine__add-phone { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  /* One moment at a time, switched by the sun and the moon (owner, 2026-11-08). */
+  .sa-routine__layout { display: none !important; }
+  .sa-flow { display: block; }
   .sa-routine__banner { flex-direction: column; align-items: flex-start; }
 }
 

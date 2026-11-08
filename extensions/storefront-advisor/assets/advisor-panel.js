@@ -692,7 +692,16 @@
     var now = el('strong', { className: 'sa-routine__now' });
     var saving = el('span', { className: 'sa-routine__saving' });
     var minNote = el('p', { className: 'sa-routine__min' });
-    var addButton = el('button', { type: 'button', className: 'sa-routine__add' });
+    // Two labels: the wide one (« Ajouter ma routine au panier — 98 € »), and on a phone (owner,
+    // 2026-11-08) « Ajouter au panier » with the price before the discount struck through.
+    var addWide = el('span', { className: 'sa-routine__add-wide' });
+    var addPhoneLabel = el('span', { className: 'sa-routine__add-label' });
+    var addPhoneWas = el('s', { className: 'sa-routine__add-was' });
+    var addPhoneNow = el('span', { className: 'sa-routine__add-now' });
+    var addButton = el('button', { type: 'button', className: 'sa-routine__add' }, [
+      addWide,
+      el('span', { className: 'sa-routine__add-phone' }, [addPhoneLabel, el('span', { className: 'sa-routine__add-prices' }, [addPhoneWas, addPhoneNow])])
+    ]);
     var addStatus = el('p', { className: 'sa-routine__status', role: 'status' });
 
     function refresh() {
@@ -713,7 +722,11 @@
       minNote.hidden = !minNote.textContent;
       // Added as it is now: said under the button, which still adds again (a cleared cart).
       var added = Boolean(items.length) && choice.addedKey === routineKey(items);
-      addButton.textContent = fill(added ? (rs.add_again || rs.add) : rs.add || 'Ajouter — {amount}', { amount: money(pct ? after : total) });
+      addWide.textContent = fill(added ? (rs.add_again || rs.add) : rs.add || 'Ajouter — {amount}', { amount: money(pct ? after : total) });
+      addPhoneLabel.textContent = added ? (strings.added || 'Ajouté au panier') : (strings.addToCart || 'Ajouter au panier');
+      addPhoneWas.textContent = pct ? money(total) : '';
+      addPhoneWas.hidden = !pct;
+      addPhoneNow.textContent = items.length ? money(pct ? after : total) : '';
       addButton.disabled = !items.length;
       addButton.className = 'sa-routine__add' + (added ? ' sa-routine__add--done' : '');
       if (bannerButton) {
@@ -793,7 +806,7 @@
     }
 
     /* A product once: full card for an essential, compact in « Compléter mon rituel ». */
-    function Pick(p, compact) {
+    function Pick(p, compact, inMoment) {
       var s = p.step;
       var media = el('span', { className: 'sa-pick__placeholder', 'aria-hidden': 'true' });
       var link = safeLink(s.url);
@@ -838,7 +851,7 @@
       node = el('article', { className: 'sa-pick' + (compact ? ' sa-pick--compact' : '') }, [
         el('div', { className: 'sa-pick__media' }, [media]),
         el('div', { className: 'sa-pick__main' }, [
-          stage || when ? el('p', { className: 'sa-pick__eyebrow', text: (compact ? [stage || when] : [stage, when]).filter(Boolean).join(' · ') }) : null,
+          stage || when ? el('p', { className: 'sa-pick__eyebrow', text: (compact || inMoment ? [stage || when] : [stage, when]).filter(Boolean).join(' · ') }) : null,
           link ? el('a', {
             className: 'sa-pick__title', href: link.href, target: link.external ? '_blank' : null, rel: link.external ? 'noopener noreferrer' : null, text: title, onClick: openPage
           }) : el('p', { className: 'sa-pick__title', text: title }),
@@ -888,7 +901,7 @@
         addStatus.textContent = routineAddedText(view, result, strings);
         refresh();
       }).catch(function () {
-        addButton.textContent = strings.addFailed || 'Réessayer';
+        addWide.textContent = addPhoneLabel.textContent = strings.addFailed || 'Réessayer';
         addButton.disabled = false;
         if (bannerButton) bannerButton.disabled = false;
       });
@@ -948,6 +961,69 @@
       extras.length ? el('div', { className: 'sa-picks__grid' }, extras.map(function (p) { return Pick(p, true); })) : null
     ]);
 
+    /*
+     * ON A PHONE (owner, 2026-11-08, from a screenshot « Complétez votre routine »): one moment at a
+     * time, switched by a sun / moon button; its steps in order, each the same card as above with
+     * its stage number on a line down the left, filled once the product is in. What is not
+     * included stays, greyed. « Compléter ma routine » under the moment not chosen. The wide
+     * layout above is hidden there, this one everywhere else.
+     */
+    var shown = (moments.filter(function (m) { return m.chosen; })[0] || moments[0]).part;
+    var switches = moments.length > 1 ? moments.map(function (m) {
+      var night = m.part === 'night';
+      var b = el('button', { type: 'button', className: 'sa-flow__switch', 'aria-label': partName(m.part) }, [icon(night ? ICONS.moon : ICONS.sun)]);
+      b.addEventListener('click', function () { shown = m.part; showMoment(); });
+      return { part: m.part, node: b };
+    }) : [];
+    var flowMoments = moments.map(function (m) {
+      var steps = m.steps.map(function (s, i) {
+        var num = el('span', { className: 'sa-flow__num', 'aria-hidden': 'true', text: String(i + 1) });
+        var row = el('div', { className: 'sa-flow__step' }, [num, Pick(byProduct[s.product_id], false, true)]);
+        refreshers.push(function (items) {
+          var on = items.some(function (x) { return x.product_id === s.product_id; });
+          row.className = 'sa-flow__step' + (on ? ' sa-flow__step--on' : '');
+        });
+        return row;
+      });
+      var note = m.chosen ? null : el('p', { className: 'sa-time__note' });
+      var toggle = m.chosen ? null : el('button', { type: 'button', className: 'sa-time__complete' });
+      if (toggle) toggle.addEventListener('click', function () {
+        if (choice.added[m.part]) delete choice.added[m.part]; else choice.added[m.part] = true;
+        persist();
+        refresh();
+      });
+      var node = el('div', { className: 'sa-flow__moment', 'data-part': m.part }, [
+        el('p', { className: 'sa-flow__when' }, [el('strong', { text: partName(m.part) }), el('span', { text: ' · ' + (m.part === 'night' ? rs.evening_eyebrow : rs.morning_eyebrow) })]),
+        el('div', { className: 'sa-flow__steps' }, steps),
+        note,
+        toggle
+      ]);
+      refreshers.push(function () {
+        node.className = 'sa-flow__moment' + (active(m) ? '' : ' sa-flow__moment--muted');
+        if (note) {
+          var elsewhere = routineSelection(view, { removed: choice.removed, added: {} }).map(function (x) { return x.product_id; });
+          var missing = m.steps.filter(function (s) { return buyable(m, s) && !removed(m, s) && elsewhere.indexOf(s.product_id) === -1; }).length;
+          note.textContent = missing ? fill(rs.complete_note, { count: missing }) : rs.complete_none;
+        }
+        if (toggle) toggle.textContent = choice.added[m.part] ? (rs.remove || 'Retirer') : (rs.complete || 'Compléter ma routine');
+      });
+      return { part: m.part, node: node };
+    });
+    function showMoment() {
+      flowMoments.forEach(function (f) { f.node.hidden = f.part !== shown; });
+      switches.forEach(function (w) {
+        w.node.setAttribute('aria-pressed', String(w.part === shown));
+        w.node.className = 'sa-flow__switch' + (w.part === shown ? ' sa-flow__switch--on' : '');
+      });
+    }
+    var flow = el('section', { className: 'sa-flow' }, [
+      el('div', { className: 'sa-flow__head' }, [
+        el('h3', { className: 'sa-flow__title', text: rs.ritual_title }),
+        switches.length ? el('div', { className: 'sa-flow__switches', role: 'group' }, switches.map(function (w) { return w.node; })) : null
+      ])
+    ].concat(flowMoments.map(function (f) { return f.node; })));
+    showMoment();
+
     var node = el('div', { className: 'sa-routine' }, [
       el('header', { className: 'sa-routine__head' }, [
         el('p', { className: 'sa-routine__eyebrow', text: rs.title || 'Votre routine' }),
@@ -956,6 +1032,7 @@
       ]),
       banner,
       el('div', { className: 'sa-routine__layout' }, [ritual, picks]),
+      flow,
       el('footer', { className: 'sa-routine__footer' }, [
         el('div', { className: 'sa-routine__sum' }, [
           el('div', { className: 'sa-routine__copy' }, [totalLabel, minNote]),
