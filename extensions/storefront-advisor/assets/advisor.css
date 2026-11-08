@@ -1208,7 +1208,17 @@ a.sa-pick__title:hover { text-decoration: underline; text-underline-offset: 3px;
   .sa-log { padding: 20px 16px; }
   .sa-composer { margin: 4px 12px 10px; }
   .sa-disclaimer { padding: 0 16px max(12px, env(safe-area-inset-bottom)); }
+  /* A phone (owner, 2026-11-08): only « Conversation avec une IA. », no product card in the header,
+     the routine cards' stars without the score and the review count. */
+  .sa-disclaimer__more,
+  .sa-disclaimer .sa-terms { display: none; }
+  .sa-viewing { display: none !important; }
+  .sa-rcard__stars + span { display: none; }
   .sa-input { font-size: 16px; }
+  /* A shorter message bar on a phone (owner, 2026-11-08): 42 px instead of 52. */
+  .sa-composer { padding: 4px 4px 4px 16px; }
+  .sa-input { min-height: 34px; padding: 5px 0; }
+  .sa-root .sa-send { width: 34px; height: 34px; }
   /* Already full screen: no size button, the moments one under the other. */
   .sa-size { display: none; }
   .sa-panel--wide { width: 100vw; height: 100dvh; }

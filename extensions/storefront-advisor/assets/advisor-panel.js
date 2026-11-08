@@ -139,10 +139,16 @@
   }
 
   /* The line under the message bar: it is an AI, medical questions go to a professional, and the shop's terms. */
+  // On a phone only its first sentence (« Conversation avec une IA. », owner 2026-11-08): the rest and the terms hidden by the stylesheet.
   function Disclaimer(strings, terms) {
-    var node = el('p', { className: 'sa-disclaimer', text: strings.disclaimer });
+    var text = String(strings.disclaimer || '');
+    var cut = text.search(/[.!?]\s/);
+    var node = el('p', { className: 'sa-disclaimer' }, cut === -1 ? [document.createTextNode(text)] : [
+      el('span', { text: text.slice(0, cut + 1) }),
+      el('span', { className: 'sa-disclaimer__more', text: text.slice(cut + 1) })
+    ]);
     if (terms && strings.terms) {
-      node.appendChild(document.createTextNode(' '));
+      node.appendChild(el('span', { className: 'sa-disclaimer__more', text: ' ' }));
       node.appendChild(el('a', { className: 'sa-terms', href: terms, target: '_blank', rel: 'noopener', text: strings.terms }));
     }
     return node;
