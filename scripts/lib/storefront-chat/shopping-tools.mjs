@@ -1,4 +1,4 @@
-import { cartDiscountTrace, evaluatePromotionsForCart, getActivePromotions, getCartContext, getStockContext, needsShoppingContext } from './shopping-evaluator.mjs';
+import { cartCodesOf, cartDiscountTrace, evaluatePromotionsForCart, getActivePromotions, getCartContext, getStockContext, needsShoppingContext } from './shopping-evaluator.mjs';
 import cartContract from '../../../extensions/storefront-advisor/assets/advisor-cart.js';
 import { simulateOffers } from './offer-solver.mjs';
 import { countryAnswer } from './knowledge-topics.mjs';
@@ -73,7 +73,8 @@ export function createShoppingTurn({ readShopping, readPublicPromotions = null, 
     const named = (rows ?? []).filter((p) => p?.id && !known.has(p.id)).map((p) => ({ ...p, offerable_in_replies: true }));
     return named.length ? { ...data, promotions: [...(data.promotions ?? []), ...named] } : data;
   };
-  const load = () => source ??= Promise.resolve().then(() => readShopping(shopDomain)).catch(() => ({ status: 'unavailable', reason: 'shopping_source_unavailable' })).then(async (data) => {
+  // Only the code promotions this cart holds are read (cartCodesOf), never the shop's every code.
+  const load = () => source ??= Promise.resolve().then(() => readShopping(shopDomain, { cartCodes: cartCodesOf(cart) })).catch(() => ({ status: 'unavailable', reason: 'shopping_source_unavailable' })).then(async (data) => {
     for (const p of data?.promotions ?? []) if (p.method === 'automatic' && p.title) offerNames.add(p.title.trim().toUpperCase());
     return onlyTheirCodes(await withNamedCodes(data));
   });

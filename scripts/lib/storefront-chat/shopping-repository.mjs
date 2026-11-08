@@ -3,18 +3,76 @@ export const SHOPPING_PRODUCT_COLUMNS = 'id,shopify_product_id,title,handle,stat
 export const SHOPPING_PROMOTION_COLUMNS = 'id,promotion_key,title,codes,method,discount_type,status,starts_at,ends_at,usage_limit,discount_usage_count,applies_once_per_customer,discount_classes,combines_with,rule_snapshot,synced_at,offerable_in_replies,describable_in_replies';
 export const SHOPPING_TTL_MS = 30_000;
 /**
+ * How long the shop's shopping snapshot (products, public offers, collections)
+ * and each cart code's rows are kept. Five minutes, like the agent's catalogue:
+ * a promotion's dates are judged at the request (`running`), so a kept row
+ * still starts and ends on time. Was 30 s, at ~0.3 MB a load.
+ */
+export const SHOPPING_SNAPSHOT_TTL_MS = 5 * 60_000;
+/**
  * ACTIVE codes of the shop, public or not — ONLY to recognise a code the
  * shopper has ALREADY applied to this cart (`cartCodeRows`). Never listed,
  * offered or evaluated on their own: naming back a code the shopper entered
  * discloses nothing to them, and it is what lets stacking be judged.
+ *
+ * READ BY THE CART'S OWN CODES, NOT WHOLE (2026-11-08). Every use of these rows
+ * asks whether a promotion holds a code that is in this cart, so only those
+ * promotions can ever match. Whole, they were 558 kB a load on the live store
+ * (45 active code promotions; the six 2026-05-19 summer ones hold 600 bulk
+ * codes each, 5,141 codes in all), re-read every 30 s of chat.
  */
 export const CART_CODE_COLUMNS = 'id,title,codes,method,discount_type,discount_classes,combines_with,status,starts_at,ends_at';
+/** Shopify takes at most 5 codes a cart; the lookups are capped a little above, whatever the client sends. */
+export const MAX_CART_CODES = 8;
 
-/** Each agent owns a bounded cache; a missing shop/failure is never cached. */
-export function createShoppingReader(db, { now = Date.now, ttlMs = SHOPPING_TTL_MS } = {}) {
+/**
+ * The ACTIVE code promotions holding this code. Two reads:
+ * - the code as the cart gives it (upper case, `advisor-cart.js` `code`), by
+ *   containment — exact, so case matters;
+ * - a promotion's FIRST code, case-insensitively. Shopify codes are
+ *   case-insensitive and the matchers compare upper case, but 5 of 12,348 live
+ *   codes are stored mixed case (generated ones, « CLUBQ-5e2a… »), each its
+ *   promotion's only code. `ilike` may let `_` match loosely; the matchers keep
+ *   only the exact code.
+ */
+async function rowsForCartCode(db, shopId, code) {
+  const active = { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' }, method: 'code', status: 'ACTIVE' };
+  const [exact, first] = await Promise.all([
+    db.selectAll('promotions', { ...active, codes: { operator: 'cs', value: JSON.stringify([{ code }]) } }, CART_CODE_COLUMNS),
+    db.selectAll('promotions', { ...active, 'codes->0->>code': { operator: 'ilike', value: code } }, CART_CODE_COLUMNS)
+  ]);
+  return [...new Map([...exact, ...first].map((row) => [row.id, row])).values()];
+}
+
+function cartCodeKeys(codes) {
+  return [...new Set((codes ?? []).map((c) => String(c ?? '').trim().toUpperCase()).filter((c) => /^[A-Z0-9_-]{1,80}$/.test(c)))].slice(0, MAX_CART_CODES);
+}
+
+/**
+ * Each agent owns a bounded cache; a missing shop/failure is never cached.
+ *
+ * `cartCodes`: the codes in the shopper's cart (`cartCodesOf`), whose rows
+ * become `cartCodeRows`. None given, none read: right for every reader without
+ * a cart (the opening, a product's offers).
+ */
+export function createShoppingReader(db, { now = Date.now, ttlMs = SHOPPING_SNAPSHOT_TTL_MS } = {}) {
   const cache = new Map();
-  return async function readShopping(shopDomain) {
-    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shopDomain || '')) return { status: 'unavailable', reason: 'shop_unknown' };
+  const codeCache = new Map();
+  const cartCodeRows = async (shopId, codes) => {
+    const found = await Promise.all(cartCodeKeys(codes).map((code) => {
+      const key = `${shopId}:${code}`;
+      const cached = codeCache.get(key);
+      if (cached && now() - cached.at < ttlMs) return cached.value;
+      const value = rowsForCartCode(db, shopId, code);
+      const entry = { at: now(), value };
+      codeCache.set(key, entry);
+      if (codeCache.size > 50) codeCache.delete(codeCache.keys().next().value);
+      value.catch(() => { if (codeCache.get(key) === entry) codeCache.delete(key); });
+      return value;
+    }));
+    return [...new Map(found.flat().map((row) => [row.id, row])).values()];
+  };
+  const snapshot = (shopDomain) => {
     const cached = cache.get(shopDomain);
     if (cached && now() - cached.at < ttlMs) return cached.value;
     const value = (async () => {
@@ -23,22 +81,28 @@ export function createShoppingReader(db, { now = Date.now, ttlMs = SHOPPING_TTL_
       const shopId = shops[0].id;
       const live = { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } };
       // Visibility is enforced in the database read, before codes can reach tools/model.
-      const [products, codes, automatic, collections, cartCodeRows] = await Promise.all([
+      const [products, codes, automatic, collections] = await Promise.all([
         db.selectAll('products', { shop_id: shopId }, SHOPPING_PRODUCT_COLUMNS),
         db.selectAll('promotions', { ...live, method: 'code', offerable_in_replies: true }, SHOPPING_PROMOTION_COLUMNS),
         db.selectAll('promotions', { ...live, method: 'automatic', describable_in_replies: true }, SHOPPING_PROMOTION_COLUMNS),
-        db.selectAll('advice_collections', live, 'shopify_collection_id,product_ids,products_synced_at'),
-        db.selectAll('promotions', { ...live, method: 'code', status: 'ACTIVE' }, CART_CODE_COLUMNS)
+        db.selectAll('advice_collections', live, 'shopify_collection_id,product_ids,products_synced_at')
       ]);
       const promotions = [...codes, ...automatic].filter(isPublicPromotion);
       const members = new Map(collections.filter((c) => c.products_synced_at && Array.isArray(c.product_ids)).map((c) => [c.shopify_collection_id, new Set(c.product_ids)]));
-      return { status: 'ok', shopDomain, products, promotions, members, cartCodeRows, loadedAt: now() };
+      return { status: 'ok', shopDomain, shopId, products, promotions, members, loadedAt: now() };
     })();
     const entry = { at: now(), value };
     cache.set(shopDomain, entry);
     if (cache.size > 10) cache.delete(cache.keys().next().value);
     value.then((result) => { if (result.status !== 'ok' && cache.get(shopDomain) === entry) cache.delete(shopDomain); }, () => { if (cache.get(shopDomain) === entry) cache.delete(shopDomain); });
     return value;
+  };
+  return async function readShopping(shopDomain, { cartCodes = [] } = {}) {
+    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(shopDomain || '')) return { status: 'unavailable', reason: 'shop_unknown' };
+    const base = await snapshot(shopDomain);
+    if (base?.status !== 'ok') return base;
+    const { shopId, ...data } = base;
+    return { ...data, cartCodeRows: await cartCodeRows(shopId, cartCodes) };
   };
 }
 

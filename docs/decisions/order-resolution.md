@@ -64,6 +64,16 @@ Resolution now also reads every later inbound message. Only the customer's own w
 
 Measured over 492 unlinked tickets: **5 become confirmed** (4 by the sender's own address, 1 by an address in a later message) and nothing else moves.
 
+### The customer index is read whole once, then by delta (2026-11-08)
+
+**Found by the egress bill.** `refreshIfChanged` dropped the whole index whenever any customer changed. That happened about 3.9 times a day, and each time re-read every live customer's `id,email`: 5.0 MB for 61.7k customers, ~19 MB of a ~150 MB day, to take in about 60 changed rows. The budget for the rest of the cycle is ~31 MB/day.
+
+**The rules** (`customer-lookup.mjs`):
+- **A moved stamp marks the index stale; it does not drop it.** The next lookup reads only `updated_at >= previous stamp − 10 min`, deleted rows included (`id,email,deleted_at`), and applies them: a new address is filed, an old one unfiled, a soft-deleted customer removed. The 10 minutes are there because `updated_at` is the writing transaction's start time, so a long transaction can commit a row older than a stamp already seen. Re-applying a row changes nothing.
+- **A customer deleted outright moves no stamp.** At lookup, an id that no longer exists is dropped and the next customer on that address answers. The whole read is now a weekly backstop, not the mechanism (it was daily).
+- **First writer wins, as before.** The ids on an address are kept, and the smallest answers, which is what the id-ordered whole read always did.
+- **A failed read is not kept.** The next lookup reads the index whole, instead of every lookup failing on the same rejected promise.
+
 ### An idle poll reads what could have changed: drafting refusals, the customer index, forwarding (2026-10-11)
 
 **Found by the egress bill, measured in production.** Egress was still ~450 MB a day after the 2026-10-06 changes. A one-hour `pg_stat_statements` comparison put the worker at ~120k PostgREST requests a day. Sizing each repeated read put the two drafting passes (replies and refund notices, `draft-runner.mjs`) at **210 kB a poll, ~270 MB a day**:

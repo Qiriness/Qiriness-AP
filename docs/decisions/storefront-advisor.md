@@ -2,6 +2,30 @@
 
 ## Storefront advisor
 
+### The cart's code rows are read by the cart's codes (2026-11-08)
+
+**Found by the egress bill.** `cartCodeRows` was every active code promotion of the shop, re-read with the shopping snapshot every 30 s of chat. That was fine on the dev store (5 codes). On the live store it is 45 promotions: the six 2026-05-19 summer ones (SUMMER10/20/30, GUASHA, MASQUE, LIVRAISON) hold 600 bulk codes each, 5,141 codes in all, 532–558 kB a load, ~14 MB a day.
+
+**Why the cart's codes are enough.** Every use asks one question: does this promotion hold a code that is in this cart? The uses are naming back an applied code, judging stacking, the cart reasoning and the offer solver's observed codes. The rows are never listed, offered or evaluated otherwise (§ Codes the shopper entered are named back). So only the promotions of the cart's codes can ever match: `cart.codes` plus the titles of its non-automatic discounts (`cartCodesOf`), at most 8.
+
+**The rules** (`shopping-repository.mjs`):
+- **Two reads per code.** An exact containment on the upper-case code, and a case-insensitive match on a promotion's first code. The second is there because 5 of 12,348 live codes are stored mixed case (generated, « CLUBQ-5e2a… »), each its promotion's only code. The matchers still keep only the exact code. Not found: a mixed-case code that is not its promotion's first one (none today).
+- **No cart, no code read:** the opening and a product's offers read none.
+- **The snapshot and each code are kept 5 minutes**, not 30 s. A promotion's dates are judged at the request (`running`), so a kept row still starts and ends on time.
+
+**Checked on production, read-only:** for six real codes (a bulk one, three mixed case, the last one, one that does not exist), the narrow read found exactly the promotions the whole read matched. A load is now ~302 kB without the codes, plus ~21 kB per code a cart holds; it was ~830 kB.
+
+### The agent is renewed when its sources are unchanged, not reloaded (2026-11-08)
+
+**Found by the egress bill.** The agent holds the whole catalogue, the policies and FAQs and the advisor's knowledge: ~1.15 MB a load (catalogue 0.95 MB, of which product FAQs 326 kB, descriptions 188 kB, ingredients 155 kB). It was reloaded every five minutes while customers were chatting, and on every cold instance: ~29 times a day, ~33 MB of a ~150 MB day, against a ~31 MB/day budget. Its sources change about once a day (the 08:00 product sync) or when someone edits a policy.
+
+**The rule** (`agent-freshness.mjs`): at the same moment the reload used to start, the agent reads a fingerprint of its sources, 2.9 kB on production. If nothing moved, it is renewed in place and its knowledge is marked as checked now. If something changed, the fingerprint could not be read, the agent is degraded (no catalogue or no knowledge), or it is a day old, it is rebuilt as before. The five-minute edit boundary and § The agent is never served past its knowledge's lifetime are unchanged: an agent past its lifetime still waits for the check.
+
+**How each source is fingerprinted:**
+- **The newest `updated_at` (one row)**, where a row is never deleted outright: products, collections, parameters and the advisor tables. A change, a soft delete and an insert all move it.
+- **Every `id,updated_at`** for `company_policies` and `knowledge_documents`. The dashboard can DELETE from both, and a deleted row moves no stamp.
+- **`shops` by its `shop_name`**, because the row's `updated_at` moves on every worker poll (its sync cursors).
+
 ### The caps are numbers on the dashboard, not variables (2026-11-02)
 
 Owner: « make these internal switches not vars (not really switches but a number that can be changed) ».
@@ -589,7 +613,7 @@ failure returns unavailable and transport details never reach the model.
 ### Codes the shopper entered are named back; one product discount per line (2026-10-06)
 
 - **A code already applied in this cart is named back to the shopper,** even when it isn't shareable (QIRINESS20 and BIENVENUE20 on the dev store showed as « Réduction appliquée »). Naming back a code they typed discloses nothing to them, and without it stacking could not be judged.
-  - The shop's active codes are read into a separate `cartCodeRows`, used **only** to recognise a code applied in the cart.
+  - The shop's active codes are read into a separate `cartCodeRows`, used **only** to recognise a code applied in the cart. Since 2026-11-08 these are **the cart's own codes only**, not every active code (§ The cart's code rows are read by the cart's codes).
   - Those rows never enter the offer listing or an evaluation. The repository test asserts it.
   - Public codes keep the `offerable_in_replies` gate. « Does X work? » about such a code is answered `applied` when it is in the cart, and stays `not_found` otherwise.
 - **Shopify applies one product discount per cart line by default** (`productDiscountsWithTagsOnSameCartLine` is Plus only, and the dev store doesn't use it). September Rose (30 %) was « eligible » by its combination flags while both its lines already held a product discount (the 2-for-1 and the gift).

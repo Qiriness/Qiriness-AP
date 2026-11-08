@@ -33,9 +33,18 @@ const COLUMNS = [
   'last_order_name', 'last_order_at', 'last_order_total', 'rfm_group'
 ].join(',');
 
-// How long a hash index may stand without a re-read, whatever the stamp says.
-// The stamp does not see a row DELETED outright (a redaction), only one changed.
-const INDEX_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+// How long a hash index may stand without a full re-read, whatever the stamp
+// says. The stamp does not see a row DELETED outright (a redaction), only one
+// changed. A deleted row the index still names is found missing at lookup and
+// dropped then (`findByEmailHash`), so this is a backstop, not the mechanism.
+const INDEX_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+// How far before the last stamp a delta reads. `updated_at` is the writing
+// transaction's start time (`set_updated_at`), so a row written by a
+// transaction that began before the stamp but committed after it carries an
+// older time than the stamp. Reading a few minutes back catches it; a row read
+// twice is applied twice, which changes nothing.
+const DELTA_OVERLAP_MS = 10 * 60 * 1000;
 
 export function createCustomerLookup({ supabase, shopId, logger, audit = true, now = () => Date.now() }) {
   let hashIndexPromise = null;
@@ -43,6 +52,9 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
   // dropped by `refreshIfChanged`, which is what it compares against.
   let indexStamp = null;
   let indexAt = 0;
+  // The stamp a delta must start from before the next lookup; null when the
+  // index is current or is to be read whole.
+  let deltaSince = null;
   let storefrontPromise = null;
   let vipRulePromise = null;
 
@@ -94,7 +106,7 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
   }
 
   /**
-   * Maps sha256(email) -> customer id for the whole shop.
+   * Maps sha256(email) -> customer ids for the whole shop.
    *
    * WHY A SCAN AND A CACHE. `tickets.requester_email_hash` is a hash and
    * `customers.email` is plaintext, so there is no column to join them on — the
@@ -102,32 +114,58 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
    * rest of the row, and the shop's catalogue of customers is walked once per
    * process rather than once per ticket.
    *
-   * This is correct at any size and cheap at ours. The scaling fix, when it is
-   * needed, is a stored generated `customers.email_hash` column with an index,
-   * which turns this into a single indexed query — deliberately not done yet,
-   * because it is a migration and this works without one.
+   * READ WHOLE ONCE, THEN BY DELTA. The whole read is every customer's id and
+   * address, 5.0 MB for 61.7k customers (2026-11-08), and it was repeated each
+   * time any customer changed: ~3.9 times a day, ~19 MB of egress for ~60
+   * changed rows. Now `refreshIfChanged` marks the index stale, and the next
+   * lookup reads only the rows whose `updated_at` moved since the last stamp,
+   * deleted ones included, and applies them. A soft delete, a new customer and
+   * a changed address all move `updated_at` (trigger `set_updated_at`, and the
+   * column's insert default).
+   *
+   * The scaling fix, when it is needed, is a stored generated
+   * `customers.email_hash` column with an index, which turns this into a
+   * single indexed query — deliberately not done yet, because it is a
+   * migration and this works without one.
    */
   function loadHashIndex() {
     if (!hashIndexPromise) {
+      deltaSince = null;
       hashIndexPromise = supabaseSelectAll(
         supabase,
         'customers',
         { shop_id: shopId, deleted_at: { operator: 'is', value: 'null' } },
         'id,email'
       ).then((rows) => {
-        const index = new Map();
-        for (const row of rows) {
-          const hash = hashIdentifier(row.email);
-          // First writer wins. Two customer records on one address is a Shopify
-          // data problem, not something to resolve by picking the later row.
-          if (hash && !index.has(hash)) {
-            index.set(hash, row.id);
-          }
-        }
+        const index = createHashIndex();
+        for (const row of rows) index.put(row.id, hashIdentifier(row.email));
+        return index;
+      });
+    } else if (deltaSince && !Number.isFinite(Date.parse(deltaSince))) {
+      // A stamp that is not a time cannot bound a delta: read it whole.
+      hashIndexPromise = null;
+      return loadHashIndex();
+    } else if (deltaSince) {
+      const since = new Date(Date.parse(deltaSince) - DELTA_OVERLAP_MS).toISOString();
+      deltaSince = null;
+      hashIndexPromise = hashIndexPromise.then(async (index) => {
+        const rows = await supabaseSelectAll(
+          supabase,
+          'customers',
+          { shop_id: shopId, updated_at: { operator: 'gte', value: since } },
+          'id,email,deleted_at'
+        );
+        for (const row of rows) index.put(row.id, row.deleted_at ? null : hashIdentifier(row.email));
         return index;
       });
     }
-    return hashIndexPromise;
+    // A FAILED READ IS NOT KEPT: the next lookup reads the index whole again,
+    // rather than every lookup failing on the same rejected promise.
+    const current = hashIndexPromise;
+    current.catch(() => {
+      if (hashIndexPromise === current) hashIndexPromise = null;
+    });
+    return current;
   }
 
   async function fetchById(customerId) {
@@ -171,8 +209,9 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
     },
 
     /**
-     * Drops the hash index only if a customer changed since it was read (or a
-     * day has passed). Returns whether it did.
+     * Marks the hash index stale only if a customer changed since it was read,
+     * and drops it whole only after a week (or when the stamp cannot be read).
+     * Returns whether the index will be re-read, in part or whole.
      *
      * WHY. The resolution pass dropped it on every pass with a ticket to look
      * up, and the rebuild is every customer's id and address: 4.7 MB for 62k
@@ -183,8 +222,11 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
      * cannot be walked backwards and every customer was read and sorted,
      * ~49k blocks and 1.6 s a call (2026-10-17); see `latestUpdateReader`.
      *
-     * The stamp is read BEFORE the rebuild, so a customer written during the
-     * scan moves it again and the next call rebuilds once more.
+     * A moved stamp now costs a delta, not a rebuild (`loadHashIndex`): the
+     * rows changed since the previous stamp, read from a little before it.
+     *
+     * The stamp is read BEFORE the read it triggers, so a customer written
+     * during that read moves it again and the next call reads it once more.
      */
     async refreshIfChanged() {
       let stamp;
@@ -202,8 +244,17 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
         return true;
       }
       const at = now();
-      if (hashIndexPromise && stamp === indexStamp && at - indexAt < INDEX_MAX_AGE_MS) return false;
+      const fresh = hashIndexPromise && at - indexAt < INDEX_MAX_AGE_MS;
+      if (fresh && stamp === indexStamp) return false;
+      if (fresh && indexStamp) {
+        // A customer moved: the next lookup reads what changed since the
+        // oldest stamp not yet applied, not the whole book.
+        deltaSince ??= indexStamp;
+        indexStamp = stamp;
+        return true;
+      }
       hashIndexPromise = null;
+      deltaSince = null;
       indexStamp = stamp;
       indexAt = at;
       return true;
@@ -238,8 +289,14 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
         return null;
       }
       const index = await loadHashIndex();
-      const customerId = index.get(hash);
-      return customerId ? fetchById(customerId) : null;
+      // The first id that still exists. One deleted outright since the index was
+      // read moves no stamp, so it is found missing here and dropped.
+      for (const customerId of index.idsFor(hash)) {
+        const customer = await fetchById(customerId);
+        if (customer) return customer;
+        index.put(customerId, null);
+      }
+      return null;
     },
 
     /**
@@ -356,6 +413,44 @@ export function createCustomerLookup({ supabase, shopId, logger, audit = true, n
         account,
         promptText: toPromptText(context, account, { includeEmail, storefrontUrl: await storefrontUrl() })
       };
+    }
+  };
+}
+
+/**
+ * sha256(email) -> customer ids, and back, so a changed or deleted row can be
+ * taken out under its old address.
+ *
+ * FIRST WRITER WINS, as before. Two customer records on one address is a
+ * Shopify data problem, not something to resolve by picking the later row. The
+ * whole read is in id order, so "first" is the smallest id, and `idsFor` keeps
+ * that order however the rows arrived (Postgres orders uuids as their
+ * lower-case text does).
+ */
+function createHashIndex() {
+  const idsByHash = new Map();
+  const hashById = new Map();
+  return {
+    /** Files `id` under `hash`, out of wherever it was; a null hash only removes it. */
+    put(id, hash) {
+      const old = hashById.get(id);
+      if (old) {
+        const ids = idsByHash.get(old);
+        ids?.delete(id);
+        if (ids?.size === 0) idsByHash.delete(old);
+        hashById.delete(id);
+      }
+      if (!hash) return;
+      hashById.set(id, hash);
+      if (!idsByHash.has(hash)) idsByHash.set(hash, new Set());
+      idsByHash.get(hash).add(id);
+    },
+    /** The ids on this address, first writer first. */
+    idsFor(hash) {
+      return [...(idsByHash.get(hash) ?? [])].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    },
+    get size() {
+      return hashById.size;
     }
   };
 }

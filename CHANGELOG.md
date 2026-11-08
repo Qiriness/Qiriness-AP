@@ -10,6 +10,30 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Egress: the storefront agent, the customer index and the cart codes stop re-reading what has not changed (2026-11-08)
+
+Owner: « ~150 MB of egress a day and only 250 MB left for the billing cycle (16 Nov) ». That leaves a budget of ~31 MB/day.
+
+- **Measured** (`pg_stat_statements`, 275 h, 10-27 → 11-08, each heavy read re-run read-only to size it). Four sources make up ~80 MB/day:
+  - storefront agent reloads, ~1.15 MB × ~29/day ≈ 33 MB;
+  - the worker's customer hash index, 5.0 MB × ~3.9/day ≈ 19 MB;
+  - the storefront cart reader, ~0.87 MB a load, of which 558 kB is 5,141 bulk discount codes, × ~16/day ≈ 14 MB;
+  - the nightly `id,shopify_customer_id` maps, 6.7 MB × 2 ≈ 13 MB.
+  The storefront figures are averages over a window where chat traffic only began on 11-06.
+- **Built (the first two):**
+  - `agent-freshness.mjs`: the agent is renewed when a 2.9 kB fingerprint of its sources is unchanged (`DECISIONS.md` § The agent is renewed when its sources are unchanged).
+  - `customer-lookup.mjs`: the index is read whole once, then by delta (§ The customer index is read whole once, then by delta).
+  - Expected saving ~50 MB/day.
+- **Proven:**
+  - new tests `agent-freshness.test.mjs` (9) and the delta cases in `customer-lookup.test.mjs`;
+  - root suite 4008/4008, agent suite 2190/2190, web `tsc` clean;
+  - the fingerprint run read-only against production: stable across two reads, 2.9 kB.
+- **Not proven:** the egress drop in production. It needs the deploy, then a re-measure (VALIDATION_LOG item 67).
+- **Then built, the same day: the cart reader reads the cart's own codes, not all 5,141** (`shopping-repository.mjs`, `cartCodesOf`; `DECISIONS.md` § The cart's code rows are read by the cart's codes). The shopping snapshot and each code are now kept 5 minutes, not 30 s.
+  - Checked read-only on production: six real codes found exactly the promotions the whole read matched. A load went from ~830 kB to ~302 kB, plus ~21 kB per code in the cart.
+  - Storefront tests 438/438, including the rewritten repository test and a new test that the turn passes the cart's codes.
+- **Not built:** the nightly id maps.
+
 ## A defective product is its own ticket category (2026-11-06)
 
 - **New subject `defective_product`** (« Produit défectueux » / « Defective product »), split out of `product`: a product that is itself broken, opened or leaking, with a pump, cap or device that does not work, a battery that no longer holds, under-filled, or with an unusual texture or smell. 15 subjects. A defect report is never a `question` (raised to `problem`, level 3); team `contact`. `DECISIONS.md` § A defective product is a subject.

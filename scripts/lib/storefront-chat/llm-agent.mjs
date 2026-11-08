@@ -504,7 +504,7 @@ export function createLlmAgent({
       let describedAdvice = advice && !caution ? advisorTurn.describe() : null;
       // ONE PRODUCT PROPOSED, WITH ITS OFFER (owner, 2026-10-13; the foundation
       // engine): the public offers running on it now, from the same synced
-      // promotions the shopping tools read (30 s cache), never a guess.
+      // promotions the shopping tools read (5-minute cache), never a guess.
       const single = advisor?.engine === 'foundations' && advisorTurn?.advice?.status === 'recommended' && advisorTurn.advice.steps.length === 1 ? byId(advisorTurn.advice.steps[0].product_id) : null;
       // …and one product the customer asked about by name or on its page (customer batch).
       const named = advisor?.engine === 'foundations' && !single && resolvedIds.size === 1 ? byId([...resolvedIds][0]) : null;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import contract from '../../../extensions/storefront-advisor/assets/advisor-cart.js';
-import { evaluatePromotionsForCart, getActivePromotions, getCartContext, getStockContext, normalizeSnapshot } from './shopping-evaluator.mjs';
+import { cartCodesOf, evaluatePromotionsForCart, getActivePromotions, getCartContext, getStockContext, normalizeSnapshot } from './shopping-evaluator.mjs';
 import { createShoppingReader } from './shopping-repository.mjs';
 import { createShoppingTurn } from './shopping-tools.mjs';
 import { parseChatRequest } from './request-schema.mjs';
@@ -105,22 +105,39 @@ test('Shipping and unsupported item conditions are withheld', () => {
 
 test('Lazy repository scopes every read to signed shop and excludes private rows before tools', async () => {
   const calls = []; const f = fixture();
+  const secret = { ...f.promotion, offerable_in_replies: false, id: 'secret', codes: [{ code: 'PARTNER_SECRET' }] };
+  const mixedCase = { ...f.promotion, offerable_in_replies: false, id: 'generated', codes: [{ code: 'CLUBQ-5e2aafe9774d' }] };
   const reader = createShoppingReader({ async selectAll(table, filters, columns) {
     calls.push({ table, filters, columns });
     if (table === 'shops') return filters.shop_domain === 'test.myshopify.com' ? [{ id: 'shop1' }] : [];
     if (table === 'products') return f.source.products;
     if (table === 'advice_collections') return [];
-    return filters.method === 'code' ? [f.promotion, { ...f.promotion, offerable_in_replies: false, id: 'secret' }] : [];
+    if (filters.status === 'ACTIVE') {
+      // A cart code's two reads: containment (exact) and the first code, case-insensitive.
+      const all = [secret, mixedCase];
+      if (filters.codes) { const [{ code }] = JSON.parse(filters.codes.value); return all.filter((p) => p.codes.some((c) => c.code === code)); }
+      return all.filter((p) => p.codes[0].code.toUpperCase() === filters['codes->0->>code'].value.toUpperCase());
+    }
+    return filters.method === 'code' ? [f.promotion, secret] : [];
   } }, { now: () => NOW });
   const source = await reader('test.myshopify.com');
   assert.equal(source.promotions.length, 1);
-  // Six reads: shop, products, public codes, automatic offers, collections, and
-  // the shop's active codes used ONLY to recognise a code applied in the cart.
-  await reader('test.myshopify.com'); assert.equal(calls.length, 6);
-  assert.ok(source.cartCodeRows.some((p) => p.id === 'secret'), 'a private code can be recognised in a cart');
-  assert.ok(!source.promotions.some((p) => p.id === 'secret'), '…but never reaches the offers');
-  assert.ok(!getActivePromotions(source, {}, NOW).promotions.some((p) => p.promotion_id === 'secret'), '…nor the listing');
-  assert.doesNotMatch(calls.find((c) => c.filters.status === 'ACTIVE' && c.filters.method === 'code').columns, /rule_snapshot|usage/);
+  // Five reads: shop, products, public codes, automatic offers, collections.
+  // NO CART, NO CODE ROWS: the shop's active codes are never read whole (5,141
+  // codes, 558 kB on the live store, 2026-11-08).
+  await reader('test.myshopify.com'); assert.equal(calls.length, 5);
+  assert.deepEqual(source.cartCodeRows, []);
+  assert.ok(!calls.some((c) => c.filters.status === 'ACTIVE' && !c.filters.codes && !c.filters['codes->0->>code']), 'no whole read of the active codes');
+
+  // A CODE IN THE CART: its own promotions only, two narrow reads, cached.
+  const carted = await reader('test.myshopify.com', { cartCodes: ['partner_secret', 'clubq-5e2aafe9774d', 'not a code!'] });
+  assert.deepEqual(carted.cartCodeRows.map((p) => p.id).sort(), ['generated', 'secret'], 'a private code and a mixed-case one are recognised');
+  assert.equal(calls.length, 9, 'two reads per well-formed code; the snapshot kept');
+  assert.equal(JSON.parse(calls.find((c) => c.filters.codes?.operator === 'cs').filters.codes.value)[0].code, 'PARTNER_SECRET');
+  await reader('test.myshopify.com', { cartCodes: ['PARTNER_SECRET'] }); assert.equal(calls.length, 9, 'a code read is kept like the snapshot');
+  assert.ok(!carted.promotions.some((p) => p.id === 'generated'), '…but never reaches the offers');
+  assert.ok(!getActivePromotions(carted, {}, NOW).promotions.some((p) => p.promotion_id === 'secret' || p.promotion_id === 'generated'), '…nor the listing');
+  assert.ok(calls.filter((c) => c.filters.status === 'ACTIVE').every((c) => !/rule_snapshot|usage/.test(c.columns)));
   assert.ok(calls.slice(1).every((c) => c.filters.shop_id === 'shop1'));
   assert.equal(calls.find((c) => c.filters.method === 'code').filters.offerable_in_replies, true);
   assert.equal((await reader('another.myshopify.com')).reason, 'shop_not_synced');
@@ -528,4 +545,14 @@ test('a code the customer names is checked from its own rules, « Proposable » 
   asked.length = 0;
   assert.deepEqual((await turn('Quelles sont les offres ?').run('get_active_promotions')).promotions, []);
   assert.deepEqual(asked, [], 'no code typed: nothing looked up');
+});
+
+test('the shopping turn reads the code promotions of its cart only: codes and non-automatic discount titles', async () => {
+  const f = fixture();
+  const cart = { ...f.cart, codes: ['partner_secret'], discounts: [{ title: 'OLDSHAPE10', type: 'unknown', amount: 100 }, { title: 'Offre automatique', type: 'automatic', amount: 200 }] };
+  let asked = null;
+  const turn = createShoppingTurn({ readShopping: async (domain, options) => { asked = options; return f.source; }, shopDomain: f.source.shopDomain, cart, message: 'Mon panier a-t-il une réduction ?' });
+  await turn.run('get_cart_context', {});
+  assert.deepEqual(asked.cartCodes.sort(), ['OLDSHAPE10', 'PARTNER_SECRET'], 'an automatic offer is no code');
+  assert.deepEqual(cartCodesOf(null), []);
 });

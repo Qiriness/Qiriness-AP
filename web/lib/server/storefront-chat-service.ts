@@ -41,6 +41,7 @@ import { loadCompany } from "../../../scripts/lib/company.mjs";
 import { createMockAgent } from "../../../scripts/lib/storefront-chat/agent.mjs";
 import { loadCatalogue } from "../../../scripts/lib/storefront-chat/product-repository.mjs";
 import { loadKnowledge, createProductPolicyReader, KNOWLEDGE_TTL_MS } from "../../../scripts/lib/storefront-chat/knowledge-repository.mjs";
+import { createAgentCache, readSourceStamp } from "../../../scripts/lib/storefront-chat/agent-freshness.mjs";
 import { createNamedCodeReader, createShoppingReader, createPublicPromotionReader, createRoutineCodeReader } from "../../../scripts/lib/storefront-chat/shopping-repository.mjs";
 import { parseAllowedShops } from "../../../scripts/lib/storefront-chat/app-proxy-signature.mjs";
 import { refsFromHistory } from "../../../scripts/lib/storefront-chat/conversation-refs.mjs";
@@ -213,46 +214,45 @@ type Agent = ReturnType<typeof createMockAgent> | ReturnType<typeof createLlmAge
 
 const AGENT_TTL_MS = KNOWLEDGE_TTL_MS;
 const AGENT_REFRESH_AHEAD_MS = 60 * 1000;
-let remembered: { at: number; key: string; agent: Agent } | null = null;
-let rebuilding: Promise<Agent> | null = null;
 
 /**
- * The agent for this request. The LLM agent is rebuilt at most every five
- * minutes, so an edited company description, a new model or a nightly product
- * sync reaches it without a restart, and is never rebuilt per message.
+ * The agent for this request. Checked against its sources every five minutes,
+ * so an edited company description, a new model or a nightly product sync
+ * reaches it without a restart, and never rebuilt per message.
  *
- * THE CATALOGUE IS LOADED HERE, WHOLE, and handed to the agent: about 100 live
+ * THE CATALOGUE IS LOADED WHOLE, and handed to the agent: about 100 live
  * products, whitelisted by product-repository.mjs. Its tools then answer from
  * memory, so a tool round costs the model's time and no database round trip.
  * `STOREFRONT_CHAT_TOOLS=off` withholds it, which is Phase 2 again.
+ *
+ * RELOADED ONLY WHEN SOMETHING CHANGED (agent-freshness.mjs). The whole load is
+ * ~1.15 MB; it was repeated every five minutes of chat, ~33 MB of egress a day.
+ * Now the five-minute check reads a fingerprint of the sources, a few kB, and
+ * renews the agent when nothing moved.
+ *
+ * STALE WHILE IT REFRESHES, NEVER SERVED EXPIRED. The customer who arrives as
+ * the copy nears its lifetime is answered from it while the check runs; one
+ * past its lifetime (a pause of five minutes or more) waits for the check, so
+ * the policies are never answered from expired knowledge (« do you allow
+ * payments in three times? » answered « unavailable », dev store, 2026-10-06).
  */
-async function currentAgent(db: ReturnType<typeof client>): Promise<Agent> {
-  if (process.env.STOREFRONT_CHAT_AGENT === "mock" || !process.env.OPENAI_API_KEY) return createMockAgent();
+const agents = createAgentCache({
+  build: (key: string) => buildAgent(client(), key),
+  readStamp: async () => {
+    const shop = await getShop();
+    if (!shop) throw new Error("shop not synced");
+    const db = client();
+    return readSourceStamp((table: string, filters: object, columns: string, options?: object) => supabaseSelect(db, table, filters, columns, options), shop.id);
+  },
+  ttlMs: AGENT_TTL_MS,
+  aheadMs: AGENT_REFRESH_AHEAD_MS,
+  onError: (error: unknown) => console.warn("[storefront chat] catalogue refresh failed", error instanceof Error ? error.message : error),
+});
 
+async function currentAgent(): Promise<Agent> {
+  if (process.env.STOREFRONT_CHAT_AGENT === "mock" || !process.env.OPENAI_API_KEY) return createMockAgent();
   const model = process.env.STOREFRONT_CHAT_MODEL || DEFAULT_STOREFRONT_MODEL;
-  const key = model;
-  if (remembered && remembered.key === key) {
-    // STALE WHILE IT REFRESHES. Loading the catalogue takes about a second; the
-    // customer who happens to arrive as the copy expires is answered from it
-    // while the next one loads, instead of paying that second.
-    //
-    // REFRESHED AHEAD, NEVER SERVED EXPIRED. The agent's policies and FAQs
-    // expire at KNOWLEDGE_TTL_MS (the same five minutes): an agent served stale
-    // after a pause answered every policy question « unavailable » — « do you
-    // allow payments in three times? » with an active payment policy (dev
-    // store, 2026-10-06). So the refresh starts a minute early, and an agent
-    // past its lifetime is waited for, not served.
-    const age = Date.now() - remembered.at;
-    if (age >= AGENT_TTL_MS - AGENT_REFRESH_AHEAD_MS && !rebuilding) {
-      rebuilding = buildAgent(db, model, key).finally(() => {
-        rebuilding = null;
-      });
-      rebuilding.catch((error) => console.warn("[storefront chat] catalogue refresh failed", error instanceof Error ? error.message : error));
-    }
-    if (age >= AGENT_TTL_MS && rebuilding) return rebuilding.catch(() => remembered!.agent);
-    return remembered.agent;
-  }
-  return rebuilding ?? buildAgent(db, model, key);
+  return agents.current(model) as Promise<Agent>;
 }
 
 /**
@@ -290,11 +290,16 @@ async function buildAdvisor(
   }
 }
 
-async function buildAgent(db: ReturnType<typeof client>, model: string, key: string): Promise<Agent> {
+async function buildAgent(db: ReturnType<typeof client>, model: string): Promise<{ agent: Agent; knowledge: { loadedAt: number } | null; stamp: string | null }> {
   // The brand the advisor speaks for is the shop this dashboard syncs.
   const shop = await getShop();
   const toolsOn = process.env.STOREFRONT_CHAT_TOOLS !== "off";
   const reader = { selectAll: (table: string, filters: object, columns: string) => supabaseSelectAll(db, table, filters, columns) };
+  // Read BEFORE the sources: a change made while they load moves it again, and
+  // the next check rebuilds. Unreadable: null, and this agent is never renewed.
+  const stamp = shop
+    ? await readSourceStamp((table: string, filters: object, columns: string, options?: object) => supabaseSelect(db, table, filters, columns, options), shop.id).catch(() => null)
+    : null;
   const [company, catalogue, knowledge] = shop
     ? await Promise.all([
         loadCompany(db, shop.id),
@@ -332,8 +337,9 @@ async function buildAgent(db: ReturnType<typeof client>, model: string, key: str
     readOrder: toolsOn && process.env.STOREFRONT_CHAT_ORDER_STATUS !== "off" ? orderReader(db) : null,
     orderShopDomain: loadConfig(process.env as Record<string, string | undefined>).shopDomain,
   });
-  remembered = { at: Date.now(), key, agent };
-  return agent;
+  // A degraded agent (no knowledge, no catalogue) is rebuilt at the next check, never renewed.
+  const complete = Boolean(shop) && (!toolsOn || (catalogue && knowledge));
+  return { agent, knowledge: (knowledge as { loadedAt: number } | null) ?? null, stamp: complete ? stamp : null };
 }
 
 export async function handleStorefrontChat(
@@ -353,7 +359,7 @@ export async function handleStorefrontChat(
   // a cold start, the catalogue) loads while the session is read; the count and
   // the history are one round trip together; the question is logged while the
   // model is already thinking.
-  const agentReady = currentAgent(db);
+  const agentReady = currentAgent();
   agentReady.catch(() => {}); // awaited below; never an unhandled rejection meanwhile
 
   let session = await findOrOpenSession(db, shopDomain, request, retention);
@@ -512,7 +518,7 @@ export async function handleStorefrontOpening(
 }
 
 async function openingFor(db: ReturnType<typeof client>, shopDomain: string, locale: string | null, identity: StorefrontIdentity) {
-  const agent = await currentAgent(db);
+  const agent = await currentAgent();
   if (identity.kind !== "customer" || !("opening" in agent)) return null;
   return agent.opening({ purchases: purchasesLoader(db, identity, shopDomain), locale, shopDomain });
 }

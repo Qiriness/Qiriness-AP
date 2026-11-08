@@ -42,6 +42,18 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 67. Egress: agent fingerprint, customer index delta and cart-code reads built, not deployed — 2026-11-08
+
+**Check after deploy** (web for the agent, the worker for the index):
+- `node scripts/.tmp-egress-snap.mjs tmp-egress/snap-<date>.json` a day after deploy, then `node scripts/.tmp-egress-rate.mjs tmp-egress/snap-2026-11-08.json tmp-egress/snap-<date>.json` (both git-excluded).
+  - `catalogue` should fall to about the number of product syncs and edits × instances (it was ~29/day).
+  - `custEmail` should fall to a few pages a day (it was ~242).
+  - The `updated_at=gte` delta read should appear.
+- The cart codes: the whole `status=ACTIVE` code read (`id,title,codes,…` with no code filter) should be gone. Per-code reads (`codes=cs.`, `codes->0->>code=ilike.`) should appear.
+- In the storefront: with a private code applied in the cart, « mon code est-il appliqué ? » still names it back.
+- The owner's Supabase Usage egress for the following days (it was ~150 MB/day).
+- In the storefront, a policy question after a 5+ minute pause still answers, which shows the renewed knowledge counts as fresh. Editing a policy reaches the chat within ~5 minutes.
+
 ## 66. `defective_product`: the categoriser measured on the synthetic set and a dry run only; migration applied and tickets relabelled 2026-11-06; live mail not yet checked — 2026-11-06
 
 **Pending, in this order** (the worker must not run the new code before step 1, or a `defective_product` label violates `tickets_category_check` and falls back to `other`):

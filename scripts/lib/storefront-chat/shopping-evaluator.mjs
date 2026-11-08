@@ -13,6 +13,17 @@ const liveProduct = (p) => p?.status?.toLowerCase() === 'active' && p.published_
 const missing = (reason) => ({ status: 'unknown', reason });
 
 /**
+ * Every code the shopping tools may look up in `cartCodeRows`: the cart's codes and the
+ * titles of its non-automatic discounts (a code, or the older cart.js shape with no type).
+ * The repository reads the code promotions for these only (`createShoppingReader`).
+ */
+export function cartCodesOf(raw) {
+  const cart = normalizeSnapshot(raw);
+  if (!cart) return [];
+  return [...new Set([...cart.codes, ...cart.discounts.filter((d) => d.type !== 'automatic').map((d) => norm(d.title))].filter(Boolean))];
+}
+
+/**
  * « Already on sale »: the synced compare-at price above the price the cart
  * charges. Promotions are calculated on the cart's price (the sale price, e.g.
  * after an Alpha sale), never on the crossed-out one.

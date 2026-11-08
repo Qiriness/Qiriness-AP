@@ -280,52 +280,142 @@ test('a ticket already linked to a customer is answered from that link', async (
   assert.equal(result.customerId, 'c1');
 });
 
-// --- refreshIfChanged: the 4.7 MB index is re-read only when a customer moved ---
+// --- refreshIfChanged: the 5 MB index is read whole once, then by delta ---
 
+/**
+ * A customers table with `updated_at` and `deleted_at`, honouring the reads
+ * the index makes: the stamp, the whole `id,email` read (live rows only) and
+ * the delta (`updated_at=gte.`, deleted rows included).
+ */
 function stampedSupabase() {
-  const state = { stamp: '2026-10-11T08:00:00Z', fail: false, scans: 0 };
+  const rows = CUSTOMERS.map(({ id, email }) => ({ id, email, updated_at: '2026-10-11T08:00:00.000Z', deleted_at: null }));
+  const state = { rows, fail: false, failRead: false, scans: 0, deltas: [] };
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
     const parsed = new URL(String(url));
-    const from = Number(String(init?.headers?.Range || '0-999').split('-')[0]);
-    if (from > 0) return { ok: true, json: async () => [] };
-    if (parsed.searchParams.get('select') === 'updated_at') {
+    const select = parsed.searchParams.get('select');
+    if (select === 'updated_at') {
       if (state.fail) return { ok: false, status: 503, json: async () => ({ message: 'unavailable' }) };
-      return { ok: true, json: async () => [{ updated_at: state.stamp }] };
+      const newest = [...state.rows].sort((a, b) => (a.updated_at < b.updated_at ? 1 : -1))[0];
+      return { ok: true, json: async () => [{ updated_at: newest.updated_at }] };
     }
-    if (parsed.searchParams.get('select') === 'id,email') {
-      if (!parsed.searchParams.has('id')) state.scans += 1; // a scan is its first page
-      const rows = CUSTOMERS.map(({ id, email }) => ({ id, email }));
-      return { ok: true, json: async () => postgrestPage(url, init, rows) };
+    if (select === 'id,email' || select === 'id,email,deleted_at') {
+      if (state.failRead) return { ok: false, status: 503, json: async () => ({ message: 'unavailable' }) };
+      const since = parsed.searchParams.get('updated_at')?.replace('gte.', '');
+      const first = !parsed.searchParams.has('id');
+      if (since) {
+        if (first) state.deltas.push(since);
+      } else if (first) state.scans += 1;
+      const pool = since
+        ? state.rows.filter((r) => r.updated_at >= since).map(({ id, email, deleted_at }) => ({ id, email, deleted_at }))
+        : state.rows.filter((r) => !r.deleted_at).map(({ id, email }) => ({ id, email }));
+      return { ok: true, json: async () => postgrestPage(url, init, pool) };
     }
-    return { ok: true, json: async () => CUSTOMERS.filter((c) => c.id === parsed.searchParams.get('id')?.replace('eq.', '')) };
+    // By id: one page, then an empty one, or the paging loop never ends.
+    if (Number(String(init?.headers?.Range || '0-999').split('-')[0]) > 0) return { ok: true, json: async () => [] };
+    const id = parsed.searchParams.get('id')?.replace('eq.', '');
+    const live = state.rows.find((r) => r.id === id);
+    const full = CUSTOMERS.find((c) => c.id === id);
+    return { ok: true, json: async () => (live ? [{ ...(full ?? {}), ...live }] : []) };
   };
-  return { state, client: { baseUrl: 'https://example.test/rest/v1', key: 'test-key' }, restore: () => { globalThis.fetch = originalFetch; } };
+  const touch = (id, change, at) => {
+    const row = state.rows.find((r) => r.id === id);
+    if (row) Object.assign(row, change, { updated_at: at });
+    else state.rows.push({ id, email: null, deleted_at: null, ...change, updated_at: at });
+  };
+  return { state, touch, client: { baseUrl: 'https://example.test/rest/v1', key: 'test-key' }, restore: () => { globalThis.fetch = originalFetch; } };
 }
 
-test('the hash index is re-read only when a customer changed since it was read', async (t) => {
+const marieHash = () => hashIdentifier('marie.martin@example.test');
+
+test('the hash index is read whole once; a changed customer costs a delta, not a re-read', async (t) => {
+  const sb = stampedSupabase();
+  t.after(sb.restore);
+  const lookup = createCustomerLookup({ supabase: sb.client, shopId: 's1', audit: false, now: () => 0 });
+
+  assert.equal(await lookup.refreshIfChanged(), true, 'nothing read yet');
+  assert.equal((await lookup.findByEmailHash(marieHash()))?.id, 'c1');
+  assert.equal(sb.state.scans, 1);
+
+  assert.equal(await lookup.refreshIfChanged(), false, 'same stamp: kept');
+  await lookup.findByEmailHash(marieHash());
+  assert.deepEqual([sb.state.scans, sb.state.deltas.length], [1, 0]);
+
+  sb.touch('c2', { email: 'paul.new@example.test' }, '2026-10-11T09:00:00.000Z');
+  assert.equal(await lookup.refreshIfChanged(), true, 'a customer moved');
+  assert.equal(await lookup.findByEmailHash(hashIdentifier('paul.durand@example.test')), null, 'the old address no longer finds him');
+  assert.equal((await lookup.findByEmailHash(hashIdentifier('paul.new@example.test')))?.id, 'c2');
+  assert.equal(sb.state.scans, 1, 'never read whole again');
+  // Read from ten minutes before the previous stamp: a transaction that began
+  // before it but committed after it carries an older updated_at.
+  assert.deepEqual(sb.state.deltas, ['2026-10-11T07:50:00.000Z']);
+});
+
+test('a delta takes in new customers and drops soft-deleted ones', async (t) => {
+  const sb = stampedSupabase();
+  t.after(sb.restore);
+  const lookup = createCustomerLookup({ supabase: sb.client, shopId: 's1', audit: false, now: () => 0 });
+  await lookup.refreshIfChanged();
+  await lookup.findByEmailHash(marieHash());
+
+  sb.touch('c1', { deleted_at: '2026-10-11T09:00:00.000Z' }, '2026-10-11T09:00:00.000Z');
+  sb.touch('c3', { email: 'new.customer@example.test' }, '2026-10-11T09:05:00.000Z');
+  await lookup.refreshIfChanged();
+  assert.equal(await lookup.findByEmailHash(marieHash()), null, 'soft-deleted');
+  assert.equal((await lookup.findByEmailHash(hashIdentifier('new.customer@example.test')))?.id, 'c3');
+  assert.equal(sb.state.scans, 1);
+});
+
+test('two stamps between lookups: one delta from the older one', async (t) => {
+  const sb = stampedSupabase();
+  t.after(sb.restore);
+  const lookup = createCustomerLookup({ supabase: sb.client, shopId: 's1', audit: false, now: () => 0 });
+  await lookup.refreshIfChanged();
+  await lookup.findByEmailHash(marieHash());
+
+  sb.touch('c3', { email: 'first@example.test' }, '2026-10-11T09:00:00.000Z');
+  await lookup.refreshIfChanged();
+  sb.touch('c4', { email: 'second@example.test' }, '2026-10-11T10:00:00.000Z');
+  await lookup.refreshIfChanged();
+  assert.equal((await lookup.findByEmailHash(hashIdentifier('first@example.test')))?.id, 'c3');
+  assert.equal((await lookup.findByEmailHash(hashIdentifier('second@example.test')))?.id, 'c4');
+  assert.deepEqual(sb.state.deltas, ['2026-10-11T07:50:00.000Z']);
+});
+
+test('a customer deleted outright moves no stamp: found missing at lookup, and the next one on the address answers', async (t) => {
+  const sb = stampedSupabase();
+  t.after(sb.restore);
+  sb.touch('c0', { email: 'MARIE.MARTIN@example.test' }, '2026-10-11T08:00:00.000Z');
+  const lookup = createCustomerLookup({ supabase: sb.client, shopId: 's1', audit: false, now: () => 0 });
+  await lookup.refreshIfChanged();
+  assert.equal((await lookup.findByEmailHash(marieHash()))?.id, 'c0', 'first writer (smallest id) wins, as before');
+
+  sb.state.rows = sb.state.rows.filter((r) => r.id !== 'c0');
+  assert.equal(await lookup.refreshIfChanged(), false);
+  assert.equal((await lookup.findByEmailHash(marieHash()))?.id, 'c1');
+  assert.equal(sb.state.scans, 1);
+});
+
+test('the index is read whole again after a week, and a failed read is not kept', async (t) => {
   const sb = stampedSupabase();
   t.after(sb.restore);
   let clock = 0;
   const lookup = createCustomerLookup({ supabase: sb.client, shopId: 's1', audit: false, now: () => clock });
-  const marie = hashIdentifier('marie.martin@example.test');
+  await lookup.refreshIfChanged();
+  await lookup.findByEmailHash(marieHash());
 
-  assert.equal(await lookup.refreshIfChanged(), true, 'nothing read yet');
-  await lookup.findByEmailHash(marie);
-  assert.equal(sb.state.scans, 1);
-
-  assert.equal(await lookup.refreshIfChanged(), false, 'same stamp: kept');
-  await lookup.findByEmailHash(marie);
-  assert.equal(sb.state.scans, 1);
-
-  sb.state.stamp = '2026-10-11T09:00:00Z';
-  assert.equal(await lookup.refreshIfChanged(), true, 'a customer moved: dropped');
-  await lookup.findByEmailHash(marie);
+  clock = 7 * 24 * 60 * 60 * 1000;
+  assert.equal(await lookup.refreshIfChanged(), true);
+  await lookup.findByEmailHash(marieHash());
   assert.equal(sb.state.scans, 2);
 
-  // A row deleted outright moves no stamp: a day is the longest an index stands.
-  clock = 24 * 60 * 60 * 1000;
-  assert.equal(await lookup.refreshIfChanged(), true);
+  sb.touch('c2', { email: 'paul.new@example.test' }, '2026-10-11T09:00:00.000Z');
+  await lookup.refreshIfChanged();
+  sb.state.failRead = true;
+  await assert.rejects(lookup.findByEmailHash(marieHash()));
+  sb.state.failRead = false;
+  assert.equal((await lookup.findByEmailHash(hashIdentifier('paul.new@example.test')))?.id, 'c2', 'read whole again');
+  assert.equal(sb.state.scans, 3);
 });
 
 test('when the stamp cannot be read the index is dropped, as every pass did before', async (t) => {
