@@ -10,6 +10,24 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## The product page can ask the advisor: the « Ask the advisor » app block (2026-11-08)
+
+Owner: « on the right hand panel at the bottom … the chatbot entry box and when they click enter the chatbot opens and runs the question », with preset options for delivery times, the return policy and how to use.
+
+- **Built:**
+  - `extensions/storefront-advisor/blocks/advisor-ask.liquid`: an app block, `target: section`, product templates. It has a heading, three preset questions (each can be switched off), an optional fourth question and a message bar. Settings cover the colours and the space above.
+  - `assets/advisor-ask.js` and `assets/advisor-ask.css`.
+  - The `ask.*` strings in the six locale files.
+  - `advisor.js` exposes `window.StorefrontAdvisor.ask`, plus a queue for questions asked before it draws.
+  - The panel's `start` takes a typed question (empty id). If a reply is pending, the question waits in the message bar.
+  - `DECISIONS.md` § The product page asks the advisor from an app block.
+- **Proven:**
+  - `scripts/lib/storefront-chat/advisor-ask.test.mjs`, 4 tests on a hand-made DOM: preset payloads, typed submit, the queue, hidden without the embed.
+  - `shopify theme check`: no offences, with `advisor.js` at 9,924 B.
+- **Not yet proven:**
+  - On a real theme. Next: `shopify app deploy`, then add the block on the staging theme (Product information → Add block → Apps → « Ask the advisor ») under « Des questions ».
+  - A preset, a typed question and a phone each opening the chat and answering.
+
 ## Egress: the storefront agent, the customer index and the cart codes stop re-reading what has not changed (2026-11-08)
 
 Owner: « ~150 MB of egress a day and only 250 MB left for the billing cycle (16 Nov) ». That leaves a budget of ~31 MB/day.

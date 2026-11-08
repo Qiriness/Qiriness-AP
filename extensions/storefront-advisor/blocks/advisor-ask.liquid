@@ -1,0 +1,113 @@
+{%- comment -%}
+  The product page's question box (owner, 2026-11-08): a heading, preset questions, a message bar.
+  A preset or a typed question opens the advisor (the app embed) and asks it there, through
+  window.StorefrontAdvisor in advisor.js. Without the embed the box hides itself (advisor-ask.js).
+  Text is the theme's own (not notranslate), so Weglot translates it like the rest of the page.
+{%- endcomment -%}
+{%- liquid
+  assign heading = block.settings.heading | strip
+  if heading == blank
+    assign heading = 'ask.heading' | t
+  endif
+  assign placeholder = block.settings.placeholder | strip
+  if placeholder == blank
+    assign placeholder = 'ask.placeholder' | t
+  endif
+  assign custom_question = block.settings.custom_question | strip
+  assign input_id = 'sa-ask-input-' | append: block.id
+-%}
+<div
+  class="sa-ask"
+  data-sa-ask
+  {{ block.shopify_attributes }}
+  style="--sa-ask-accent: {{ block.settings.accent_color }}; --sa-ask-surface: {{ block.settings.background_color }}; margin-top: {{ block.settings.margin_top }}px;"
+>
+  <p class="sa-ask__title">{{ heading | escape }}</p>
+  {%- if block.settings.subheading != blank -%}
+    <p class="sa-ask__sub">{{ block.settings.subheading | escape }}</p>
+  {%- endif -%}
+
+  {%- if block.settings.preset_delivery or block.settings.preset_returns or block.settings.preset_usage or custom_question != blank -%}
+    <ul class="sa-ask__chips" role="list">
+      {%- if block.settings.preset_delivery -%}
+        <li>
+          <button type="button" class="sa-ask__chip" data-sa-ask-chip data-action="delivery">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 6.5h11v9H3zM14 9.5h3.6l3.4 3.4v2.6h-7"/><circle cx="7" cy="17.5" r="1.6"/><circle cx="17.5" cy="17.5" r="1.6"/></svg>
+            <span data-sa-ask-text>{{ 'actions.delivery' | t }}</span>
+          </button>
+        </li>
+      {%- endif -%}
+      {%- if block.settings.preset_returns -%}
+        <li>
+          <button type="button" class="sa-ask__chip" data-sa-ask-chip data-action="returns">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 7.5 5 11.5l4 4"/><path d="M5 11.5h9.5a4.5 4.5 0 0 1 0 9H11"/></svg>
+            <span data-sa-ask-text>{{ 'actions.returns' | t }}</span>
+          </button>
+        </li>
+      {%- endif -%}
+      {%- if block.settings.preset_usage -%}
+        <li>
+          {%- comment -%} The label is short; the question asked is the hidden line under it. {%- endcomment -%}
+          <button type="button" class="sa-ask__chip" data-sa-ask-chip data-action="">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5s-5.5 6.2-5.5 10a5.5 5.5 0 0 0 11 0c0-3.8-5.5-10-5.5-10Z"/></svg>
+            <span>{{ 'ask.how_to_use' | t }}</span>
+            <span class="sa-ask__hidden" aria-hidden="true" data-sa-ask-text>{{ 'ask.how_to_use_question' | t }}</span>
+          </button>
+        </li>
+      {%- endif -%}
+      {%- if custom_question != blank -%}
+        <li>
+          <button type="button" class="sa-ask__chip" data-sa-ask-chip data-action="">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5c-4.97 0-9 3.36-9 7.5 0 2.1 1.04 4 2.72 5.36L5 20.5l4.3-2.03c.86.2 1.76.3 2.7.3 4.97 0 9-3.35 9-7.5s-4.03-7.5-9-7.5Z"/></svg>
+            <span data-sa-ask-text>{{ custom_question | escape }}</span>
+          </button>
+        </li>
+      {%- endif -%}
+    </ul>
+  {%- endif -%}
+
+  <form class="sa-ask__form" novalidate>
+    <label class="sa-ask__hidden" for="{{ input_id }}">{{ 'advisor.input_label' | t }}</label>
+    <input
+      id="{{ input_id }}"
+      class="sa-ask__input"
+      type="text"
+      maxlength="1000"
+      autocomplete="off"
+      enterkeyhint="send"
+      placeholder="{{ placeholder | escape }}"
+    >
+    <button type="submit" class="sa-ask__send" aria-label="{{ 'advisor.send' | t }}">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.5 12h16M14.5 7l5 5-5 5"/></svg>
+    </button>
+  </form>
+
+  {%- if request.design_mode -%}
+    <p class="sa-ask__note">Opens the Beauty advisor: turn on its app embed (Theme settings › App embeds), or this box is hidden on the shop.</p>
+  {%- endif -%}
+</div>
+
+{% schema %}
+{
+  "name": "Ask the advisor",
+  "target": "section",
+  "javascript": "advisor-ask.js",
+  "stylesheet": "advisor-ask.css",
+  "enabled_on": { "templates": ["product"] },
+  "settings": [
+    { "type": "paragraph", "content": "A question box that opens the Beauty advisor and asks it. Needs the Beauty advisor app embed turned on." },
+    { "type": "text", "id": "heading", "label": "Heading", "info": "Leave empty for the default, in the visitor's language." },
+    { "type": "text", "id": "subheading", "label": "Text under the heading", "info": "Optional." },
+    { "type": "text", "id": "placeholder", "label": "Message bar placeholder", "info": "Leave empty for the default, in the visitor's language." },
+    { "type": "header", "content": "Preset questions" },
+    { "type": "checkbox", "id": "preset_delivery", "label": "Delivery times", "default": true },
+    { "type": "checkbox", "id": "preset_returns", "label": "Return policy", "default": true },
+    { "type": "checkbox", "id": "preset_usage", "label": "How to use this product", "default": true },
+    { "type": "text", "id": "custom_question", "label": "Another question", "info": "Optional: shown as a fourth button and asked as written." },
+    { "type": "header", "content": "Style" },
+    { "type": "color", "id": "accent_color", "label": "Accent colour", "default": "#23201c" },
+    { "type": "color", "id": "background_color", "label": "Background", "default": "#f8f5f0" },
+    { "type": "range", "id": "margin_top", "label": "Space above", "min": 0, "max": 48, "step": 4, "unit": "px", "default": 16 }
+  ]
+}
+{% endschema %}

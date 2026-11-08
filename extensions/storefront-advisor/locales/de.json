@@ -115,5 +115,11 @@
     "text": "Eine persönliche Routine erstellen und ab 2 Produkten 20 % sparen",
     "button": "Meine Routine",
     "close": "Banner schließen"
+  },
+  "ask": {
+    "heading": "Stellen Sie unserer Beauty-Beraterin all Ihre Fragen",
+    "placeholder": "Ihre Frage zu diesem Produkt…",
+    "how_to_use": "Anwendung",
+    "how_to_use_question": "Wie wende ich dieses Produkt an?"
   }
 }

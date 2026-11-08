@@ -115,5 +115,11 @@
     "text": "Crear una rutina personalizada para disfrutar de un 20 % de descuento a partir de 2 productos",
     "button": "Mi rutina",
     "close": "Cerrar el banner"
+  },
+  "ask": {
+    "heading": "Haga todas sus preguntas a nuestra asesora de belleza",
+    "placeholder": "Su pregunta sobre este producto…",
+    "how_to_use": "Modo de empleo",
+    "how_to_use_question": "¿Cómo se usa este producto?"
   }
 }

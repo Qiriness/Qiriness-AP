@@ -115,5 +115,11 @@
     "text": "Construire une routine personnalisée pour profiter de −20 % dès 2 produits achetés",
     "button": "Ma routine",
     "close": "Fermer le bandeau"
+  },
+  "ask": {
+    "heading": "Posez toutes vos questions à notre Conseillère Beauté",
+    "placeholder": "Votre question sur ce soin…",
+    "how_to_use": "Conseils d’utilisation",
+    "how_to_use_question": "Comment utiliser ce soin ?"
   }
 }

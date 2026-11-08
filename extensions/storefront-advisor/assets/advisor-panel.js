@@ -1316,12 +1316,18 @@
     /*
      * A quick action from outside the panel (the routine banner): the panel opens and the action
      * runs as its chip would. A conversation already under way gets it too: « Construire ma
-     * routine » after other questions starts the builder.
+     * routine » after other questions starts the builder. The product page's question box
+     * (blocks/advisor-ask.liquid) comes this way too: a typed question has an empty id and goes as
+     * a typed message. A reply still on its way: the question waits in the message bar, not lost.
      */
     function start(action) {
       if (!action || typeof action.id !== 'string' || typeof action.label !== 'string') return;
+      var text = action.label.trim().slice(0, MAX_MESSAGE_CHARS);
+      if (!text) return;
       setOpen(true);
-      if (!state.pending) ask(action.label, action.id);
+      if (!state.pending) return ask(text, action.id || null);
+      input.value = text;
+      autosize();
     }
 
     /*

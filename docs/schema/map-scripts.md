@@ -380,7 +380,10 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 ```text
 |-- extensions/storefront-advisor/  # the support app's theme app extension (2026-11-02):
 |                                # blocks/advisor-embed.liquid (app embed, target body;
-|                                # settings + JSON config); its [app_proxy] is in the
+|                                # settings + JSON config) · blocks/advisor-ask.liquid (app
+|                                # block, target section, product templates: preset questions
+|                                # + message bar; assets/advisor-ask.js/.css; asks through
+|                                # window.StorefrontAdvisor.ask in advisor.js); its [app_proxy] is in the
 |                                # root shopify.app.toml. extensions/package.json: CommonJS
 |                                # for the tests that import assets/advisor-cart.js
 |                                # · assets/advisor.js (loader: launcher + routine banner) ·

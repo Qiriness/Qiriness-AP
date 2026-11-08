@@ -1,0 +1,185 @@
+/*
+ * The product page's question box (blocks/advisor-ask.liquid). It sits in the theme's product column,
+ * so it takes the theme's fonts and text colour; everything is under .sa-ask, and the controls are
+ * reset so the theme's own button and input styles do not reach them.
+ */
+.sa-ask {
+  --sa-ask-accent: #23201c;
+  --sa-ask-surface: #f8f5f0;
+  --sa-ask-line: rgba(35, 32, 28, 0.12);
+  display: block;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--sa-ask-line);
+  border-radius: 14px;
+  background: var(--sa-ask-surface);
+  font-family: inherit;
+  color: inherit;
+}
+.sa-ask[hidden] { display: none; }
+.sa-ask *,
+.sa-ask *::before,
+.sa-ask *::after { box-sizing: border-box; }
+
+.sa-ask__title {
+  margin: 0;
+  font-family: var(--font-heading-family, inherit);
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: normal;
+}
+.sa-ask__sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  opacity: 0.72;
+}
+
+.sa-ask__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.sa-ask__chips li { margin: 0; padding: 0; }
+.sa-ask__chips li::before { content: none; }
+
+.sa-ask__chip,
+.sa-ask__send {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+  min-width: 0;
+  min-height: 0;
+  box-shadow: none;
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  text-decoration: none;
+  cursor: pointer;
+}
+.sa-ask__chip::before,
+.sa-ask__chip::after,
+.sa-ask__send::before,
+.sa-ask__send::after { content: none; }
+
+.sa-ask__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px 7px 10px;
+  border: 1px solid var(--sa-ask-line);
+  border-radius: 999px;
+  background: #ffffff;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.sa-ask__chip:hover {
+  border-color: var(--sa-ask-accent);
+  transform: translateY(-1px);
+}
+.sa-ask__chip svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: var(--sa-ask-accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sa-ask__form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 0;
+  padding: 5px 5px 5px 16px;
+  border: 1px solid var(--sa-ask-line);
+  border-radius: 999px;
+  background: #ffffff;
+  transition: border-color 0.2s ease;
+}
+.sa-ask__form:focus-within { border-color: var(--sa-ask-accent); }
+
+.sa-ask__input {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  /* 16px: iOS zooms the page into a smaller field. */
+  font-size: 16px;
+  letter-spacing: normal;
+}
+.sa-ask__input::placeholder { color: inherit; opacity: 0.55; }
+
+.sa-ask__send {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sa-ask-accent);
+  transition: transform 0.2s ease;
+}
+.sa-ask__send:hover { transform: translateX(1px); }
+.sa-ask__send svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sa-ask :focus-visible {
+  outline: 2px solid var(--sa-ask-accent);
+  outline-offset: 2px;
+}
+.sa-ask__form :focus-visible { outline: none; }
+
+.sa-ask__hidden {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.sa-ask__note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  opacity: 0.6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sa-ask__chip,
+  .sa-ask__send { transition: none; }
+  .sa-ask__chip:hover,
+  .sa-ask__send:hover { transform: none; }
+}

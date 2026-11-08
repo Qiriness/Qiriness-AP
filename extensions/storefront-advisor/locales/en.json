@@ -115,5 +115,11 @@
     "text": "Build a personalised routine to get 20% off from 2 products",
     "button": "My routine",
     "close": "Close the banner"
+  },
+  "ask": {
+    "heading": "Ask our Beauty Advisor anything",
+    "placeholder": "Your question about this product…",
+    "how_to_use": "How to use",
+    "how_to_use_question": "How do I use this product?"
   }
 }

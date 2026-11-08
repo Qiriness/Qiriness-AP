@@ -2,6 +2,23 @@
 
 ## Storefront advisor
 
+### The product page asks the advisor from an app block, not a theme section (2026-11-08)
+
+**The owner's ask:** at the bottom of the product page's right-hand column, under « Des questions », a box headed « Posez toutes vos questions à notre Conseillère Beauté ». It holds preset questions (delivery times, return policy, how to use) and a message bar. Sending opens the chat and asks there.
+
+**Why an app block** (`blocks/advisor-ask.liquid`, `target: section`, enabled on product templates):
+- The right-hand column is the product section's own blocks, and an app block is the one thing a merchant can drop in there from the theme editor.
+- It ships with the app (`shopify app deploy`) rather than being edited into each theme, and works in any shop's OS 2.0 theme.
+- It is placed once per product template; every product on that template shows it.
+
+**The rules:**
+- **The box only asks. The advisor (the app embed) answers.** The box has no chat of its own. `advisor.js` exposes `window.StorefrontAdvisor.ask` and drains `window.StorefrontAdvisorAsks`, which holds what was asked before it drew (Weglot's strings load first). It reaches the routine banner's path: `mount(true, action)`, then the panel's `start`.
+- **Presets keep their action ids.** Delivery and returns are sent as `delivery` and `returns`, as their chips in the chat are. « How to use » has no action: it goes as the typed question « Comment utiliser ce soin ? », and the page's product (already in every request's context) says which product. A shop can add a fourth question as written.
+- **A typed question has an empty id and goes as a typed message.** If a reply is still on its way, the question is put in the chat's message bar rather than dropped.
+- **No embed, no box.** Without `#storefront-advisor` on the page, the box hides itself. The theme editor still shows it, with a note on turning the embed on.
+- **The theme's look, not the chat's.** The box takes the theme's fonts and text colour, so it reads as part of the page. Its controls are reset so the theme's button and input styles cannot reach them. It is translatable: not `notranslate`, so Weglot treats it as page text, plus the extension's six locale files.
+- **`advisor.js` stays under Theme Check's 10,000 B.** The hook is four lines (9,924 B).
+
 ### The cart's code rows are read by the cart's codes (2026-11-08)
 
 **Found by the egress bill.** `cartCodeRows` was every active code promotion of the shop, re-read with the shopping snapshot every 30 s of chat. That was fine on the dev store (5 codes). On the live store it is 45 promotions: the six 2026-05-19 summer ones (SUMMER10/20/30, GUASHA, MASQUE, LIVRAISON) hold 600 bulk codes each, 5,141 codes in all, 532–558 kB a load, ~14 MB a day.

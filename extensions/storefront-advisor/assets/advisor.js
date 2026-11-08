@@ -91,6 +91,10 @@
     if (wasLeftOpen()) { wait = 0; mount(false); }
     setTimeout(function () { root.insertBefore(launcher, root.firstChild); }, wait);
     routineBanner(root, config, function (start) { mount(true, start); }, wait);
+    // advisor-ask block: open and ask.
+    var ask = function (q) { label.remove(); mount(true, q); };
+    window.StorefrontAdvisor = { ask: ask };
+    (window.StorefrontAdvisorAsks || []).splice(0).forEach(ask);
   }
 
   /* The routine banner (docs/decisions/storefront-advisor.md). */
