@@ -105,7 +105,11 @@
   background: #ffffff;
   transition: border-color 0.2s ease;
 }
-.sa-ask__form:focus-within { border-color: var(--sa-ask-accent); }
+/* Selected: the bar's border darkens and a soft halo shows (owner, 2026-11-08: no rectangle round the field). */
+.sa-ask__form:focus-within {
+  border-color: var(--sa-ask-accent);
+  box-shadow: 0 0 0 3px rgba(35, 32, 28, 0.06);
+}
 
 .sa-ask__input {
   -webkit-appearance: none;
@@ -129,6 +133,14 @@
   letter-spacing: normal;
 }
 .sa-ask__input::placeholder { color: inherit; opacity: 0.55; }
+/* The theme's own focus ring (an outline or a box-shadow on every input) is the rectangle: removed. */
+.sa-ask .sa-ask__input:focus,
+.sa-ask .sa-ask__input:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  border: 0 !important;
+}
 
 .sa-ask__send {
   display: grid;
@@ -157,7 +169,6 @@
   outline: 2px solid var(--sa-ask-accent);
   outline-offset: 2px;
 }
-.sa-ask__form :focus-visible { outline: none; }
 
 .sa-ask__hidden {
   position: absolute !important;
