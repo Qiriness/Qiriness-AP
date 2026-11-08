@@ -16,6 +16,14 @@
   if greeting == blank
     assign greeting = 'advisor.greeting' | t: shop: shop.name
   endif
+  assign logo_url = ''
+  if block.settings.logo != blank
+    assign logo_url = block.settings.logo | image_url: width: 160
+  elsif shop.brand.square_logo != blank
+    assign logo_url = shop.brand.square_logo | image_url: width: 160
+  elsif shop.brand.logo != blank
+    assign logo_url = shop.brand.logo | image_url: width: 160
+  endif
   assign banner_button = block.settings.banner_button | strip
   if banner_button == blank
     assign banner_button = 'banner.button' | t
@@ -35,6 +43,7 @@
     "cartScript": {{ 'advisor-cart.js' | asset_url | json }},
     "stringsScript": {{ 'advisor-strings.js' | asset_url | json }},
     "shopName": {{ shop.name | json }},
+    "logo": {{ logo_url | json }},
     "custom": {
       "greeting": {% if block.settings.greeting != blank %}true{% else %}false{% endif %},
       "bannerText": {% if block.settings.banner_text != blank %}true{% else %}false{% endif %},
@@ -66,15 +75,16 @@
     "viewer": {% if customer %}{{ customer.id | append: '' | json }}{% else %}""{% endif %},
     "quickActions": [
       {%- assign first = true -%}
-      {%- if block.settings.action_find_product -%}{"id": "find_product", "label": {{ 'actions.find_product' | t | json }}}{%- assign first = false -%}{%- endif -%}
-      {%- if block.settings.action_build_routine -%}{%- unless first -%},{%- endunless -%}{"id": "build_routine", "label": {{ 'actions.build_routine' | t | json }}}{%- assign first = false -%}{%- endif -%}
+      {%- if block.settings.action_build_routine -%}{"id": "build_routine", "label": {{ 'actions.build_routine' | t | json }}}{%- assign first = false -%}{%- endif -%}
+      {%- if block.settings.action_find_product -%}{%- unless first -%},{%- endunless -%}{"id": "find_product", "label": {{ 'actions.find_product' | t | json }}}{%- assign first = false -%}{%- endif -%}
+      {%- if block.settings.action_delivery -%}{%- unless first -%},{%- endunless -%}{"id": "delivery", "label": {{ 'actions.delivery' | t | json }}}{%- assign first = false -%}{%- endif -%}
+      {%- if block.settings.action_returns -%}{%- unless first -%},{%- endunless -%}{"id": "returns", "label": {{ 'actions.returns' | t | json }}}{%- assign first = false -%}{%- endif -%}
       {%- if block.settings.action_compare -%}{%- unless first -%},{%- endunless -%}{"id": "compare", "label": {{ 'actions.compare' | t | json }}}{%- assign first = false -%}{%- endif -%}
-      {%- if block.settings.action_delivery_returns -%}{%- unless first -%},{%- endunless -%}{"id": "delivery_returns", "label": {{ 'actions.delivery_returns' | t | json }}}{%- assign first = false -%}{%- endif -%}
       {%- if block.settings.action_offers -%}{%- unless first -%},{%- endunless -%}{"id": "offers", "label": {{ 'actions.offers' | t | json }}}{%- endif -%}
     ],
     "strings": {
       "title": {{ 'advisor.title' | t: shop: shop.name | json }},
-      "eyebrow": {{ 'advisor.eyebrow' | t: shop: shop.name | json }},
+      "routineNote": {{ 'actions.build_routine_note' | t | json }},
       "launcher": {{ 'advisor.launcher' | t | json }},
       "open": {{ 'advisor.open' | t | json }},
       "close": {{ 'advisor.close' | t | json }},
@@ -208,15 +218,18 @@
       "label": "Accent colour",
       "default": "#23201c"
     },
+    { "type": "image_picker", "id": "logo", "label": "Advisor picture", "info": "Shown in a circle at the top of the chat. Empty: the shop logo from Settings > Brand." },
     { "type": "text", "id": "font_heading", "label": "Heading font", "info": "Titles and product names. Must be in the fonts stylesheet below.", "default": "Cormorant Garamond" },
     { "type": "text", "id": "font_body", "label": "Body font", "info": "Messages, buttons and labels.", "default": "DM Sans" },
     { "type": "text", "id": "fonts_url", "label": "Fonts stylesheet", "info": "Loaded only once the advisor shows. Empty: the fonts must already be on the page.", "default": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:wght@400;500;600&display=swap" },
     { "type": "header", "content": "Quick actions" },
-    { "type": "checkbox", "id": "action_find_product", "label": "Find my skincare", "default": true },
+    { "type": "paragraph", "content": "Listed under the first message, in this order." },
     { "type": "checkbox", "id": "action_build_routine", "label": "Build my routine", "default": true },
-    { "type": "checkbox", "id": "action_compare", "label": "Compare products", "default": true },
-    { "type": "checkbox", "id": "action_delivery_returns", "label": "Delivery & returns", "default": true },
-    { "type": "checkbox", "id": "action_offers", "label": "Current offers", "default": true },
+    { "type": "checkbox", "id": "action_find_product", "label": "Find my skincare", "default": true },
+    { "type": "checkbox", "id": "action_delivery", "label": "Delivery times", "default": true },
+    { "type": "checkbox", "id": "action_returns", "label": "Return policy", "default": true },
+    { "type": "checkbox", "id": "action_compare", "label": "Compare products", "default": false },
+    { "type": "checkbox", "id": "action_offers", "label": "Current offers", "default": false },
     { "type": "text", "id": "terms_path", "label": "Terms page", "info": "The page « See T&Cs » under the message bar opens, a path on this shop. Leave empty to hide the link.", "default": "/pages/conditions-generales-de-ventes" },
     { "type": "header", "content": "Routine banner" },
     { "type": "checkbox", "id": "banner_enabled", "label": "Show the routine banner", "info": "A bar across the bottom of the screen; its button opens the advisor and starts the routine builder.", "default": true },

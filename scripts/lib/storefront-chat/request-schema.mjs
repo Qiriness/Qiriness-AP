@@ -14,7 +14,8 @@ import { normalizeSnapshot } from './shopping-evaluator.mjs';
 export const MAX_BODY_BYTES = 32 * 1024;
 
 /** The quick actions the widget offers. Anything else is sent as a plain message. */
-export const QUICK_ACTIONS = ['find_product', 'build_routine', 'compare', 'delivery_returns', 'offers'];
+// delivery_returns: the single chip before 2026-11-08, still sent by a page cached from then.
+export const QUICK_ACTIONS = ['find_product', 'build_routine', 'compare', 'delivery', 'returns', 'delivery_returns', 'offers'];
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE_TYPE = /^[a-z_]{1,40}$/;

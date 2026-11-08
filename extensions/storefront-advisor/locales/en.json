@@ -1,8 +1,7 @@
 {
   "advisor": {
-    "title": "{{ shop }} Beauty Advisor",
-    "eyebrow": "{{ shop }} at your service",
-    "launcher": "Beauty advice",
+    "title": "Beauty Advisor",
+    "launcher": "Need help? Talk to our AI beauty advisor",
     "open": "Open the beauty advisor",
     "close": "Close the advisor",
     "greeting": "Hello! I’m your virtual {{ shop }} beauty assistant, here to answer all your questions. How can I help you find the skincare that will awaken your skin’s energy? ⚡",
@@ -43,8 +42,11 @@
   "actions": {
     "find_product": "Find my skincare",
     "build_routine": "Build my routine",
+    "build_routine_note": "−20% from 2 products",
     "compare": "Compare products",
     "delivery_returns": "Delivery & returns",
+    "delivery": "Delivery times",
+    "returns": "Return policy",
     "offers": "Current offers"
   },
   "routine": {

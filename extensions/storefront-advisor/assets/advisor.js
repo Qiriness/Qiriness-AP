@@ -1,7 +1,4 @@
-/*
- * Storefront advisor loader (Theme Check cap: 10 KB): the launcher; advisor-panel.js on first open.
- * All shop-specific values come from the embed's JSON config.
- */
+/* Advisor loader, kept under Theme Check's 10 KB: the launcher and banner; the panel loads on first open. */
 (function () {
   'use strict';
 
@@ -10,10 +7,8 @@
   var BANNER_KEY = 'storefront-advisor:banner-closed';
   var SEEN_KEY = 'storefront-advisor:since';
   var MOBILE_QUERY = '(max-width: 640px)';
-  var SPARK = [
-    'M12 3.5c.6 3.9 2.6 5.9 6.5 6.5-3.9.6-5.9 2.6-6.5 6.5-.6-3.9-2.6-5.9-6.5-6.5 3.9-.6 5.9-2.6 6.5-6.5Z',
-    'M18.5 15.5c.25 1.6 1 2.35 2.5 2.5-1.5.25-2.25 1-2.5 2.5-.25-1.5-1-2.25-2.5-2.5 1.5-.15 2.25-.9 2.5-2.5Z'
-  ];
+  var TEASED_KEY = 'storefront-advisor:teased';
+  var BUBBLE = ['M12 3.5c-4.97 0-9 3.36-9 7.5 0 2.1 1.04 4 2.72 5.36L5 20.5l4.3-2.03c.86.2 1.76.3 2.7.3 4.97 0 9-3.35 9-7.5s-4.03-7.5-9-7.5Z'];
 
   function boot() {
     var root = document.getElementById(ROOT_ID);
@@ -27,7 +22,7 @@
     }
     root.setAttribute('data-ready', 'true');
     decodeConfigText(config);
-    // A language other than Shopify's (Weglot): advisor-strings.js.
+    // Weglot: advisor-strings.js.
     var shopLang = String((config.context || {}).locale || '').slice(0, 2);
     var pageLang = String((location.pathname.match(/^\/([a-z]{2})(\/|$)/) || [])[1] || document.documentElement.lang || '').slice(0, 2);
     if (config.stringsScript && (window.Weglot || (pageLang && pageLang !== shopLang))) {
@@ -55,17 +50,17 @@
     launcher.setAttribute('aria-controls', ROOT_ID + '-panel');
     launcher.setAttribute('aria-expanded', 'false');
     launcher.setAttribute('aria-label', strings.open || '');
-    launcher.appendChild(sparkIcon());
+    launcher.appendChild(bubbleIcon());
     var label = document.createElement('span');
     label.className = 'sa-launcher__label';
+    label.setAttribute('aria-hidden', 'true');
     label.textContent = strings.launcher || '';
-    launcher.appendChild(label);
+    try { if (!sessionStorage.getItem(TEASED_KEY) && label.textContent) launcher.appendChild(label); } catch (error) { launcher.appendChild(label); }
 
     var loading = null;
     var mounted = false;
     var advisor = null;
 
-    // `start`: a quick action run once open (the banner's).
     function mount(openNow, start) {
       if (mounted) {
         if (start && advisor) advisor.start(start);
@@ -86,20 +81,19 @@
     }
 
     launcher.addEventListener('click', function () {
+      if (label.parentNode) label.parentNode.removeChild(label);
+      try { sessionStorage.setItem(TEASED_KEY, '1'); } catch (error) { /* this page */ }
       if (!mounted) mount(true);
     });
 
-    // Launcher and banner wait `delay` s into the visit, clear of the cookie banner (owner, 2026-11-06).
+    // `delay` s into the visit: the cookie banner first.
     var wait = visitWait((config.banner || {}).delay);
     if (wasLeftOpen()) { wait = 0; mount(false); }
     setTimeout(function () { root.insertBefore(launcher, root.firstChild); }, wait);
     routineBanner(root, config, function (start) { mount(true, start); }, wait);
   }
 
-  /*
-   * THE ROUTINE BANNER (owner, 2026-10-19): a bottom bar; its button starts the routine builder,
-   * its × hides it for `hours` hours. Shown with the launcher.
-   */
+  /* The routine banner (docs/decisions/storefront-advisor.md). */
   function routineBanner(root, config, start, wait) {
     var banner = config.banner || {};
     if (!banner.enabled || !banner.text || !banner.button || bannerClosed(banner.hours)) return;
@@ -125,7 +119,7 @@
     bar.appendChild(go);
     bar.appendChild(close);
 
-    // Other widgets pinned to the bottom (Klaviyo's teaser): lifted above the bar (theme setting).
+    // Other bottom widgets: lifted above the bar.
     var lifted = [];
     var watch = null;
     function lift() {
@@ -163,12 +157,10 @@
       measure();
       root.classList.add('sa-root--banner');
       window.addEventListener('resize', measure);
-      // Lifted as they appear.
       if (banner.lift && window.MutationObserver) {
         watch = new MutationObserver(lift);
         watch.observe(document.body, { childList: true, subtree: true });
       }
-      // Next frame: slide up.
       window.requestAnimationFrame(function () { bar.classList.add('sa-banner--in'); });
     }, Math.max(1200, wait));
   }
@@ -179,7 +171,6 @@
     return Math.max(0, (typeof s === 'number' ? s : 15) * 1000 + at - Date.now());
   }
 
-  /* The web fonts (theme setting), only once something of ours is drawn. */
   function loadFonts(url) {
     if (typeof url !== 'string' || url.indexOf('https://') !== 0 || document.getElementById('sa-fonts')) return;
     var link = document.createElement('link');
@@ -198,7 +189,7 @@
     }
   }
 
-  /* Liquid's `t` HTML-escapes (« m&#39;en »); we write textContent: decoded once. */
+  /* Liquid's `t` HTML-escapes; we write textContent. */
   function decodeConfigText(config) {
     var parser = typeof DOMParser === 'function' ? new DOMParser() : null;
     function decode(value) {
@@ -237,13 +228,13 @@
     });
   }
 
-  function sparkIcon() {
+  function bubbleIcon() {
     var ns = 'http://www.w3.org/2000/svg';
     var svg = document.createElementNS(ns, 'svg');
     svg.setAttribute('viewBox', '0 0 24 24');
     svg.setAttribute('aria-hidden', 'true');
     svg.setAttribute('focusable', 'false');
-    SPARK.forEach(function (d) {
+    BUBBLE.forEach(function (d) {
       var path = document.createElementNS(ns, 'path');
       path.setAttribute('d', d);
       svg.appendChild(path);

@@ -1,8 +1,7 @@
 {
   "advisor": {
-    "title": "{{ shop }} Beautyadvies",
-    "eyebrow": "{{ shop }} tot uw dienst",
-    "launcher": "Beautyadvies",
+    "title": "Beautyadviseur",
+    "launcher": "Hulp nodig? Praat met onze AI-beautyadviseur",
     "open": "Beautyadvies openen",
     "close": "Advies sluiten",
     "greeting": "Hallo! Ik ben uw virtuele {{ shop }} beautyassistent en beantwoord graag al uw vragen. Hoe kan ik u helpen de verzorging te vinden die de energie van uw huid wakker maakt? ⚡",
@@ -43,8 +42,11 @@
   "actions": {
     "find_product": "Mijn verzorging vinden",
     "build_routine": "Mijn routine samenstellen",
+    "build_routine_note": "−20% vanaf 2 producten",
     "compare": "Producten vergelijken",
     "delivery_returns": "Levering & retour",
+    "delivery": "Levertijden",
+    "returns": "Retourbeleid",
     "offers": "Actuele aanbiedingen"
   },
   "routine": {

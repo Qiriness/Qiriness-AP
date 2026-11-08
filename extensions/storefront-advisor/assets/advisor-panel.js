@@ -1137,12 +1137,38 @@
     ]);
   }
 
+  /*
+   * The quick actions (owner, 2026-11-08): a list under the greeting, an emoji before each, the routine's
+   * offer beside it (strings.routineNote, the locale's). The note is shown only: the label alone is sent.
+   */
+  var ACTION_EMOJI = {
+    build_routine: '✨', find_product: '🔍', delivery: '🚚', returns: '🔁',
+    delivery_returns: '📦', compare: '⚖️', offers: '🎁'
+  };
+
   function QuickActions(actions, strings, onPick) {
     if (!actions.length) return null;
-    return el('div', { className: 'sa-actions', role: 'group', 'aria-label': strings.quickActionsLabel },
-      actions.map(function (action) {
-        return el('button', { type: 'button', className: 'sa-chip', text: action.label, onClick: function () { onPick(action); } });
-      }));
+    return el('div', { className: 'sa-actions', role: 'group', 'aria-label': strings.quickActionsLabel }, [
+      el('p', { className: 'sa-actions__label', 'aria-hidden': 'true', text: strings.quickActionsLabel })
+    ].concat(actions.map(function (action) {
+      var note = action.id === 'build_routine' ? strings.routineNote : '';
+      return el('button', { type: 'button', className: 'sa-action', onClick: function () { onPick(action); } }, [
+        el('span', { className: 'sa-action__icon', 'aria-hidden': 'true', text: ACTION_EMOJI[action.id] || '💬' }),
+        el('span', { className: 'sa-action__label', text: action.label }),
+        note ? el('span', { className: 'sa-action__note', text: note }) : null
+      ]);
+    })));
+  }
+
+  /* The advisor's picture (owner, 2026-11-08): the theme setting's, else the shop logo, else its initial. */
+  function Avatar(config) {
+    var name = String(config.shopName || '');
+    var box = el('span', { className: 'sa-avatar', 'aria-hidden': 'true' });
+    function initial() { box.textContent = name.charAt(0).toUpperCase(); }
+    if (typeof config.logo === 'string' && /^(https:)?\/\//.test(config.logo)) {
+      box.appendChild(el('img', { src: config.logo, alt: '', width: '40', height: '40', onError: initial }));
+    } else initial();
+    return box;
   }
 
   /* ---------- the advisor ---------- */
@@ -1205,7 +1231,6 @@
     var titleId = ROOT_ID + '-title';
 
     var log = el('div', { className: 'sa-log', role: 'log', 'aria-live': 'polite', 'aria-relevant': 'additions' });
-    var actionsSlot = el('div', { className: 'sa-actions-slot' });
 
     var input = el('textarea', {
       id: ROOT_ID + '-input',
@@ -1240,9 +1265,13 @@
       hidden: true
     }, [
       header = el('header', { className: 'sa-header' }, [
+        // Picture, « Conseillère Beauté » in the heading font, the shop's name small under it (owner, 2026-11-08).
         el('div', { className: 'sa-header__text' }, [
-          el('p', { className: 'sa-eyebrow', text: strings.eyebrow }),
-          el('h2', { id: titleId, className: 'sa-title', text: strings.title })
+          Avatar(config),
+          el('div', null, [
+            el('h2', { id: titleId, className: 'sa-title', text: strings.title }),
+            config.shopName ? el('p', { className: 'sa-subtitle', text: config.shopName }) : null
+          ])
         ]),
         el('div', { className: 'sa-header__buttons' }, [
           newChatButton,
@@ -1251,7 +1280,6 @@
         ])
       ]),
       log,
-      actionsSlot,
       composer,
       Disclaimer(strings, contactHref({ url: config.termsPath }))
     ]);
@@ -1547,6 +1575,15 @@
     function render() {
       log.textContent = '';
       log.appendChild(Bubble({ role: 'assistant', text: strings.greeting }, strings));
+      // The repurchase message counts as started: its own buttons replace the quick actions.
+      var started = state.messages.some(function (m) { return m.role === 'user' || m.opening; });
+      // Directly under the greeting (owner, 2026-11-08), until the conversation starts.
+      if (!started) {
+        var chips = QuickActions(actions, strings, function (action) {
+          if (!state.pending) ask(action.label, action.id);
+        });
+        if (chips) log.appendChild(chips);
+      }
       var last = state.messages[state.messages.length - 1];
       // The first reply since the customer last wrote that shows product cards: the scroll stops at its text.
       var lastUser = -1;
@@ -1562,16 +1599,6 @@
         log.appendChild(node);
       });
       if (state.pending) log.appendChild(TypingIndicator(strings, state.waitStage, state.waitingFor));
-
-      actionsSlot.textContent = '';
-      // The repurchase message counts as started: its own buttons replace the quick actions.
-      var started = state.messages.some(function (m) { return m.role === 'user' || m.opening; });
-      if (!started) {
-        var chips = QuickActions(actions, strings, function (action) {
-          if (!state.pending) ask(action.label, action.id);
-        });
-        if (chips) actionsSlot.appendChild(chips);
-      }
 
       sendButton.disabled = state.pending;
       newChatButton.disabled = state.pending || !started;

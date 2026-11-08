@@ -516,11 +516,17 @@ The per-session turn cap and the per-shop daily cap on customer messages ship in
 
 ### The loader is small because Theme Check says so
 
-App-embed JavaScript is capped at 10 KB by Theme Check (`AssetSizeAppBlockJavaScript`), and the full widget was 16 KB. Only the launcher loads on every page (`advisor.js`, about 4 KB). The panel (`advisor-panel.js`) is fetched on first open, or straight away on desktop when the previous page left it open. A visitor who never opens the advisor pays only for the launcher.
+App-embed JavaScript is capped at 10 KB by Theme Check (`AssetSizeAppBlockJavaScript`), and the full widget was 16 KB. Only the launcher loads on every page (`advisor.js`, just under 10 KB raw on 2026-11-08: trim its comments, not the cap, when it grows). The panel (`advisor-panel.js`) is fetched on first open, or straight away on desktop when the previous page left it open. A visitor who never opens the advisor pays only for the launcher.
 
 ### Nothing brand-specific in the code
 
-The header reads « Conseiller Beauté {shop} », filled from `shop.name`. The proxy subpath is `storefront-advisor`, and the strings live in the extension's locale files. Another shop installs the same extension unchanged.
+The header shows the advisor's picture in a circle (theme setting « Advisor picture », else the shop's Brand logo, else the shop's initial), « Conseillère Beauté » in the heading font and `shop.name` small under it (owner, 2026-11-08: the feminine, the « {shop} à votre service » line removed, a smaller header). The proxy subpath is `storefront-advisor`, and the strings live in the extension's locale files. Another shop installs the same extension unchanged.
+### The launcher and the quick actions (owner, 2026-11-08)
+
+- **The launcher is a round speech-bubble button, no text on it.** Its words (`advisor.launcher`: « Besoin d’aide ? Parlez à notre conseillère beauté IA ») sit in a small bubble above it, on phones too, until the chat is first opened in that tab (sessionStorage `storefront-advisor:teased`).
+- **The quick actions are a list directly under the greeting**, not chips above the message bar: a small « Suggestions » label, then one row each with an emoji (by action id, in `advisor-panel.js`) and the label. They go once the conversation starts, as before.
+- **Four by default, in this order:** Construire ma routine (with the offer beside it, `actions.build_routine_note` « −20 % dès 2 soins »: shown, never sent, so the model sees only « Construire ma routine »), Trouver mon soin, Temps de livraison, Politique de retour. « Livraison & retours » became two actions, `delivery` and `returns`; the server still accepts `delivery_returns` from a page cached before. Compare and offers stay as theme settings, off by default.
+- **The offer's wording is locale data, like the banner's.** Another shop, or a changed discount, edits `actions.build_routine_note` in the locale files; nothing reads the routine discount's percentage into it yet.
 
 ### Phase 2: one model call, opt-in, bounded (2026-10-05)
 

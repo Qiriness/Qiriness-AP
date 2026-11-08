@@ -50,7 +50,8 @@ export function createMockAgent() {
       const products = action === 'find_product'
         ? [{ title: replies.product_title, url: '/collections/all', image: null, price: null, rationale: replies.product_rationale }]
         : [];
-      return { text: replies[action] ?? replies.default, products, choices: [], model: null, usage: null };
+      const demo = action === 'delivery' || action === 'returns' ? 'delivery_returns' : action;
+      return { text: replies[demo] ?? replies.default, products, choices: [], model: null, usage: null };
     }
   };
 }

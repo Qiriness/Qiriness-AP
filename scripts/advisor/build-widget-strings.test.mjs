@@ -37,7 +37,7 @@ test('German words replace the French ones, with the shop name; a greeting the m
   const c = config();
   assert.equal(words.apply(c, 'de'), true);
   assert.match(c.strings.greeting, /^Guten Tag! .*Maison Test/);
-  assert.equal(c.strings.title, 'Maison Test Beauty-Beratung');
+  assert.equal(c.strings.title, 'Beauty-Beraterin');
   assert.equal(c.quickActions[0].label, 'Meine Pflege finden');
   assert.notEqual(c.strings.routine.total, 'Routine');
   assert.equal(c.context.locale, 'de', 'the chat is asked in German too');

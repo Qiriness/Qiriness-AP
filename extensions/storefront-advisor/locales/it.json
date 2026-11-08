@@ -1,8 +1,7 @@
 {
   "advisor": {
-    "title": "Consulente di bellezza {{ shop }}",
-    "eyebrow": "{{ shop }} al Suo servizio",
-    "launcher": "Consiglio di bellezza",
+    "title": "Consulente di bellezza",
+    "launcher": "Serve aiuto? Parli con la nostra consulente di bellezza IA",
     "open": "Apri il consulente di bellezza",
     "close": "Chiudi il consulente",
     "greeting": "Buongiorno! Sono la Sua assistente di bellezza virtuale {{ shop }}, qui per rispondere a tutte le Sue domande. Come posso aiutarLa a trovare il trattamento che risveglierà l’energia della Sua pelle? ⚡",
@@ -43,8 +42,11 @@
   "actions": {
     "find_product": "Trovare il mio trattamento",
     "build_routine": "Costruire la mia routine",
+    "build_routine_note": "−20% da 2 prodotti",
     "compare": "Confrontare i prodotti",
     "delivery_returns": "Consegna e resi",
+    "delivery": "Tempi di consegna",
+    "returns": "Politica di reso",
     "offers": "Offerte del momento"
   },
   "routine": {

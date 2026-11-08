@@ -1,8 +1,7 @@
 {
   "advisor": {
-    "title": "{{ shop }} Beauty-Beratung",
-    "eyebrow": "{{ shop }} ist für Sie da",
-    "launcher": "Beauty-Beratung",
+    "title": "Beauty-Beraterin",
+    "launcher": "Brauchen Sie Hilfe? Sprechen Sie mit unserer KI-Beauty-Beraterin",
     "open": "Beauty-Beratung öffnen",
     "close": "Beratung schließen",
     "greeting": "Guten Tag! Ich bin Ihre virtuelle {{ shop }} Beauty-Assistentin und beantworte gerne alle Ihre Fragen. Wie kann ich Ihnen helfen, die Pflege zu finden, die die Energie Ihrer Haut weckt? ⚡",
@@ -43,8 +42,11 @@
   "actions": {
     "find_product": "Meine Pflege finden",
     "build_routine": "Meine Routine erstellen",
+    "build_routine_note": "−20 % ab 2 Produkten",
     "compare": "Produkte vergleichen",
     "delivery_returns": "Lieferung & Rücksendung",
+    "delivery": "Lieferzeiten",
+    "returns": "Rückgaberecht",
     "offers": "Aktuelle Angebote"
   },
   "routine": {
