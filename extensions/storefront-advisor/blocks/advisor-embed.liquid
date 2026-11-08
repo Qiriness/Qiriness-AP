@@ -18,11 +18,11 @@
   endif
   assign logo_url = ''
   if block.settings.logo != blank
-    assign logo_url = block.settings.logo | image_url: width: 160
+    assign logo_url = block.settings.logo | image_url: width: 320
   elsif shop.brand.square_logo != blank
-    assign logo_url = shop.brand.square_logo | image_url: width: 160
+    assign logo_url = shop.brand.square_logo | image_url: width: 320
   elsif shop.brand.logo != blank
-    assign logo_url = shop.brand.logo | image_url: width: 160
+    assign logo_url = shop.brand.logo | image_url: width: 320
   endif
   assign banner_button = block.settings.banner_button | strip
   if banner_button == blank
@@ -34,7 +34,7 @@
   class="sa-root sa-root--{{ block.settings.position }} notranslate"
   translate="no"
   data-wg-notranslate
-  style="--sa-accent: {{ block.settings.accent_color }};{% if block.settings.font_heading != blank %} --sa-heading: '{{ block.settings.font_heading | strip | escape }}', Georgia, serif;{% endif %}{% if block.settings.font_body != blank %} --sa-body: '{{ block.settings.font_body | strip | escape }}', 'Helvetica Neue', Arial, sans-serif;{% endif %}"
+  style="--sa-accent: {{ block.settings.accent_color }}; --sa-bottom: {{ block.settings.launcher_bottom }}px;{% if block.settings.font_heading != blank %} --sa-heading: '{{ block.settings.font_heading | strip | escape }}', Georgia, serif;{% endif %}{% if block.settings.font_body != blank %} --sa-body: '{{ block.settings.font_body | strip | escape }}', 'Helvetica Neue', Arial, sans-serif;{% endif %}"
 ></div>
 <script type="application/json" id="storefront-advisor-config">
   {
@@ -212,6 +212,7 @@
       ],
       "default": "right"
     },
+    { "type": "range", "id": "launcher_bottom", "label": "Chat button distance from the bottom", "info": "0 sits it on the bottom edge. Above the routine banner while that shows.", "min": 0, "max": 40, "step": 2, "unit": "px", "default": 12 },
     {
       "type": "color",
       "id": "accent_color",
