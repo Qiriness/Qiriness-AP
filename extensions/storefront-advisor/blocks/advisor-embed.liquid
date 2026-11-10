@@ -59,6 +59,7 @@
       "bannerText": {% if block.settings.banner_text != blank %}true{% else %}false{% endif %},
       "bannerButton": {% if block.settings.banner_button != blank %}true{% else %}false{% endif %}
     },
+    "above": {{ block.settings.sit_above | strip | json }},
     "launcherBubble": {{ block.settings.launcher_bubble | json }},
     "fontsUrl": {{ block.settings.fonts_url | strip | json }},
     "termsPath": {{ block.settings.terms_path | strip | json }},
@@ -230,6 +231,7 @@
       "label": "Accent colour",
       "default": "#23201c"
     },
+    { "type": "text", "id": "sit_above", "label": "Sit above", "info": "CSS selectors of the theme's bars pinned to the bottom of the screen, comma-separated. While one shows, the chat button sits above it. Default: the phone's sticky add-to-cart button.", "default": "button.add-to-cart" },
     { "type": "image_picker", "id": "logo", "label": "Advisor picture", "info": "Shown in a circle at the top of the chat. Empty: the shop logo from Settings > Brand." },
     { "type": "text", "id": "font_heading", "label": "Heading font", "info": "Titles and product names. Must be in the fonts stylesheet below.", "default": "Cormorant Garamond" },
     { "type": "text", "id": "font_body", "label": "Body font", "info": "Messages, buttons and labels.", "default": "DM Sans" },

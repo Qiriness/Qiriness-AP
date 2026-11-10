@@ -1,4 +1,4 @@
-/* Advisor loader, kept under Theme Check's 10 KB: the launcher and banner; the panel loads on first open. */
+/* Advisor loader (Theme Check: < 10,000 B). */
 (function () {
   'use strict';
 
@@ -8,8 +8,6 @@
   var SEEN_KEY = 'storefront-advisor:since';
   var MOBILE_QUERY = '(max-width: 640px)';
   var TEASED_KEY = 'storefront-advisor:teased';
-  var BUBBLE = ['M12 3.5c-4.97 0-9 3.36-9 7.5 0 2.1 1.04 4 2.72 5.36L5 20.5l4.3-2.03c.86.2 1.76.3 2.7.3 4.97 0 9-3.35 9-7.5s-4.03-7.5-9-7.5Z'];
-
   function boot() {
     var root = document.getElementById(ROOT_ID);
     var configEl = document.getElementById(ROOT_ID + '-config');
@@ -22,7 +20,6 @@
     }
     root.setAttribute('data-ready', 'true');
     decodeConfigText(config);
-    // Weglot: advisor-strings.js.
     var shopLang = String((config.context || {}).locale || '').slice(0, 2);
     var pageLang = String((location.pathname.match(/^\/([a-z]{2})(\/|$)/) || [])[1] || document.documentElement.lang || '').slice(0, 2);
     if (config.stringsScript && (window.Weglot || (pageLang && pageLang !== shopLang))) {
@@ -50,7 +47,7 @@
     launcher.setAttribute('aria-controls', ROOT_ID + '-panel');
     launcher.setAttribute('aria-expanded', 'false');
     launcher.setAttribute('aria-label', strings.open || '');
-    launcher.appendChild(bubbleIcon());
+    launcher.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3.5c-4.97 0-9 3.36-9 7.5 0 2.1 1.04 4 2.72 5.36L5 20.5l4.3-2.03c.86.2 1.76.3 2.7.3 4.97 0 9-3.35 9-7.5s-4.03-7.5-9-7.5Z"/></svg>';
     var label = document.createElement('span');
     label.className = 'sa-launcher__label';
     label.setAttribute('aria-hidden', 'true');
@@ -84,21 +81,20 @@
 
     launcher.addEventListener('click', function () {
       if (label.parentNode) label.parentNode.removeChild(label);
-      try { sessionStorage.setItem(TEASED_KEY, '1'); } catch (error) { /* this page */ }
+      try { sessionStorage.setItem(TEASED_KEY, '1'); } catch (e) {}
       if (!mounted) mount(true);
     });
 
-    // `delay` s into the visit: the cookie banner first.
     var wait = visitWait((config.banner || {}).delay);
     if (wasLeftOpen()) { wait = 0; mount(false); }
     setTimeout(function () { root.insertBefore(launcher, root.firstChild); }, wait);
     routineBanner(root, config, function (start) { mount(true, start); }, wait);
+    sitAbove(root, config.above);
     var ask = function (q) { label.remove(); mount(true, q); };
     window.StorefrontAdvisor = { ask: ask };
     (window.StorefrontAdvisorAsks || []).splice(0).forEach(ask);
   }
 
-  /* The routine banner (docs/decisions/storefront-advisor.md). */
   function routineBanner(root, config, start, wait) {
     var banner = config.banner || {};
     if (!banner.enabled || !banner.text || !banner.button || bannerClosed(banner.hours)) return;
@@ -124,7 +120,6 @@
     bar.appendChild(go);
     bar.appendChild(close);
 
-    // Other bottom widgets: lifted above the bar.
     var lifted = [];
     var watch = null;
     function lift() {
@@ -140,7 +135,7 @@
       if (watch) watch.disconnect();
       lifted.forEach(function (el) { el.style.removeProperty('margin-bottom'); });
       if (remember) {
-        try { window.localStorage.setItem(BANNER_KEY, String(Date.now())); } catch (error) { /* shown again next page */ }
+        try { window.localStorage.setItem(BANNER_KEY, String(Date.now())); } catch (e) {}
       }
       root.classList.remove('sa-root--banner');
       root.style.removeProperty('--sa-banner-h');
@@ -170,9 +165,28 @@
     }, Math.max(1200, wait));
   }
 
+  // Above the theme's fixed bars (setting `sit_above`).
+  function sitAbove(root, sel) {
+    if (!sel) return;
+    var on = 0;
+    function fit() {
+      on = 0;
+      var h = 0, vh = window.innerHeight, found;
+      try { found = document.querySelectorAll(sel); } catch (e) { return; }
+      for (var i = 0; i < found.length; i++) {
+        var r = found[i].getBoundingClientRect();
+        if (r.height && r.bottom > vh - 60 && getComputedStyle(found[i]).position === 'fixed') h = Math.max(h, vh - r.top);
+      }
+      root.style.setProperty('--sa-above', h + 'px');
+    }
+    function soon() { if (!on) on = requestAnimationFrame(fit); }
+    ['resize', 'scroll', 'load'].forEach(function (t) { window.addEventListener(t, soon, { passive: true }); });
+    fit();
+  }
+
   function visitWait(s) {
     var at = Date.now();
-    try { at = Number(sessionStorage.getItem(SEEN_KEY)) || at; sessionStorage.setItem(SEEN_KEY, at); } catch (error) { /* this page */ }
+    try { at = Number(sessionStorage.getItem(SEEN_KEY)) || at; sessionStorage.setItem(SEEN_KEY, at); } catch (e) {}
     return Math.max(0, (typeof s === 'number' ? s : 15) * 1000 + at - Date.now());
   }
 
@@ -230,20 +244,6 @@
       script.onerror = function () { script.remove(); reject(new Error('panel script failed')); };
       document.head.appendChild(script);
     });
-  }
-
-  function bubbleIcon() {
-    var ns = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.setAttribute('focusable', 'false');
-    BUBBLE.forEach(function (d) {
-      var path = document.createElementNS(ns, 'path');
-      path.setAttribute('d', d);
-      svg.appendChild(path);
-    });
-    return svg;
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

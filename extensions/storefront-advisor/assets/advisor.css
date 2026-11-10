@@ -19,7 +19,8 @@
   --sa-gap: 24px;
   position: fixed;
   /* The closed button sits low, like the shop's other corner widgets (owner, 2026-11-08; theme setting). */
-  bottom: var(--sa-bottom, 12px);
+  /* --sa-above: the theme's fixed bars, such as a phone's « Ajouter au panier » (owner, 2026-11-10). */
+  bottom: calc(var(--sa-above, 0px) + var(--sa-bottom, 12px));
   z-index: 2147483000;
   font-family: var(--sa-body);
   font-size: 15px;
@@ -123,7 +124,7 @@
 
 /* ---------- the routine banner (owner, 2026-10-19) ---------- */
 /* Across the bottom of the screen; the launcher sits above it; hidden while the panel is open. */
-.sa-root--banner { bottom: calc(var(--sa-banner-h, 0px) + var(--sa-bottom, 12px)); }
+.sa-root--banner { bottom: calc(var(--sa-banner-h, 0px) + var(--sa-above, 0px) + var(--sa-bottom, 12px)); }
 .sa-root--open { bottom: var(--sa-gap); }
 .sa-root--open .sa-banner { display: none; }
 .sa-root--banner.sa-root--open { bottom: var(--sa-gap); }
