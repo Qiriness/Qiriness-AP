@@ -806,6 +806,7 @@
   line-height: 1.15;
 }
 .sa-ritual__sub { margin: 0; font-size: 12px; line-height: 1.5; color: var(--sa-muted); }
+.sa-ritual__hint { margin-bottom: 4px; }
 .sa-ritual__count {
   flex: none;
   display: grid;
@@ -995,7 +996,9 @@ a.sa-pick__title:hover { text-decoration: underline; text-underline-offset: 3px;
   text-align: right;
 }
 .sa-pick__amount { margin: 0; font-size: 15px; font-weight: 600; white-space: nowrap; }
-.sa-pick__size { margin: 2px 0 0; font-size: 11px; color: var(--sa-muted); }
+.sa-pick__size { margin: 2px 0 0; font-size: 11px; line-height: 1.35; color: var(--sa-muted); }
+/* A variant's name and its volume, one line each: on one line they ran into the price (2026-11-08). */
+.sa-pick__size span { display: block; }
 .sa-pick__toggle {
   display: inline-flex;
   align-items: center;
@@ -1189,8 +1192,8 @@ a.sa-pick__title:hover { text-decoration: underline; text-underline-offset: 3px;
   .sa-root { --sa-gap: 16px; }
   .sa-launcher { width: 56px; height: 56px; }
   .sa-launcher svg { width: 32px; height: 32px; }
-  .sa-root--left .sa-launcher__label::after { left: 23px; }
-  .sa-root--right .sa-launcher__label::after { right: 23px; }
+  /* No help bubble on a phone (owner, 2026-11-10). */
+  .sa-launcher__label { display: none; }
   .sa-root--open,
   .sa-root--banner.sa-root--open {
     inset: 0;
@@ -1254,7 +1257,50 @@ a.sa-pick__title:hover { text-decoration: underline; text-underline-offset: 3px;
   /* One moment at a time, switched by the sun and the moon (owner, 2026-11-08). */
   .sa-routine__layout { display: none !important; }
   .sa-flow { display: block; }
-  .sa-routine__banner { flex-direction: column; align-items: flex-start; }
+  /* The offer on a phone (owner, 2026-11-08): at the end of the routine, just above the add button,
+     only « −20 % sur votre routine » and the line under it. */
+  .sa-routine__banner { order: 1; flex-direction: column; align-items: flex-start; padding: 14px 16px; }
+  .sa-routine__footer { order: 2; }
+  .sa-routine__banner-eyebrow,
+  .sa-routine__badge { display: none; }
+  .sa-routine__banner-title { margin-top: 0; font-size: 22px; }
+  /* The cards on a phone (owner, 2026-11-08): the name gets the card's width, under the stage and
+     the price, above « Inclus »; three lines at most. */
+  .sa-flow .sa-pick {
+    grid-template-columns: 64px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "media eyebrow price"
+      "media title title"
+      "media rating toggle"
+      "media more status"
+      "detail detail detail";
+    gap: 4px 10px;
+    align-items: start;
+  }
+  .sa-flow .sa-pick__main,
+  .sa-flow .sa-pick__aside { display: contents; }
+  .sa-flow .sa-pick__media { grid-area: media; }
+  .sa-flow .sa-pick__eyebrow { grid-area: eyebrow; align-self: center; margin: 0; }
+  .sa-flow .sa-pick__price { grid-area: price; display: flex; align-items: baseline; gap: 8px; text-align: right; }
+  .sa-flow .sa-pick__size { margin: 0; }
+  .sa-flow .sa-pick__title {
+    grid-area: title;
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+  .sa-flow .sa-rcard__rating { grid-area: rating; align-self: center; margin: 0; }
+  .sa-flow .sa-pick__more { grid-area: more; margin-top: 0; justify-self: start; }
+  .sa-flow .sa-pick__toggle { grid-area: toggle; justify-self: end; }
+  .sa-flow .sa-pick__status { grid-area: status; justify-self: end; text-align: right; }
+  .sa-flow .sa-pick__detail { grid-area: detail; margin-top: 6px; }
+  /* Their boxes are gone there: the greying moves to the pieces. */
+  .sa-flow .sa-pick:not(.sa-pick--on) .sa-pick__eyebrow,
+  .sa-flow .sa-pick:not(.sa-pick--on) .sa-pick__title,
+  .sa-flow .sa-pick:not(.sa-pick--on) .sa-rcard__rating,
+  .sa-flow .sa-pick:not(.sa-pick--on) .sa-pick__more { opacity: 0.55; }
 }
 
 html.sa-scroll-lock,

@@ -867,8 +867,11 @@
         el('div', { className: 'sa-pick__aside' }, [
           el('div', { className: 'sa-pick__price' }, [
             s.price ? el('p', { className: 'sa-pick__amount', text: String(s.price) }) : null,
-            // The size chosen for them (« Normale 50 ml »), else the product's size.
-            s.variant_title || s.volume ? el('p', { className: 'sa-pick__size', text: String(s.variant_title || s.volume) }) : null
+            // The size chosen for them (« Normale 50 ml »), else the product's size. A name before the
+            // volume goes on its own line (owner, 2026-11-08: one line overlapped the price on « Source d'Eau »).
+            s.variant_title || s.volume ? el('p', { className: 'sa-pick__size' }, sizeLines(String(s.variant_title || s.volume)).map(function (line) {
+              return el('span', { text: line });
+            })) : null
           ]),
           toggle,
           status
@@ -934,6 +937,8 @@
         el('div', {}, [
           el('p', { className: 'sa-routine__label', text: rs.glance }),
           el('h3', { className: 'sa-ritual__title', text: rs.ritual_title }),
+          // The hint sits under « Votre rituel quotidien » (owner, 2026-11-08), no longer under a headline.
+          rs.hint ? el('p', { className: 'sa-ritual__sub sa-ritual__hint', text: rs.hint }) : null,
           el('p', { className: 'sa-ritual__sub', text: rs.ritual_sub })
         ]),
         count
@@ -1031,10 +1036,9 @@
     showMoment();
 
     var node = el('div', { className: 'sa-routine' }, [
+      // « Votre rituel, à votre rythme. » removed (owner, 2026-11-08); the hint moved under the ritual's title.
       el('header', { className: 'sa-routine__head' }, [
-        el('p', { className: 'sa-routine__eyebrow', text: rs.title || 'Votre routine' }),
-        rs.headline ? el('h3', { className: 'sa-routine__headline', text: rs.headline }) : null,
-        el('p', { className: 'sa-routine__hint', text: rs.hint })
+        el('p', { className: 'sa-routine__eyebrow', text: rs.title || 'Votre routine' })
       ]),
       banner,
       el('div', { className: 'sa-routine__layout' }, [ritual, picks]),
@@ -1050,6 +1054,12 @@
     ]);
     refresh();
     return node;
+  }
+
+  /* « Normale 50 ml » → « Normale » / « 50 ml »; « 50 ml + 1 masque » and « 30 ml » stay one line. */
+  function sizeLines(text) {
+    var m = text.trim().match(/^(\D*\S)\s+(\d.*)$/);
+    return m ? [m[1], m[2]] : [text.trim()];
   }
 
   function AddButton(product, strings) {

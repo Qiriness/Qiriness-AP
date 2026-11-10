@@ -24,6 +24,15 @@
   elsif shop.brand.logo != blank
     assign logo_url = shop.brand.logo | image_url: width: 320
   endif
+  assign launcher_text = block.settings.launcher_text | strip
+  if launcher_text == blank
+    assign launcher_text = 'advisor.launcher' | t
+  endif
+  # The routine banner stays off product pages (owner, 2026-11-10).
+  assign banner_enabled = block.settings.banner_enabled
+  if request.page_type == 'product'
+    assign banner_enabled = false
+  endif
   assign banner_button = block.settings.banner_button | strip
   if banner_button == blank
     assign banner_button = 'banner.button' | t
@@ -46,9 +55,11 @@
     "logo": {{ logo_url | json }},
     "custom": {
       "greeting": {% if block.settings.greeting != blank %}true{% else %}false{% endif %},
+      "launcherText": {% if block.settings.launcher_text != blank %}true{% else %}false{% endif %},
       "bannerText": {% if block.settings.banner_text != blank %}true{% else %}false{% endif %},
       "bannerButton": {% if block.settings.banner_button != blank %}true{% else %}false{% endif %}
     },
+    "launcherBubble": {{ block.settings.launcher_bubble | json }},
     "fontsUrl": {{ block.settings.fonts_url | strip | json }},
     "termsPath": {{ block.settings.terms_path | strip | json }},
     "context": {
@@ -63,7 +74,7 @@
       "loggedIn": {% if customer %}true{% else %}false{% endif %}
     },
     "banner": {
-      "enabled": {{ block.settings.banner_enabled | json }},
+      "enabled": {{ banner_enabled | json }},
       "text": {{ banner_text | json }},
       "button": {{ banner_button | json }},
       "close": {{ 'banner.close' | t | json }},
@@ -85,7 +96,7 @@
     "strings": {
       "title": {{ 'advisor.title' | t: shop: shop.name | json }},
       "routineNote": {{ 'actions.build_routine_note' | t | json }},
-      "launcher": {{ 'advisor.launcher' | t | json }},
+      "launcher": {{ launcher_text | json }},
       "open": {{ 'advisor.open' | t | json }},
       "close": {{ 'advisor.close' | t | json }},
       "newChat": {{ 'advisor.new_chat' | t | json }},
@@ -223,6 +234,9 @@
     { "type": "text", "id": "font_heading", "label": "Heading font", "info": "Titles and product names. Must be in the fonts stylesheet below.", "default": "Cormorant Garamond" },
     { "type": "text", "id": "font_body", "label": "Body font", "info": "Messages, buttons and labels.", "default": "DM Sans" },
     { "type": "text", "id": "fonts_url", "label": "Fonts stylesheet", "info": "Loaded only once the advisor shows. Empty: the fonts must already be on the page.", "default": "https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=DM+Sans:wght@400;500;600&display=swap" },
+    { "type": "header", "content": "Help bubble" },
+    { "type": "checkbox", "id": "launcher_bubble", "label": "Show the help bubble", "info": "A small message above the chat button, until the visitor opens the chat. Never on phones.", "default": true },
+    { "type": "text", "id": "launcher_text", "label": "Help bubble text", "info": "Leave empty for the default text, in the visitor's language." },
     { "type": "header", "content": "Quick actions" },
     { "type": "paragraph", "content": "Listed under the first message, in this order." },
     { "type": "checkbox", "id": "action_build_routine", "label": "Build my routine", "default": true },
@@ -233,7 +247,7 @@
     { "type": "checkbox", "id": "action_offers", "label": "Current offers", "default": false },
     { "type": "text", "id": "terms_path", "label": "Terms page", "info": "The page « See T&Cs » under the message bar opens, a path on this shop. Leave empty to hide the link.", "default": "/pages/conditions-generales-de-ventes" },
     { "type": "header", "content": "Routine banner" },
-    { "type": "checkbox", "id": "banner_enabled", "label": "Show the routine banner", "info": "A bar across the bottom of the screen; its button opens the advisor and starts the routine builder.", "default": true },
+    { "type": "checkbox", "id": "banner_enabled", "label": "Show the routine banner", "info": "A bar across the bottom of the screen; its button opens the advisor and starts the routine builder. Never on product pages.", "default": true },
     { "type": "textarea", "id": "greeting", "label": "Greeting", "info": "The advisor's first message. Leave empty for the default, in the visitor's language." },
     { "type": "text", "id": "banner_text", "label": "Banner text", "info": "Leave empty for the default text, in the visitor's language." },
     { "type": "text", "id": "banner_button", "label": "Banner button", "info": "Leave empty for the default label, in the visitor's language." },

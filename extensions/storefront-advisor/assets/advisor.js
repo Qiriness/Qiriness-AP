@@ -55,7 +55,10 @@
     label.className = 'sa-launcher__label';
     label.setAttribute('aria-hidden', 'true');
     label.textContent = strings.launcher || '';
-    try { if (!sessionStorage.getItem(TEASED_KEY) && label.textContent) launcher.appendChild(label); } catch (error) { launcher.appendChild(label); }
+    // Theme setting `launcher_bubble`; hidden on phones by the stylesheet.
+    if (config.launcherBubble !== false && label.textContent) {
+      try { if (!sessionStorage.getItem(TEASED_KEY)) launcher.appendChild(label); } catch (error) { launcher.appendChild(label); }
+    }
 
     var loading = null;
     var mounted = false;

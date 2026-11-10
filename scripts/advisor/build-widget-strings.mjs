@@ -34,6 +34,7 @@ export function configMap(liquid) {
   }
   // Theme settings that fall back to a translation: the setting, when filled, is the merchant's own text.
   map['strings.greeting'] = 'advisor.greeting';
+  map['strings.launcher'] = 'advisor.launcher';
   map['banner.text'] = 'banner.text';
   map['banner.button'] = 'banner.button';
   return map;
@@ -78,12 +79,12 @@ export function buildWidgetStrings(liquid = fs.readFileSync(path.join(EXTENSION,
     return LANGUAGES[lang] ? lang : '';
   }
 
-  /* The config's words in that language. A setting the merchant filled (greeting, banner) stays theirs. */
+  /* The config's words in that language. A setting the merchant filled (greeting, help bubble, banner) stays theirs. */
   function apply(config, lang) {
     var words = LANGUAGES[lang];
     if (!words) return false;
     var custom = config.custom || {};
-    var skip = { 'strings.greeting': custom.greeting, 'banner.text': custom.bannerText, 'banner.button': custom.bannerButton };
+    var skip = { 'strings.greeting': custom.greeting, 'strings.launcher': custom.launcherText, 'banner.text': custom.bannerText, 'banner.button': custom.bannerButton };
     Object.keys(MAP).forEach(function (where) {
       var text = words[MAP[where]];
       if (typeof text !== 'string' || skip[where]) return;
