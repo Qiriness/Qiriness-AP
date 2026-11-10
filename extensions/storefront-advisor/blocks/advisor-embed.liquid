@@ -28,9 +28,9 @@
   if launcher_text == blank
     assign launcher_text = 'advisor.launcher' | t
   endif
-  # The routine banner stays off product pages (owner, 2026-11-10).
+  # The routine banner stays off product, cart and checkout pages (owner, 2026-11-10).
   assign banner_enabled = block.settings.banner_enabled
-  if request.page_type == 'product'
+  if request.page_type == 'product' or request.page_type == 'cart' or request.path contains 'checkout'
     assign banner_enabled = false
   endif
   assign banner_button = block.settings.banner_button | strip
@@ -231,7 +231,7 @@
       "label": "Accent colour",
       "default": "#23201c"
     },
-    { "type": "text", "id": "sit_above", "label": "Sit above", "info": "CSS selectors of the theme's bars pinned to the bottom of the screen, comma-separated. While one shows, the chat button sits above it. Default: the phone's sticky add-to-cart button.", "default": "button.add-to-cart" },
+    { "type": "text", "id": "sit_above", "label": "Sit above", "info": "CSS selectors of the theme's bars pinned to the bottom of the screen, comma-separated. While one shows, the chat button sits above it. Default: the phone's sticky add-to-cart button and the cart page's checkout bar.", "default": "button.add-to-cart, .cart__page > div:nth-child(2)" },
     { "type": "image_picker", "id": "logo", "label": "Advisor picture", "info": "Shown in a circle at the top of the chat. Empty: the shop logo from Settings > Brand." },
     { "type": "text", "id": "font_heading", "label": "Heading font", "info": "Titles and product names. Must be in the fonts stylesheet below.", "default": "Cormorant Garamond" },
     { "type": "text", "id": "font_body", "label": "Body font", "info": "Messages, buttons and labels.", "default": "DM Sans" },
@@ -249,7 +249,7 @@
     { "type": "checkbox", "id": "action_offers", "label": "Current offers", "default": false },
     { "type": "text", "id": "terms_path", "label": "Terms page", "info": "The page « See T&Cs » under the message bar opens, a path on this shop. Leave empty to hide the link.", "default": "/pages/conditions-generales-de-ventes" },
     { "type": "header", "content": "Routine banner" },
-    { "type": "checkbox", "id": "banner_enabled", "label": "Show the routine banner", "info": "A bar across the bottom of the screen; its button opens the advisor and starts the routine builder. Never on product pages.", "default": true },
+    { "type": "checkbox", "id": "banner_enabled", "label": "Show the routine banner", "info": "A bar across the bottom of the screen; its button opens the advisor and starts the routine builder. Never on product, cart or checkout pages.", "default": true },
     { "type": "textarea", "id": "greeting", "label": "Greeting", "info": "The advisor's first message. Leave empty for the default, in the visitor's language." },
     { "type": "text", "id": "banner_text", "label": "Banner text", "info": "Leave empty for the default text, in the visitor's language." },
     { "type": "text", "id": "banner_button", "label": "Banner button", "info": "Leave empty for the default label, in the visitor's language." },
