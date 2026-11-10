@@ -535,7 +535,7 @@ The per-session turn cap and the per-shop daily cap on customer messages ship in
 
 ### The loader is small because Theme Check says so
 
-App-embed JavaScript is capped at 10 KB by Theme Check (`AssetSizeAppBlockJavaScript`), and the full widget was 16 KB. Only the launcher loads on every page (`advisor.js`, just under 10 KB raw on 2026-11-08: trim its comments, not the cap, when it grows). The panel (`advisor-panel.js`) is fetched on first open, or straight away on desktop when the previous page left it open. A visitor who never opens the advisor pays only for the launcher.
+App-embed JavaScript is capped at 10 KB by Theme Check (`AssetSizeAppBlockJavaScript`), and the full widget was 16 KB. Only the launcher loads on every page (`advisor.js`, 9,878 bytes on 2026-11-10 against Theme Check's 10,000-byte threshold: trim its comments, not the cap, when it grows). The panel (`advisor-panel.js`) is fetched on first open, or straight away on desktop when the previous page left it open. A visitor who never opens the advisor pays only for the launcher.
 
 ### Nothing brand-specific in the code
 

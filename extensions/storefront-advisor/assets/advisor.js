@@ -55,7 +55,6 @@
     label.className = 'sa-launcher__label';
     label.setAttribute('aria-hidden', 'true');
     label.textContent = strings.launcher || '';
-    // Theme setting `launcher_bubble`; hidden on phones by the stylesheet.
     if (config.launcherBubble !== false && label.textContent) {
       try { if (!sessionStorage.getItem(TEASED_KEY)) launcher.appendChild(label); } catch (error) { launcher.appendChild(label); }
     }
@@ -94,7 +93,6 @@
     if (wasLeftOpen()) { wait = 0; mount(false); }
     setTimeout(function () { root.insertBefore(launcher, root.firstChild); }, wait);
     routineBanner(root, config, function (start) { mount(true, start); }, wait);
-    // advisor-ask block: open and ask.
     var ask = function (q) { label.remove(); mount(true, q); };
     window.StorefrontAdvisor = { ask: ask };
     (window.StorefrontAdvisorAsks || []).splice(0).forEach(ask);
@@ -196,7 +194,6 @@
     }
   }
 
-  /* Liquid's `t` HTML-escapes; we write textContent. */
   function decodeConfigText(config) {
     var parser = typeof DOMParser === 'function' ? new DOMParser() : null;
     function decode(value) {
