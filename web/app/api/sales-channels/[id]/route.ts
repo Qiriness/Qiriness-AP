@@ -10,7 +10,7 @@ interface RouteParams {
   params: { id: string };
 }
 
-/** Changes a marketplace's name, handles or Analytics names. Its key never changes. */
+/** Changes a marketplace's name, handles, Analytics names or whether it counts in All platforms. Its key never changes. */
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     const body = await request.json().catch(() => ({}));

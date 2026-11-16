@@ -174,6 +174,15 @@ The filter offers **Shopify · Amazon · Yves Rocher**. **Yves Rocher is not a h
 
 A filter that does not apply is **disabled with its reason, never hidden**: tickets belong to no platform, and the customer base is a snapshot with no honest date range. A control that vanishes between tabs reads as a bug.
 
+### A €0 marketplace stays out of "All platforms" (2026-11-16)
+
+**The Bradery** started buying on 2026-11-05 through Garnet (handle `garnet-seller`, « Garnet Seller » in Shopify Analytics): 150 orders in ten days, **every one at €0**, buyers on relay addresses `@email.garnetmarketplace.com`, one customer per order. It is a marketplace in `sales_channels` like Amazon, so it has its own platform in the filter and its buyers leave every per-person figure.
+
+The owner asked for its €0 orders to leave **All platforms** too. Counted there, November to the 16th read 386 orders at a €53.83 basket; without them, 236 at €88.05. Two choices:
+
+- **A per-marketplace setting, not a per-order `total_price > 0` rule.** `sales_channels.in_all` (Setup → Sales channels, « Counted in All platforms »). "All" passes the unticked marketplaces' handles as `p_not_channels`, an argument every ranged function already took, so the rule cost a column and no function rewrite. A per-order rule would have touched ~20 functions and also removed the online store's own €0 orders (47 of them), which nobody asked for. The ShopifyQL figures follow the same switch (`countsInAll` in `foldSalesLadder` / `foldSalesSeries`); the platform mix card still lists every platform.
+- **Its own platform still shows it.** Choosing The Bradery in the filter reads its 150 orders; only the total leaves it out. The management chat is told the same rule.
+
 ### Sales: four definitions a reader would otherwise have to guess (2026-09-11)
 
 - **Revenue is net of refunds, cancelled orders excluded.** Subtracting refunds alone would still count a cancelled order that was never paid. On the last 30 days this reproduces the reference dashboard exactly: €16,375.77, Shopify 99.9%, Yves Rocher €9.80.

@@ -41,7 +41,7 @@ export async function listSalesChannels(shopId: string): Promise<SalesChannelsVi
       supabase,
       T.SALES_CHANNELS,
       { shop_id: shopId },
-      "id,platform_key,label,handles,analytics_names,position",
+      "id,platform_key,label,handles,analytics_names,position,in_all",
       { order: "position.asc" }
     ),
     // Every order the shop holds, whatever its date: the widest window the
@@ -60,6 +60,7 @@ export async function listSalesChannels(shopId: string): Promise<SalesChannelsVi
     label: String(row.label),
     handles: (row.handles ?? []).map(String),
     analyticsNames: (row.analytics_names ?? []).map(String),
+    inAll: row.in_all !== false,
   }));
   const owner = new Map<string, string>();
   for (const channel of channels) for (const handle of channel.handles) owner.set(handle, channel.label);
@@ -128,6 +129,7 @@ export async function addSalesChannel(shopId: string, input: any): Promise<Sales
       label,
       handles,
       analytics_names: list(input.analyticsNames, true),
+      in_all: input.inAll !== false,
       position: existing.channels.length,
     },
   ], { returning: 'minimal' });
@@ -148,6 +150,7 @@ export async function updateSalesChannel(shopId: string, id: string, input: any)
     patch.handles = handles;
   }
   if (input.analyticsNames !== undefined) patch.analytics_names = list(input.analyticsNames, true);
+  if (input.inAll !== undefined) patch.in_all = input.inAll !== false;
   // The key never changes: it is in bookmarked Insights URLs.
   await supabaseUpdateById(getSupabaseClient(), T.SALES_CHANNELS, id, patch, { returning: 'minimal' });
   forgetMarketplaces(shopId);

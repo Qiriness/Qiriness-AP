@@ -14,6 +14,7 @@ export interface SalesChannelInput {
   label?: string;
   handles?: string[];
   analyticsNames?: string[];
+  inAll?: boolean;
 }
 
 export function addSalesChannel(input: SalesChannelInput): Promise<SalesChannelsView> {

@@ -50,3 +50,22 @@ test('the reserved keys cannot name a marketplace', () => {
   const built = buildMarketplaces([{ platform_key: 'shopify', label: 'X', handles: ['x'] }]);
   assert.deepEqual(built.list, []);
 });
+
+test('a marketplace set not to count in All stays on its own platform and leaves All', () => {
+  const m = buildMarketplaces([
+    { platform_key: 'market_a', label: 'Market A', handles: ['market-a'], position: 0 },
+    { platform_key: 'reseller', label: 'Reseller', handles: ['reseller-1'], analytics_names: ['Reseller Seller'], position: 1, in_all: false }
+  ]);
+  assert.deepEqual(m.channelFilter('all'), { channels: null, notChannels: ['reseller-1'] });
+  assert.deepEqual(m.channelFilter('reseller'), { channels: ['reseller-1'], notChannels: null });
+  // Still a marketplace: out of the shop's own store and of every per-person figure.
+  assert.deepEqual(m.channelFilter('shopify'), { channels: null, notChannels: ['market-a', 'reseller-1'] });
+  assert.deepEqual([...m.handles], ['market-a', 'reseller-1']);
+  assert.equal(m.countsInAll('reseller'), false);
+  assert.equal(m.countsInAll('market_a'), true);
+  assert.equal(m.countsInAll('shopify'), true);
+  assert.deepEqual(m.outOfAllNames, ['Reseller']);
+  // A row that predates the column counts, as every marketplace did.
+  assert.equal(MARKETPLACES.countsInAll('market_b'), true);
+  assert.deepEqual([...MARKETPLACES.outOfAllHandles], []);
+});

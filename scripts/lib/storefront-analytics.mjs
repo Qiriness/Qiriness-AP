@@ -278,7 +278,7 @@ export function salesSeriesQuery(range) {
  */
 export function foldSalesSeries(rows = [], range, platform = 'all', marketplaces = NO_MARKETPLACES) {
   const kept = rows
-    .filter((row) => platform === 'all' || platformOfSalesChannel(row.sales_channel, marketplaces) === platform)
+    .filter((row) => inPlatform(row.sales_channel, platform, marketplaces))
     .map((row) => {
       const orders = toNumber(row.orders) ?? 0;
       const aov = toNumber(row.average_order_value);
@@ -314,6 +314,16 @@ export function platformOfSalesChannel(channel, marketplaces = NO_MARKETPLACES) 
 }
 
 /**
+ * Whether a ShopifyQL channel row belongs to a platform's figures. "All" is
+ * every channel except a marketplace set not to count there (Setup -> Sales
+ * channels), the same rule the order functions apply through `channelFilter`.
+ */
+function inPlatform(channel, platform, marketplaces) {
+  const own = platformOfSalesChannel(channel, marketplaces);
+  return platform === 'all' ? marketplaces.countsInAll(own) : own === platform;
+}
+
+/**
  * The ladder rows folded onto one platform (or all of them).
  *
  * Money adds up across channels. AOV IS SHOPIFY'S OWN COLUMN, weighted by each
@@ -328,7 +338,7 @@ export function platformOfSalesChannel(channel, marketplaces = NO_MARKETPLACES) 
  * deductions.
  */
 export function foldSalesLadder(rows = [], platform = 'all', marketplaces = NO_MARKETPLACES) {
-  const wanted = (row) => platform === 'all' || platformOfSalesChannel(row.sales_channel, marketplaces) === platform;
+  const wanted = (row) => inPlatform(row.sales_channel, platform, marketplaces);
   const kept = rows.filter(wanted);
   if (kept.length === 0) return null;
 

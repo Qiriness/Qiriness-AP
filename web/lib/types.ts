@@ -429,6 +429,8 @@ export interface SalesChannel {
   handles: string[];
   /** The names Shopify Analytics gives the same marketplace, lower case. */
   analyticsNames: string[];
+  /** False when its orders are left out of "All platforms" (they carry no money). */
+  inAll: boolean;
 }
 
 /** Setup -> Sales channels: the marketplaces, and every handle the orders carry. */

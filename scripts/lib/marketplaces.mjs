@@ -31,12 +31,18 @@ export function buildMarketplaces(rows = []) {
       label: String(row.label || row.platform_key),
       handles: [...new Set((row.handles || []).map((h) => String(h).trim()).filter(Boolean))],
       analyticsNames: [...new Set((row.analytics_names || []).map((h) => String(h).trim().toLowerCase()).filter(Boolean))],
-      position: Number(row.position) || 0
+      position: Number(row.position) || 0,
+      // False for a channel whose orders carry no money (a reseller that pays
+      // off Shopify: every order €0). Its orders stay on its own platform but
+      // leave "All platforms", where they would halve the basket.
+      inAll: row.in_all !== false
     }))
     .sort((a, b) => a.position - b.position || a.label.localeCompare(b.label));
 
   const byKey = new Map(list.map((m) => [m.key, m]));
   const handles = Object.freeze([...new Set(list.flatMap((m) => m.handles))]);
+  const outOfAll = list.filter((m) => !m.inAll);
+  const outOfAllHandles = Object.freeze([...new Set(outOfAll.flatMap((m) => m.handles))]);
 
   return {
     /** The marketplaces, in display order: [{ key, label, handles }]. */
@@ -51,6 +57,10 @@ export function buildMarketplaces(rows = []) {
     ],
     /** Their names, for a sentence: « Amazon et Yves Rocher ». Empty when none. */
     names: list.map((m) => m.label),
+    /** The handles "All platforms" leaves out: marketplaces set not to count there. */
+    outOfAllHandles,
+    /** Their labels, for the notes that say so. */
+    outOfAllNames: outOfAll.map((m) => m.label),
 
     /** True for a platform whose buyers are minted one customer per order. */
     isMarketplace(platform) {
@@ -61,7 +71,12 @@ export function buildMarketplaces(rows = []) {
     channelFilter(platform) {
       if (byKey.has(platform)) return { channels: [...byKey.get(platform).handles], notChannels: null };
       if (platform === SHOPIFY_PLATFORM) return { channels: null, notChannels: [...handles] };
-      return { channels: null, notChannels: null };
+      return { channels: null, notChannels: outOfAllHandles.length ? [...outOfAllHandles] : null };
+    },
+
+    /** Whether a platform's figures belong in the "All platforms" total. */
+    countsInAll(platform) {
+      return platform === SHOPIFY_PLATFORM || byKey.get(platform)?.inAll !== false;
     },
 
     /** The platform a channel handle belongs to: a marketplace's key, or `shopify`. */
@@ -100,7 +115,7 @@ export async function loadMarketplaces(supabase, shopId) {
     supabase,
     T.SALES_CHANNELS,
     { shop_id: shopId },
-    'platform_key,label,handles,analytics_names,position',
+    'platform_key,label,handles,analytics_names,position,in_all',
     { order: 'position.asc' }
   );
   return buildMarketplaces(rows);

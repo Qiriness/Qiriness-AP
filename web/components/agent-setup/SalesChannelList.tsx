@@ -17,6 +17,10 @@ import styles from "./SenderDirectory.module.css";
  * it and how many orders, and what it counts as today. Clicking a handle adds it
  * to the form below.
  *
+ * « Counted in All platforms » is off for a channel whose orders carry no money
+ * (a reseller billed outside Shopify: every order €0). Its orders stay under
+ * its own platform and leave the All totals, where they would cut the basket.
+ *
  * Shares the Senders screen's styles: both are a short list of facts about who
  * is who, edited in place.
  */
@@ -154,6 +158,17 @@ export function SalesChannelList({ initial, loadError }: { initial: SalesChannel
                   run(() => updateSalesChannel(channel.id, { analyticsNames: split(e.target.value) }))
                 }
               />
+              <label className={styles.field}>
+                <span>
+                  <input
+                    type="checkbox"
+                    checked={channel.inAll}
+                    disabled={busy}
+                    onChange={() => run(() => updateSalesChannel(channel.id, { inAll: !channel.inAll }))}
+                  />{" "}
+                  {t("setup.salesChannels.inAll")}
+                </span>
+              </label>
               <Button size="sm" variant="tertiary" disabled={busy} onClick={() => run(() => deleteSalesChannel(channel.id))}>
                 {t("setup.salesChannels.remove")}
               </Button>

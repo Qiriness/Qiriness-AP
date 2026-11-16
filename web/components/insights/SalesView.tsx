@@ -11,12 +11,13 @@ import { TimeSeriesChart } from "./TimeSeriesChart";
 import { perGrain } from "./grain";
 import styles from "./SalesView.module.css";
 
-/** A colour per platform, fixed — never by rank, so a filter cannot repaint the survivors. */
-const PLATFORM_COLORS: Record<string, string> = {
-  shopify: "var(--chart-1)",
-  amazon: "var(--chart-2)",
-  yves_rocher: "var(--chart-3)",
-};
+/**
+ * A colour per platform by its configured position — never by rank, so a filter
+ * cannot repaint the survivors. `panel.platforms` always lists every platform
+ * (the shop's store, then each `sales_channels` row by position), so a
+ * marketplace added in Setup gets the next colour without a code change.
+ */
+const PLATFORM_PALETTE = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)"];
 
 /**
  * Sales over the chosen range and platform — the reference dashboard's layout:
@@ -103,11 +104,11 @@ export function SalesView({ panel, compareLabel }: { panel: SalesPanel; compareL
         <Card title={t("insights.sales.byPlatform")} span={2}>
           <SplitBar
             total={platformRevenue}
-            parts={panel.platforms.map((p) => ({
+            parts={panel.platforms.map((p, i) => ({
               key: p.platform,
               label: p.label,
               value: p.revenue,
-              color: PLATFORM_COLORS[p.platform] ?? "var(--chart-4)",
+              color: PLATFORM_PALETTE[i % PLATFORM_PALETTE.length],
               display: (
                 <>
                   {euros(p.revenue, { cents: true })}{" "}

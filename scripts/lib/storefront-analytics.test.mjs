@@ -389,3 +389,24 @@ test('the platform mix is Shopify net sales per platform, every platform whateve
     { platform: 'yves_rocher', label: 'Yves Rocher', netSales: 0, orders: 0 }
   ]);
 });
+
+test('All leaves out a marketplace set not to count there; its own platform keeps it', () => {
+  // November 2026: The Bradery's orders arrive through Garnet at €0 each.
+  const marketplaces = buildMarketplaces([
+    { platform_key: 'amazon', label: 'Amazon', handles: ['amazon'], analytics_names: ['marketplace connect'], position: 0 },
+    { platform_key: 'reseller', label: 'Reseller', handles: ['garnet-seller'], analytics_names: ['garnet seller'], position: 1, in_all: false }
+  ]);
+  const rows = [
+    { sales_channel: 'Online Store', gross_sales: '1000', discounts: '0', net_sales: '1000', total_sales: '1000', orders: '10', average_order_value: '100' },
+    { sales_channel: 'Garnet Seller', gross_sales: '0', discounts: '0', net_sales: '0', total_sales: '0', orders: '15', average_order_value: '0' }
+  ];
+  const all = foldSalesLadder(rows, 'all', marketplaces);
+  assert.equal(all.orders, 10);
+  assert.equal(all.averageOrderValue, 100);
+  assert.equal(foldSalesLadder(rows, 'reseller', marketplaces).orders, 15);
+  assert.equal(foldSalesLadder(rows, 'shopify', marketplaces).orders, 10);
+
+  const range = resolveRange({ month: '2026-08' }, PARIS);
+  const series = foldSalesSeries(rows.map((r) => ({ ...r, day: '2026-08-03' })), range, 'all', marketplaces);
+  assert.equal([...series.orders.values()].reduce((a, b) => a + b, 0), 10);
+});

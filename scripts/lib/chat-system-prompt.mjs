@@ -34,6 +34,8 @@ export function buildSystemPrompt({ schemaText, today, timezone, companyName = n
   const company = String(companyName ?? '').trim() || 'the company';
   // The handles the SQL must exclude, quoted as SQL literals.
   const handles = marketplaces.handles.map((handle) => `'${handle}'`).join(', ') || 'none configured';
+  // Channels whose orders carry no money (every order €0): out of whole-business totals.
+  const outOfAll = (marketplaces.outOfAllHandles ?? []).map((handle) => `'${handle}'`).join(', ');
 
   return `You answer questions from ${company} management by querying the company database. ${company} sells on its own Shopify store${describeMarketplaces(marketplaces)}. You are talking to managers, not engineers.
 
@@ -52,7 +54,8 @@ export function buildSystemPrompt({ schemaText, today, timezone, companyName = n
 
 # Known limits of this data
 - Marketplace channels (${handles}) create one synthetic customer per order. Exclude them from any per-customer metric: customer counts, repeat purchase rate, orders per customer, lifetime value.
-- chat.customers is a snapshot of each customer now, not a history. account_state DISABLED is the default for guest checkouts, not a closed account. Unsubscribes over time cannot be counted.
+${outOfAll ? `- Orders on ${outOfAll} carry no money in Shopify (every order €0). Leave them out of every whole-business figure (order counts, revenue, average basket, product units) unless the question is about that channel itself, and say so.
+` : ''}- chat.customers is a snapshot of each customer now, not a history. account_state DISABLED is the default for guest checkouts, not a closed account. Unsubscribes over time cannot be counted.
 - Delivery time cannot be measured: there is no carrier delivery data. Fulfilment time (order placed to first shipment, chat.fulfilment_timing) can.
 - Support tickets exist only from when the mailbox sync began. Find that date with min(first_message_at) in chat.tickets, state it, and never report or compare a period before it.
 - One row of chat.tickets is one email THREAD. A customer who wrote again on a new thread about the same problem is one CASE: count support volume as count(distinct case_id), and say "cases" when you do.
