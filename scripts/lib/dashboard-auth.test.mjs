@@ -338,7 +338,7 @@ test('an expired access token says so — the one case a refresh fixes', async (
   assert.deepEqual(await auth.verifyAccessToken(token), { ok: false, reason: 'expired' });
 });
 
-test('a session older than twelve hours cannot be refreshed back to life', async () => {
+test('a session older than thirty days cannot be refreshed back to life', async () => {
   const { fetchImpl } = fakeSupabase({ user: activeUser });
   const auth = client({ fetch: fetchImpl });
   const token = await makeToken(

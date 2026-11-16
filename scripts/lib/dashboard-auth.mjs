@@ -142,10 +142,11 @@ export const ACCESS_COOKIE = 'qos_at';
 export const REFRESH_COOKIE = 'qos_rt';
 
 /**
- * A working day, then sign in again — counted from when the password was typed,
- * not from the last refresh, so a tab left open cannot renew itself forever.
+ * A month, then sign in again (owner, 2026-11-16: the browser should remember the
+ * login) — counted from when the password was typed, not from the last refresh,
+ * so a tab left open cannot renew itself forever.
  */
-export const SESSION_MAX_AGE_SECONDS = 12 * 60 * 60;
+export const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
 
 /** Refresh this long before the access token expires, rather than after. */
 const REFRESH_SKEW_SECONDS = 120;

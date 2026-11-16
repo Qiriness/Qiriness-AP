@@ -26,7 +26,7 @@ import { clearSession, writeSession, type SupabaseSession } from "./lib/session-
  *
  * IT ALSO KEEPS THE SESSION ALIVE. Supabase access tokens last an hour; when
  * one is spent this trades the refresh token for a new pair, writes both back,
- * and lets the request continue — so a twelve-hour day needs one sign-in, while
+ * and lets the request continue — so a month needs one sign-in, while
  * a disabled account stops working within a minute.
  */
 

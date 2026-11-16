@@ -15,7 +15,7 @@ export interface SupabaseSession {
 /**
  * Write the session Supabase just issued.
  *
- * Both cookies expire with the SESSION — twelve hours from when the password
+ * Both cookies expire with the SESSION — thirty days from when the password
  * was typed — not with the access token, which lasts an hour. The pair is
  * useless without a refresh token, and a refresh token whose session has aged
  * out is refused anyway, so the shorter cookie life would only log people out
