@@ -747,3 +747,11 @@ The rules are researched in `docs/shopify-discount-rules.md`; this is why the ev
   - `purchase` (order attribution);
   - `unresolved_question` / `support_handoff`.
   - All four types are in the schema already. Dashboard integration is a separate task (`docs/storefront-chatbot.md` § Advice).
+
+### Exception from 60, Temps Sublime from 45 to 59 (2026-11-18)
+
+Owner: « 45-59 and then 60+ … exception only goes to 60+ range (the 45-59 is temps sublime gamme) ». The Rules tab's age question had four answers, the last « 45 ans et plus » → Exception; it now has five: under 25 → Active Énergie, 25–34, 35–44 and **45–59 → Temps Sublime**, **60 and over → Exception**. Spreadsheet rows 45–46, imported; no code change, since the ranges are read from the sheet.
+
+**The age is the only way into Exception in the routine builder.** Checked on the engine: a 52-year-old naming « rides marquées, peau très mature » (a premium concern) gets Temps Sublime, because `premium_variant` is never set on the foundations, so the premium bonus in `foundations.mjs` cannot fire. Locked by a test (`day-night.test.mjs`, deep wrinkles at 45–59). The eval case « deep wrinkles → advanced (Exception) » already failed before the change and now contradicts the rule.
+
+**Routines recorded before the change keep `45_plus`** in `advisor_routines.age_band`. The new chips are `45_59` and `60_plus`, so the dashboard's age donut shows the old key unlabelled for routines finished before the load.

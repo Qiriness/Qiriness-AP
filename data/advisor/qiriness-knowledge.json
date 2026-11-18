@@ -4431,16 +4431,30 @@
   {
    "_row": 45,
    "section": "Âge (question 3) → gamme de l'anti-âge",
-   "key": "45_plus",
-   "label_fr": "45 ans et plus",
-   "label_en": "45 and over",
+   "key": "45_59",
+   "label_fr": "45 à 59 ans",
+   "label_en": "45 to 59",
+   "effect": "Temps Sublime",
+   "secondary_effect": null,
+   "note": "Temps Sublime de 45 à 59 ans (2026-11-18)",
+   "label_it": "Da 45 a 59 anni",
+   "label_de": "45 bis 59 Jahre",
+   "label_nl": "45 tot 59 jaar",
+   "label_es": "De 45 a 59 años"
+  },
+  {
+   "_row": 46,
+   "section": "Âge (question 3) → gamme de l'anti-âge",
+   "key": "60_plus",
+   "label_fr": "60 ans et plus",
+   "label_en": "60 and over",
    "effect": "Exception",
    "secondary_effect": null,
-   "note": "Longévité : Exception à partir de 45 ans",
-   "label_it": "45 anni e oltre",
-   "label_de": "45 Jahre und älter",
-   "label_nl": "45 jaar en ouder",
-   "label_es": "45 años o más"
+   "note": "Longévité : Exception à partir de 60 ans (2026-11-18)",
+   "label_it": "60 anni e oltre",
+   "label_de": "60 Jahre und älter",
+   "label_nl": "60 jaar en ouder",
+   "label_es": "60 años o más"
   },
   {
    "_row": 48,

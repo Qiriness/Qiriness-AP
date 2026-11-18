@@ -43,7 +43,7 @@ test('the questions: main concern, skin type (sensitive among them), age, then d
   assert.equal(skin.options.find((o) => o.value === 'sensitive').label, 'Sensible');
   const age = ask({ primary_concern: q('global_signs_of_ageing'), skin_type: q('dry') }, ['primary_concern', 'skin_type']);
   assert.equal(age.field, 'age_band');
-  assert.deepEqual(age.options.map((o) => o.label), ['Moins de 25 ans', '25 à 34 ans', '35 à 44 ans', '45 ans et plus']);
+  assert.deepEqual(age.options.map((o) => o.label), ['Moins de 25 ans', '25 à 34 ans', '35 à 44 ans', '45 à 59 ans', '60 ans et plus']);
   const time = ask({ primary_concern: q('global_signs_of_ageing'), skin_type: q('dry'), age_band: q('35_44') }, ['primary_concern', 'skin_type', 'age_band']);
   assert.equal(time.field, 'routine_time');
   assert.deepEqual(time.options.map((o) => o.label), ['Routine du jour', 'Routine de nuit', 'Jour et nuit']);
@@ -53,7 +53,7 @@ test('the questions: main concern, skin type (sensitive among them), age, then d
 
 test('…in English too; and the age is asked for every concern, hydration too (owner, 2026-10-17: kept for statistics)', () => {
   const en = advisor.advise({ profile: { primary_concern: q('wrinkles'), skin_type: q('dry') }, mode: 'routine_builder', asked: ['primary_concern', 'skin_type'], locale: 'en' }).next_question;
-  assert.deepEqual(en.options.map((o) => o.label), ['Under 25', '25 to 34', '35 to 44', '45 and over']);
+  assert.deepEqual(en.options.map((o) => o.label), ['Under 25', '25 to 34', '35 to 44', '45 to 59', '60 and over']);
   assert.equal(en.text, 'What is your age range?');
   const hydration = advisor.advise({ profile: { primary_concern: q('dehydration'), skin_type: q('dry') }, mode: 'routine_builder', asked: ['primary_concern', 'skin_type'], locale: 'en' }).next_question;
   assert.equal(hydration.field, 'age_band');
@@ -70,7 +70,9 @@ test('an age said in words answers the age question, in French and English; « r
   assert.equal(next.playbook.preferred_family, 'Temps Sublime');
   const en = said("I'm 52, I have wrinkles and want a morning and evening routine");
   assert.equal(en.routine_time.value, 'both');
-  assert.equal(advisor.advise({ profile: { ...en, skin_type: q('normal') }, mode: 'routine_builder', asked: ['primary_concern', 'skin_type'] }).playbook.preferred_family, 'Exception');
+  assert.equal(advisor.advise({ profile: { ...en, skin_type: q('normal') }, mode: 'routine_builder', asked: ['primary_concern', 'skin_type'] }).playbook.preferred_family, 'Temps Sublime');
+  const older = said("I'm 63, I have wrinkles and want a morning routine");
+  assert.equal(advisor.advise({ profile: { ...older, skin_type: q('normal') }, mode: 'routine_builder', asked: ['primary_concern', 'skin_type'] }).playbook.preferred_family, 'Exception');
   assert.equal(said('a night routine for my dry skin').routine_time.value, 'night');
 });
 
@@ -87,14 +89,19 @@ test('the day routine: four products, a cleanser or lotion, the serum, the eye c
   assert.ok(a.steps[3].reason_codes.includes('texture_match:rich'));
 });
 
-test('the age chooses the anti-age range: Active Énergie under 25, Temps Sublime 25–44, Exception from 45 with its eye cream', () => {
+test('the age chooses the anti-age range: Active Énergie under 25, Temps Sublime 25–59, Exception from 60 with its eye cream', () => {
   const range = (age) => [...new Set(anti('normal', age, 'day').steps.slice(1).map((s) => KNOWLEDGE.get(s.handle).range))];
   assert.deepEqual(range('under_25'), ['Active Énergie']);
   assert.deepEqual(range('25_34'), ['Temps Sublime']);
-  assert.deepEqual(range('45_plus'), ['Exception']);
-  assert.equal(anti('normal', '45_plus', 'day').steps[2].handle, 'regard-dexception');
-  // « Premières rides » (fine lines) follows the age as well: at 45, Exception.
-  const fine = build({ primary_concern: q('early_signs_of_ageing'), skin_type: q('normal'), age_band: q('45_plus'), routine_time: q('day') });
+  // 45–59 is Temps Sublime, Exception only from 60 (owner, 2026-11-18).
+  assert.deepEqual(range('45_59'), ['Temps Sublime']);
+  assert.deepEqual(range('60_plus'), ['Exception']);
+  assert.equal(anti('normal', '60_plus', 'day').steps[2].handle, 'regard-dexception');
+  // A concern that justifies the premium range does not bring Exception before 60.
+  const deep = build({ primary_concern: q('deep_wrinkles'), skin_type: q('normal'), age_band: q('45_59'), routine_time: q('both') });
+  assert.ok(!deep.steps.some((s) => KNOWLEDGE.get(s.handle)?.range === 'Exception'));
+  // « Premières rides » (fine lines) follows the age as well: at 60, Exception.
+  const fine = build({ primary_concern: q('early_signs_of_ageing'), skin_type: q('normal'), age_band: q('60_plus'), routine_time: q('day') });
   assert.equal(fine.steps[1].handle, 'serum-anti-age-elixir-dexception');
   // With no age known, Active Énergie (owner, 2026-11-04: settings F `range_without_age`).
   const noAge = build({ primary_concern: q('early_signs_of_ageing'), skin_type: q('normal'), routine_time: q('day') });
@@ -124,7 +131,7 @@ test('day and night: the night adds only what the day does not have', () => {
   assert.deepEqual(handles(ts, 'night'), ['lait-demaquillant-amande-douce', 'creme-nuit-anti-age-caresse-temps-sublime']);
   assert.deepEqual(ts.skipped.filter((s) => s.reason === 'also_in_day_routine').map((s) => s.handle), ['lotion-hydratante-nettoyante-peaux-seches', 'creme-contour-yeux-anti-age-levres-acide-hyaluronique']);
   // Exception has no night cream: its cream morning and evening, the day's lotion too; the night adds the make-up remover.
-  const ex = anti('normal', '45_plus', 'both');
+  const ex = anti('normal', '60_plus', 'both');
   assert.equal(handles(ex).length, 5);
   assert.ok(ex.skipped.some((s) => s.handle === 'creme-anti-age-caresse-dexception' && s.reason === 'also_in_day_routine'));
   assert.equal(new Set(handles(ex)).size, handles(ex).length, 'never the same product twice');
@@ -206,13 +213,14 @@ test('the eye routine: the day is the Éclat Parfait lotion, the gold patches, t
 
 test('the eye cream: the age range’s when it treats one of their concerns, else the standard one', () => {
   const cream = (eye, age) => handles(eyes(eye, age, 'day'))[3];
-  assert.equal(cream('eye_wrinkles', '45_plus'), 'regard-dexception');
-  assert.equal(cream('dehydration', '45_plus'), 'regard-dexception');
+  assert.equal(cream('eye_wrinkles', '60_plus'), 'regard-dexception');
+  assert.equal(cream('dehydration', '60_plus'), 'regard-dexception');
   // Temps Sublime's eye cream treats wrinkles only; no eye cream treats dark spots.
   assert.equal(cream('dehydration', '25_34'), STANDARD);
-  assert.equal(cream('dark_spots', '45_plus'), STANDARD);
+  assert.equal(cream('dehydration', '45_59'), STANDARD);
+  assert.equal(cream('dark_spots', '60_plus'), STANDARD);
   assert.equal(cream('dark_spots', 'under_25'), STANDARD);
-  assert.deepEqual(eyes('dark_spots', '45_plus', 'day').steps[3].reason_codes, ['step_fallback']);
+  assert.deepEqual(eyes('dark_spots', '60_plus', 'day').steps[3].reason_codes, ['step_fallback']);
 });
 
 test('the eye routine asks the other eye concern instead of the skin type, every question asked', () => {

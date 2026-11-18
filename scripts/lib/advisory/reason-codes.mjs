@@ -39,7 +39,7 @@ export const FIT = {
   CONCERN_NEEDS_SPECIFIC_PRODUCT: 'concern_needs_specific_product',
   /** A required step had no product: this optional step takes its place (owner, 2026-10-16). */
   REPLACES_MISSING_STEP: 'replaces_missing_step',
-  /** The range their age gives (`age_range:45_plus`): Exception, Temps Sublime, Active Énergie (owner, 2026-10-16). */
+  /** The range their age gives (`age_range:60_plus`): Exception, Temps Sublime, Active Énergie (owner, 2026-10-16; Exception from 60, 2026-11-18). */
   AGE_RANGE: 'age_range',
   /** Made for this moment of the routine (`made_for_time:night`): a night cream (owner, 2026-10-16). */
   MADE_FOR_TIME: 'made_for_time',

@@ -43,7 +43,7 @@ test('the main concerns: their range as the products spell it, by age for anti-a
   assert.equal(F('B').preferred_range, 'Eclat Parfait');
   assert.equal(F('E').range_by_age, true);
   assert.deepEqual(F('B').primary_concerns, ['blemishes', 'enlarged_pores', 'excess_sebum', 'uneven_texture', 'uneven_tone']);
-  assert.deepEqual(built.routines.age_ranges.map((a) => [a.key, a.range]), [['under_25', 'Active Énergie'], ['25_34', 'Temps Sublime'], ['35_44', 'Temps Sublime'], ['45_plus', 'Exception']]);
+  assert.deepEqual(built.routines.age_ranges.map((a) => [a.key, a.range]), [['under_25', 'Active Énergie'], ['25_34', 'Temps Sublime'], ['35_44', 'Temps Sublime'], ['45_59', 'Temps Sublime'], ['60_plus', 'Exception']]);
   assert.deepEqual(built.routines.routine_times.map((t) => [t.key, t.label_fr, t.label_en]), [['day', 'Routine du jour', 'Day routine'], ['night', 'Routine de nuit', 'Night routine'], ['both', 'Jour et nuit', 'Day and night']]);
 });
 

@@ -10,6 +10,14 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Advisor: Exception from 60, Temps Sublime from 45 to 59 (2026-11-18)
+
+Owner: the routine's age question is 45–59 and 60+, and only 60+ gets Exception.
+
+- **Spreadsheet** (`qiriness-knowledge-template.xlsx`, master), Rules tab: « 45 ans et plus » (`45_plus`, Exception) became « 45 à 59 ans » (`45_59`, Temps Sublime) and a new row « 60 ans et plus » (`60_plus`, Exception), labelled in all six languages. Imported into `qiriness-knowledge.json`.
+- **Tests:** the age, eye-cream and chip assertions moved to the new bands. A deep-wrinkles profile at 45–59 is checked to get no Exception product. 4,015 pass. `eval:advisory` 43/49, the same six misses as before the change.
+- **Live:** `npm run advisor:load` on 2026-11-18, knowledge version 17 active (16 archived); its `age_ranges` checked in the database.
+
 ## The product page can ask the advisor: the « Ask the advisor » app block (2026-11-08)
 
 Owner: « on the right hand panel at the bottom … the chatbot entry box and when they click enter the chatbot opens and runs the question », with preset options for delivery times, the return policy and how to use.

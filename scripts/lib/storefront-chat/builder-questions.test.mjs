@@ -60,7 +60,7 @@ test('the eye routine by buttons: four questions and the routine from the code, 
   ]);
   const q3 = await turn('Rides ou ridules', 'profile:eye_concern:eye_wrinkles', q2.advisor);
   assert.equal(q3.text, "Quelle est votre tranche d'âge ?");
-  const q4 = await turn('45 ans et plus', 'profile:age_band:45_plus', q3.advisor);
+  const q4 = await turn('60 ans et plus', 'profile:age_band:60_plus', q3.advisor);
   assert.equal(q4.text, 'Souhaitez-vous une routine pour le jour, pour la nuit, ou les deux ?');
   assert.equal(client.calls.length, 0);
 
@@ -72,7 +72,7 @@ test('the eye routine by buttons: four questions and the routine from the code, 
   assert.deepEqual(done.routine && {
     main_concern: done.routine.main_concern, primary_concern: done.routine.primary_concern, skin_type: done.routine.skin_type,
     eye_concern: done.routine.eye_concern, age_band: done.routine.age_band, routine_time: done.routine.routine_time,
-  }, { main_concern: 'Y', primary_concern: 'dark_circles', skin_type: null, eye_concern: 'eye_wrinkles', age_band: '45_plus', routine_time: 'both' });
+  }, { main_concern: 'Y', primary_concern: 'dark_circles', skin_type: null, eye_concern: 'eye_wrinkles', age_band: '60_plus', routine_time: 'both' });
   // The day, then the night's eye make-up remover: the rest is already in the day routine.
   assert.deepEqual(done.routine.product_handles, ['lotion-tonique-hydratante-eclat-parfait', 'patchs-yeux-clat-anti-age-regard-or-60-patchs', 'serum-anti-age-elixir-regard-eclat', 'regard-dexception', 'demaquillant-yeux-biphase-express']);
   assert.deepEqual(done.routine.answer_sources, { primary_concern: 'quick_choice', eye_concern: 'quick_choice', age_band: 'quick_choice', routine_time: 'quick_choice' });
@@ -131,7 +131,7 @@ test('the record is anonymous: codes only, the age as its range, never a session
   assert.ok(isBuiltRoutine(advice, 'routine_builder'));
   assert.ok(!isBuiltRoutine(advice, 'conversation'));
   const r = routineRecord({ advice, profile, channel: 'storefront_chat', locale: 'fr', currency: 'EUR' });
-  assert.equal(r.age_band, '45_plus');
+  assert.equal(r.age_band, '45_59');
   assert.equal(r.main_concern, 'E');
   assert.match(r.ref, /^[0-9a-f-]{36}$/);
   assert.deepEqual(Object.keys(r).sort(), ['age_band', 'answer_sources', 'channel', 'currency', 'eye_concern', 'locale', 'main_concern', 'primary_concern', 'product_handles', 'ref', 'routine_time', 'secondary_concerns', 'skin_type', 'total_price'].sort());
