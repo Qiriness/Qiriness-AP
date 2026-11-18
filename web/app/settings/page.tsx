@@ -10,7 +10,7 @@ import { readMailSettings } from "../../../scripts/lib/shop-mail-settings.mjs";
 import { getKlaviyoStatus } from "@/lib/server/integrations-service";
 import { insightsShopFor } from "@/lib/server/insights/context";
 import { getSocialConnections } from "@/lib/server/social-connections-service";
-import { canAccessPath, canChooseAgentModels, canManageIntegrations } from "../../../scripts/lib/dashboard-auth.mjs";
+import { canAccessPath, canChooseAgentModels, canManageIntegrations, canSeeAgentSettings } from "../../../scripts/lib/dashboard-auth.mjs";
 
 export const dynamic = "force-dynamic";
 
@@ -46,8 +46,9 @@ export default async function SettingsPage({
   const selected = insightsShopFor({ shop: searchParams?.shop });
   const [badges, user] = await Promise.all([navBadgeCounts(), getSession()]);
   const integrations = Boolean(user && canManageIntegrations(user.role));
+  const agents = Boolean(user && canSeeAgentSettings(user.role));
   const tab: SettingsTab =
-    asked === "agents" && selected.desk
+    asked === "agents" && selected.desk && agents
       ? "agents"
       : asked === "integrations" && integrations
         ? "integrations"
@@ -99,6 +100,7 @@ export default async function SettingsPage({
         socialNotice={socialNotice}
         mail={mail as Record<"sales_report" | "stock_alert", MailSetting> | null}
         canManageIntegrations={integrations}
+        canSeeAgents={agents}
         canChooseModels={Boolean(user && canChooseAgentModels(user.role))}
       />
     </AppShell>

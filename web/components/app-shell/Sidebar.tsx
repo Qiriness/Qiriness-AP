@@ -33,7 +33,10 @@ interface NavItem {
   available: boolean;
   /** A chip beside the label, e.g. "Beta". */
   chipKey?: MessageKey;
-  /** Drawn only for roles this admits. Absent means every role. */
+  /**
+   * Drawn only for roles this admits. Absent means every role that may open
+   * `href` (drawn while the role is still unknown).
+   */
   visibleTo?: (role: string | null) => boolean;
   /** A `nav.*` key: the item opens a section, drawn as a small heading above it. */
   sectionKey?: MessageKey;
@@ -142,7 +145,7 @@ export function Sidebar({
       <ShopMenu shops={shops} current={shop} collapsed={collapsed} onPick={pickShop} />
 
       <ul className={styles.navList}>
-        {NAV.filter((item) => (!item.visibleTo || item.visibleTo(role)) && (shop.desk || isShopPage(item.href))).map((item) => {
+        {NAV.filter((item) => (item.visibleTo ? item.visibleTo(role) : role === null || canAccessPath(role, item.href)) && (shop.desk || isShopPage(item.href))).map((item) => {
           const Icon = item.icon;
           const isActive = item.available && item.href === activeHref;
           const badge = badges[item.href];

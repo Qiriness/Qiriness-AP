@@ -16,6 +16,7 @@ Accounts live in **Supabase Auth** (`auth.users`); the role is `app_metadata.das
 | `developer` | everything |
 | `management` | everything |
 | `contact` | everything except Insights → Overview, Sales and Marketing & funnel and the sales report download (the tabs are not drawn; the URLs redirect to Fulfilment) and Home — the management chat, page and `/api/chat` (not drawn in the sidebar) |
+| `social` | Insights as `contact` sees it (Social media included, Connections dialog too) and Settings → My info; not Tickets, Conversations, Orders, Agent Setup, Agent settings or their APIs (`SOCIAL_DENIED`). The sidebar hides every item the role may not open |
 
 Two HttpOnly cookies carry the session: `qos_at` (the Supabase access token, one hour) and `qos_rt` (the refresh token). Each request checks the token's ES256 signature locally against the project's JWKS, then confirms it against `/auth/v1/user` — cached for a minute per token — so a ban, a role change or a sign-out takes effect within a minute rather than at the token's expiry. The middleware refreshes the pair when the hour is nearly up; both cookies expire thirty days after the password was typed (`amr`), which is the longest a session can live without signing in again.
 

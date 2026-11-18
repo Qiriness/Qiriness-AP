@@ -10,6 +10,7 @@ import {
   canAccessPath,
   canChooseAgentModels,
   canManageIntegrations,
+  canSeeAgentSettings,
   canSeePanel,
   canUseManagementChat,
   createAuthClient,
@@ -103,8 +104,8 @@ const client = (options = {}) =>
 
 // --- roles ---------------------------------------------------------------------
 
-test('the three roles and their labels are the ones the CLI and the UI use', () => {
-  assert.deepEqual(ROLES, ['developer', 'management', 'contact']);
+test('the four roles and their labels are the ones the CLI and the UI use', () => {
+  assert.deepEqual(ROLES, ['developer', 'management', 'contact', 'social']);
   assert.deepEqual(Object.keys(ROLE_LABELS).sort(), [...ROLES].sort());
 });
 
@@ -153,14 +154,33 @@ test('contact can connect, sync and disconnect social accounts (2026-10-16)', ()
   ]) assert.equal(canAccessPath('contact', path), true, path);
 });
 
-test('every role may open the other panels, and the rest of the app', () => {
+test('every role may open the other panels; every desk role the rest of the app', () => {
   for (const role of ROLES) {
     for (const panel of ['fulfilment', 'support', 'customers', 'agent']) {
       assert.equal(canSeePanel(role, panel), true, `${role} should see ${panel}`);
     }
+  }
+  for (const role of ['developer', 'management', 'contact']) {
     assert.equal(canAccessPath(role, '/tickets'), true);
     assert.equal(canAccessPath(role, '/api/tickets/abc'), true);
   }
+});
+
+test('social media sees Insights as contact does, and nothing of the desk (2026-11-18)', () => {
+  for (const path of [
+    '/insights/fulfilment', '/insights/social', '/api/insights/social/report', '/api/insights/topic-map',
+    '/api/settings/integrations/social', '/api/settings/integrations/meta/sync', '/settings', '/api/auth/me',
+    '/api/preferences/locale'
+  ]) assert.equal(canAccessPath('social', path), true, path);
+  for (const path of [
+    '/insights/overview', '/insights/sales', '/insights/marketing', '/api/insights/report', '/home', '/api/chat',
+    '/tickets', '/api/tickets/abc', '/conversations', '/orders', '/orders/123', '/agent-setup/rules',
+    '/api/knowledge/articles', '/api/policy/rules', '/api/reports/sales', '/api/settings/agents/models',
+    '/api/settings/integrations/klaviyo', '/storefront-agent'
+  ]) assert.equal(canAccessPath('social', path), false, path);
+  assert.equal(canSeeAgentSettings('social'), false);
+  assert.equal(canSeeAgentSettings('contact'), true);
+  assert.equal(fallbackPath('social'), '/insights/fulfilment');
 });
 
 test('an unknown or missing role may open nothing', () => {

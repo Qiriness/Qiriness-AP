@@ -20,7 +20,7 @@ export type SettingsTab = "me" | "agents" | "integrations" | "dev";
 export interface SettingsMe {
   name: string | null;
   email: string | null;
-  /** The role's key (`developer` | `management` | `contact`); its words are `role.<key>`. */
+  /** The role's key (`developer` | `management` | `contact` | `social`); its words are `role.<key>`. */
   role: string;
   /** Each area's dictionary key (`settings.area.<id>`) and whether the role may open it. */
   access: { id: string; allowed: boolean }[];
@@ -60,6 +60,7 @@ export function SettingsView({
   socialNotice = null,
   mail = null,
   canManageIntegrations,
+  canSeeAgents = true,
   canChooseModels,
 }: {
   tab: SettingsTab;
@@ -74,6 +75,8 @@ export function SettingsView({
   mail?: Record<"sales_report" | "stock_alert", MailSetting> | null;
   /** The contact team is not shown the Integrations or Dev info tabs (dashboard-auth.mjs). */
   canManageIntegrations: boolean;
+  /** The social media role has no desk, so no Agent settings tab (dashboard-auth.mjs). */
+  canSeeAgents?: boolean;
   /** The contact team sees the models but cannot change them (dashboard-auth.mjs). */
   canChooseModels: boolean;
 }) {
@@ -86,7 +89,7 @@ export function SettingsView({
         </div>
         <nav className={header.nav} aria-label={tr("settings.sections")}>
           <ul className={header.tabs}>
-            {TABS.filter((id) => (!RESTRICTED.includes(id) || canManageIntegrations) && (shop.desk || !DESK_ONLY.includes(id))).map((id) => (
+            {TABS.filter((id) => (!RESTRICTED.includes(id) || canManageIntegrations) && (id !== "agents" || canSeeAgents) && (shop.desk || !DESK_ONLY.includes(id))).map((id) => (
               <li key={id}>
                 <Link
                   href={tabHref(id, shop.slug)}

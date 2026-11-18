@@ -28,12 +28,13 @@
 
 // --- roles ---------------------------------------------------------------------
 
-export const ROLES = Object.freeze(['developer', 'management', 'contact']);
+export const ROLES = Object.freeze(['developer', 'management', 'contact', 'social']);
 
 export const ROLE_LABELS = Object.freeze({
   developer: 'Developer',
   management: 'Management',
-  contact: 'Contact team'
+  contact: 'Contact team',
+  social: 'Social media'
 });
 
 /** Where the role lives on a Supabase user. Service-key writable only. */
@@ -59,26 +60,57 @@ export const ROLE_CLAIM = 'dashboard_role';
  * Developer and Management are identical for now; they
  * are separate roles so they can diverge without a migration.
  */
+const CONTACT_DENIED = Object.freeze([
+  '/insights/overview',
+  '/insights/sales',
+  '/insights/marketing',
+  '/api/insights/report',
+  '/home',
+  '/api/chat',
+  // Only the Klaviyo key: connecting social accounts is open (2026-10-16).
+  '/api/settings/integrations/klaviyo',
+  // Who each shop's automatic mail comes from and goes to, on the same tab.
+  '/api/settings/integrations/mail',
+  '/api/settings/agents',
+  // The Storefront Agent dashboard leads with assisted revenue (2026-10-30).
+  '/storefront-agent',
+  // …and carries the chat's caps (2026-11-02).
+  '/api/storefront-agent'
+]);
+
+/**
+ * The social media role (2026-11-18, the owner's rule): Insights as the contact
+ * team sees it — Social media included — and Settings → My info, nothing of the
+ * support desk. So the contact team's list, plus the desk's pages and every API
+ * only they call. A new desk API must be added here, or this role can call it.
+ */
+const SOCIAL_DENIED = Object.freeze([
+  ...CONTACT_DENIED,
+  '/tickets',
+  '/api/tickets',
+  '/conversations',
+  '/orders',
+  '/agent-setup',
+  '/api/agent-test',
+  '/api/collections',
+  '/api/company-policies',
+  '/api/dropped-mail',
+  '/api/forwarding',
+  '/api/knowledge',
+  '/api/parameters',
+  '/api/policy',
+  '/api/promotions',
+  '/api/recommendations',
+  '/api/reports',
+  '/api/sales-channels',
+  '/api/senders'
+]);
+
 const DENIED = Object.freeze({
   developer: [],
   management: [],
-  contact: [
-    '/insights/overview',
-    '/insights/sales',
-    '/insights/marketing',
-    '/api/insights/report',
-    '/home',
-    '/api/chat',
-    // Only the Klaviyo key: connecting social accounts is open (2026-10-16).
-    '/api/settings/integrations/klaviyo',
-    // Who each shop's automatic mail comes from and goes to, on the same tab.
-    '/api/settings/integrations/mail',
-    '/api/settings/agents',
-    // The Storefront Agent dashboard leads with assisted revenue (2026-10-30).
-    '/storefront-agent',
-    // …and carries the chat's caps (2026-11-02).
-    '/api/storefront-agent'
-  ]
+  contact: CONTACT_DENIED,
+  social: SOCIAL_DENIED
 });
 
 /** May this role use the management chat? What the sidebar asks before drawing Home. */
@@ -89,6 +121,11 @@ export function canUseManagementChat(role) {
 /** May this role see and change the Klaviyo key? What Settings asks before drawing the tab. */
 export function canManageIntegrations(role) {
   return canAccessPath(role, '/api/settings/integrations/klaviyo');
+}
+
+/** May this role open Agent settings at all? The social media role has no desk. */
+export function canSeeAgentSettings(role) {
+  return canAccessPath(role, '/agent-setup');
 }
 
 /** May this role choose the model an agent runs on? What Agent settings asks before drawing the picker. */
