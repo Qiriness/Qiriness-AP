@@ -43,7 +43,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # eval:storefront-knowledge (read-only live policy/FAQ checks)
 |                    # inspect:storefront-knowledge (source keys, headings, parameter availability)
 |                    # inspect:storefront-shopping (shop-scoped inventory counts, no codes)
-|-- shopify.app.toml # Shopify app scopes (all read_*)
+|-- shopify.app.toml # Shopify app scopes (read_*, plus write_products for sale prices only)
 |-- web/             # Next.js dashboard: app/ (pages + api/), components/, lib/server/ (services),
 |                    # lib/i18n/ (fr default, en), middleware.ts (THE GATE: every page + API
 |                    # needs a session, except login and the HMAC/clientState webhooks)
@@ -52,6 +52,8 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 |                    # lib/ is shared by web and agent (REST client, records, rules)
 |-- extensions/storefront-advisor/  # the support app's theme app extension (advisor embed);
 |                    # [app_proxy] in the root shopify.app.toml
+|-- extensions/sale-prices/  # the app's home page in Shopify Admin: « Prix soldés »
+|                    # (sale prices by collection; shares scripts/lib/sale-prices/)
 |-- data/advisor/qiriness.json  # the brand's advisory playbooks + mappings + merchandising;
 |                    # npm run advisor:load loads it, npm run eval:advisory checks it
 |-- reports/         # one-off read-only analyses (qiriness-360-2026-11/: REPORT.md, sql/, run.mjs

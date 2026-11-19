@@ -18,7 +18,15 @@ embedded = true
 # granted scopes against the 26 this file listed, and `npm run probe:analytics`
 # answered real sessions before anything was deployed. This file was behind the
 # install; a reinstall from it would have dropped the scope silently.
-scopes = "read_all_orders,read_cart_transforms,read_content,read_customer_data_erasure,read_customers,read_discounts,read_discounts_allocator_functions,read_draft_orders,read_files,read_fulfillments,read_inventory,read_inventory_shipments,read_inventory_shipments_received_items,read_legal_policies,read_locales,read_metaobject_definitions,read_metaobjects,read_online_store_pages,read_order_edits,read_orders,read_price_rules,read_product_listings,read_products,read_reports,read_returns,read_themes,read_validations"
+#
+# `write_products` (2026-11-19) IS THE APP'S ONLY WRITE SCOPE, and it is there
+# for one thing: sale prices (« Prix soldés », extensions/sale-prices, and
+# `npm run sale:*`) set a variant's price + compare-at and its
+# `qiriness_sale.original` marker. The one module that writes is
+# scripts/lib/sale-prices/shopify-price-writer.mjs. Unlike `read_reports`
+# above, this one CHANGES the install: it reaches the shop only after
+# `shopify app deploy` and the store owner accepting it in Admin.
+scopes = "read_all_orders,read_cart_transforms,read_content,read_customer_data_erasure,read_customers,read_discounts,read_discounts_allocator_functions,read_draft_orders,read_files,read_fulfillments,read_inventory,read_inventory_shipments,read_inventory_shipments_received_items,read_legal_policies,read_locales,read_metaobject_definitions,read_metaobjects,read_online_store_pages,read_order_edits,read_orders,read_price_rules,read_product_listings,read_products,read_reports,read_returns,read_themes,read_validations,write_products"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
