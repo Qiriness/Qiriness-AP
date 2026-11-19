@@ -17,7 +17,7 @@ import { tiktokConfig } from './tiktok-client.mjs';
 
 /** Pinned so a provider's version bump is a one-line, reviewed change. Env wins. */
 export const DEFAULT_META_GRAPH_VERSION = 'v23.0';
-export const DEFAULT_GOOGLE_ADS_API_VERSION = 'v21';
+export const DEFAULT_GOOGLE_ADS_API_VERSION = 'v26';
 
 /**
  * What a Meta connection asks for. Read-only, every one:
