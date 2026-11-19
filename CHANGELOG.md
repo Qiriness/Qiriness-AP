@@ -10,6 +10,15 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Sale prices by collection, from the terminal: `npm run sale:*` (2026-11-19)
+
+So Google Ads shows Black Friday prices: a sale changes the real price and sets the compare-at to the old one, instead of a checkout discount Google never sees (`DECISIONS.md` § Sale prices).
+
+- **Commands:** `sale:preview` (read-only), `sale:apply` (typed APPLY), `sale:status`, `sale:restore --collection <handle> | --all` (typed RESTORE, `--force` for hand-edited prices).
+- **The original price is never lost:** the marker metafield `qiriness_sale.original` is written in the same call as the new price, and a local JSON + CSV backup is written before the first write.
+- **Tests:** 18 (`pricing.test.mjs`, `sale-prices.test.mjs`): rounding, skips, idempotent re-apply, restore/conflict/cleanup, args.
+- **Live, read-only:** `sale:status` and `sale:preview` run against the shop on 2026-11-19 (Soins visage: 74 variants, 72 would change). **No write has run yet:** the app lacks `write_products` (VALIDATION_LOG item 68).
+
 ## Advisor: Exception from 60, Temps Sublime from 45 to 59 (2026-11-18)
 
 Owner: the routine's age question is 45–59 and 60+, and only 60+ gets Exception.

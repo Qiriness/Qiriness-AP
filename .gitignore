@@ -30,3 +30,8 @@ Notes/casework-labels-*.json
 
 # Launch stress-test runs (npm run advisor:stress): chat session ids and replies, regenerated on demand.
 data/advisor/stress-runs/
+
+# Sale price backups (npm run sale:apply / sale:restore): the original prices,
+# written before any change. Local working copies; the source of truth for a
+# restore is the marker metafield on each variant in Shopify.
+sale-backups/

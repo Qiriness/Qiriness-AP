@@ -1416,6 +1416,157 @@ export async function fetchCollectionProducts(shopify, collectionId, cursor) {
   });
 }
 
+// --- sale prices (scripts/sale-prices.mjs) ------------------------------------
+//
+// Reads only. The writes live in scripts/lib/sale-prices/shopify-price-writer.mjs,
+// the one module allowed to change a price.
+//
+// SMALL PAGES ON PURPOSE. The cost is the product of the `first` values: 5
+// products x 50 variants x (variant + marker) stays near 500 points, half the
+// 1000-point single-query ceiling. A product with more than 50 variants is
+// refused rather than half-read (`variants.pageInfo.hasNextPage`).
+export const SALE_PRODUCT_PAGE_SIZE = 5;
+export const SALE_VARIANTS_PER_PRODUCT = 50;
+export const SALE_VARIANT_SCAN_PAGE_SIZE = 100;
+const SALE_MARKER_NAMESPACE = 'qiriness_sale';
+const SALE_MARKER_KEY = 'original';
+
+const SALE_COLLECTION_VARIANTS_QUERY = `#graphql
+  query SaleCollectionVariants($handle: String!, $first: Int!, $after: String, $variantFirst: Int!) {
+    collectionByIdentifier(identifier: { handle: $handle }) {
+      id
+      handle
+      title
+      products(first: $first, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          id
+          title
+          status
+          variants(first: $variantFirst) {
+            pageInfo { hasNextPage }
+            nodes {
+              id
+              title
+              price
+              compareAtPrice
+              metafield(namespace: "${SALE_MARKER_NAMESPACE}", key: "${SALE_MARKER_KEY}") { id value }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const SALE_VARIANT_SCAN_QUERY = `#graphql
+  query SaleMarkedVariants($first: Int!, $after: String) {
+    productVariants(first: $first, after: $after) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        id
+        title
+        price
+        compareAtPrice
+        product { id title status }
+        metafield(namespace: "${SALE_MARKER_NAMESPACE}", key: "${SALE_MARKER_KEY}") { id value }
+      }
+    }
+  }
+`;
+
+const ACCESS_SCOPES_QUERY = `#graphql
+  query SaleAccessScopes {
+    currentAppInstallation { accessScopes { handle } }
+    shop { myshopifyDomain }
+  }
+`;
+
+/** The access scopes the current token actually carries, and the shop it is for. */
+export async function fetchAccessScopes(shopify) {
+  const data = await shopifyGraphql(shopify, ACCESS_SCOPES_QUERY);
+  return {
+    scopes: (data?.currentAppInstallation?.accessScopes || []).map((scope) => scope.handle),
+    shopDomain: data?.shop?.myshopifyDomain || null
+  };
+}
+
+/**
+ * Every product of a collection with its variants' price, compare-at and sale
+ * marker. Returns null when no collection has that handle.
+ * -> { collection: { id, handle, title }, products: [{ id, title, status, variants: [...] }] }
+ */
+export async function fetchSaleCollection(shopify, handle) {
+  const products = [];
+  let collection = null;
+  let cursor = null;
+
+  do {
+    const data = await shopifyGraphql(shopify, SALE_COLLECTION_VARIANTS_QUERY, {
+      handle,
+      first: SALE_PRODUCT_PAGE_SIZE,
+      after: cursor,
+      variantFirst: SALE_VARIANTS_PER_PRODUCT
+    });
+    const node = data?.collectionByIdentifier;
+    if (!node) return null;
+    collection = { id: node.id, handle: node.handle, title: node.title };
+
+    for (const product of node.products.nodes) {
+      if (product.variants.pageInfo.hasNextPage) {
+        throw new Error(
+          `"${product.title}" has more than ${SALE_VARIANTS_PER_PRODUCT} variants; refusing to half-read it.`
+        );
+      }
+      products.push({
+        id: product.id,
+        title: product.title,
+        status: product.status,
+        variants: product.variants.nodes
+      });
+    }
+    cursor = node.products.pageInfo.hasNextPage ? node.products.pageInfo.endCursor : null;
+  } while (cursor);
+
+  return { collection, products };
+}
+
+/**
+ * Every variant in the shop that carries a sale marker, shaped like
+ * fetchSaleCollection's products (one entry per product, marked variants only).
+ * Scans all variants: the marker has no metafield definition, so it cannot be
+ * used as a search filter, and the shop has a few hundred variants.
+ */
+export async function fetchSaleMarkedProducts(shopify) {
+  const byProduct = new Map();
+  let cursor = null;
+
+  do {
+    const data = await shopifyGraphql(shopify, SALE_VARIANT_SCAN_QUERY, {
+      first: SALE_VARIANT_SCAN_PAGE_SIZE,
+      after: cursor
+    });
+    const connection = data?.productVariants;
+    for (const variant of connection?.nodes || []) {
+      if (!variant.metafield) continue;
+      const product = variant.product;
+      if (!byProduct.has(product.id)) {
+        byProduct.set(product.id, { id: product.id, title: product.title, status: product.status, variants: [] });
+      }
+      byProduct.get(product.id).variants.push({
+        id: variant.id,
+        title: variant.title,
+        price: variant.price,
+        compareAtPrice: variant.compareAtPrice,
+        metafield: variant.metafield
+      });
+    }
+    cursor = connection?.pageInfo?.hasNextPage ? connection.pageInfo.endCursor : null;
+  } while (cursor);
+
+  return [...byProduct.values()];
+}
+
 export async function fetchDiscountPage(shopify, args, cursor) {
   return shopifyGraphql(shopify, DISCOUNTS_QUERY, {
     first: args.pageSize,

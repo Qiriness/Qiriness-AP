@@ -27,6 +27,15 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |   |                                    # cluster:tickets:save persists a run
 |   |-- sync-shopify-collections.mjs     # collections + membership of active ones;
 |   |                                   #   in the nightly, and behind the Sync button
+|   |-- sale-prices.mjs                  # sale:preview|apply|status|restore -- a
+|   |                                    # collection on sale by changing the real
+|   |                                    # price + compare-at (Google Ads), and back.
+|   |                                    # Rules: lib/sale-prices/pricing.mjs; the
+|   |                                    # ONLY Shopify writer: lib/sale-prices/
+|   |                                    # shopify-price-writer.mjs; reads in
+|   |                                    # shopify-admin-client (fetchSaleCollection,
+|   |                                    # fetchSaleMarkedProducts, fetchAccessScopes).
+|   |                                    # Backups: sale-backups/ (gitignored)
 |   |-- apply-supabase-migration.mjs     # SQL runner
 |   |-- set-worker-db-password.mjs     # (re)sets qiriness_worker's password (SCRAM verifier),
 |   |                                    # writes WORKER_DB_URL to .env.local

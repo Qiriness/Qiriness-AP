@@ -42,6 +42,15 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 68. Sale prices: preview and status run live, no price written yet — 2026-11-19
+
+Blocked on the `write_products` scope (add it to `shopify.app.toml`, `shopify app deploy`, owner approves). Then, **on a test collection holding one draft product with 2 variants, one with a compare-at**:
+- `npm run sale:apply -- --collection <test> --percent 20 --include-drafts`: in Admin, the price, the compare-at and the `qiriness_sale.original` metafield; the backup files in `sale-backups/`.
+- `npm run sale:status` lists both variants as « on sale ».
+- Edit one price by hand, then `sale:restore --collection <test>`: the other variant is back exactly (compare-at included, or empty) with no metafield, and the edited one is a conflict. `--force` restores it too.
+- Ctrl+C an apply midway, re-run it: no variant reduced twice.
+- Before Black Friday: one live product, confirm Merchant Center shows the sale price, then restore.
+
 ## 67. Egress: agent fingerprint, customer index delta and cart-code reads built, not deployed — 2026-11-08
 
 **Check after deploy** (web for the agent, the worker for the index):

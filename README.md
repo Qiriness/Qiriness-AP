@@ -90,6 +90,22 @@ On Insights → Social media → All platforms, use the report card at the botto
 
 From `web/`, `npm run report:social:verify` runs synthetic Chromium checks and writes a sample PDF/screenshots under `.next/social-report-validation/`. It uses installed Edge/Chrome on Windows; elsewhere install a Playwright Chromium browser or set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`.
 
+### Running a sale (real prices, for Google Ads)
+
+Puts every product of a collection on sale by lowering the real price and setting the compare-at to the old price, so Merchant Center and Google Ads show the promotion. Needs the app's `write_products` scope.
+
+```sh
+npm run sale:preview -- --collection black-friday --percent 20   # read-only table
+npm run sale:apply   -- --collection black-friday --percent 20   # type APPLY to confirm
+npm run sale:status                                              # what is on sale now
+npm run sale:restore -- --collection black-friday                # type RESTORE; --all for every sale
+```
+
+- The original price and compare-at are kept on each variant (metafield `qiriness_sale.original`) and in `sale-backups/` before anything changes. Restore puts them back exactly.
+- A price edited by hand during the sale is left alone on restore and listed as a conflict (`--force` restores it).
+- Re-running an interrupted apply or restore is safe.
+- Before the sale: turn off any automatic discount on the same products (it would discount again at checkout), and check Admin › Marchés: markets with fixed prices don't follow. Apply the evening before: Merchant Center can take a few hours.
+
 ### Agent worker (`agent/`)
 
 `cd agent && npm install`, then `npm run ingest:once` for a single pass or `npm start` to poll. For a backlog review pass that stores and categorises mail without investigation or forwarding, run `npm run ingest:once -- --limit=500 --stop-after=categorise`. Every pipeline stage also has a standalone CLI, most with a `:dry-run` twin — see `APP_SCHEMA.md` § Agent CLIs.

@@ -44,3 +44,4 @@ grep -rn "^### <heading>" docs/decisions/
 | Interface language | `docs/decisions/interface-language.md` | 3 | 1,031 |
 | Storefront advisor | `docs/decisions/storefront-advisor.md` | 59 | 34,000 |
 | Social report (2026-10-09) | `docs/decisions/social-report.md` | 5 | 1,477 |
+| Sale prices (2026-11-19) | `docs/decisions/sale-prices.md` | 4 | 900 |
