@@ -76,7 +76,9 @@
     "node": ">=20"
   },
   "dependencies": {
-    "pg": "^8.22.0"
+    "@shopify/ui-extensions": "2026.7.4",
+    "pg": "^8.22.0",
+    "preact": "^10.29.8"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.11"

@@ -35,3 +35,7 @@ data/advisor/stress-runs/
 # written before any change. Local working copies; the source of truth for a
 # restore is the marker metafield on each variant in Shopify.
 sale-backups/
+
+# Shopify CLI build output of the UI extensions (shopify app build / dev / deploy).
+extensions/*/dist/
+extensions/*/manifest.json

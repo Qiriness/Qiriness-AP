@@ -94,6 +94,10 @@ From `web/`, `npm run report:social:verify` runs synthetic Chromium checks and w
 
 Puts every product of a collection on sale by lowering the real price and setting the compare-at to the old price, so Merchant Center and Google Ads show the promotion. Needs the app's `write_products` scope.
 
+**In Shopify Admin:** Apps › Qiriness Email Agent opens « Prix soldés » (`extensions/sale-prices`): pick a collection and a %, preview, apply; « Promotions en cours » lists what is on sale and restores it. Any staff member allowed to edit products can use it.
+
+**From the terminal** (same rules, plus local backup files):
+
 ```sh
 npm run sale:preview -- --collection black-friday --percent 20   # read-only table
 npm run sale:apply   -- --collection black-friday --percent 20   # type APPLY to confirm

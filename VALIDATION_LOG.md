@@ -42,9 +42,11 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
-## 68. Sale prices: preview and status run live, no price written yet — 2026-11-19
+## 68. Sale prices: CLI preview and status run live; the admin page built but not opened; no price written yet — 2026-11-19
 
-Blocked on the `write_products` scope (add it to `shopify.app.toml`, `shopify app deploy`, owner approves). Then, **on a test collection holding one draft product with 2 variants, one with a compare-at**:
+**The page first:** `shopify app dev`, open the app in Shopify Admin. Check the collection list loads, a preview renders its tables, « Promotions en cours » says none, and the `write_products` banner shows while the scope is missing.
+
+Writes are blocked on the `write_products` scope (add it to `shopify.app.toml`, `shopify app deploy`, owner approves). Then, **on a test collection holding one draft product with 2 variants, one with a compare-at**, once from the page and once from the CLI:
 - `npm run sale:apply -- --collection <test> --percent 20 --include-drafts`: in Admin, the price, the compare-at and the `qiriness_sale.original` metafield; the backup files in `sale-backups/`.
 - `npm run sale:status` lists both variants as « on sale ».
 - Edit one price by hand, then `sale:restore --collection <test>`: the other variant is back exactly (compare-at included, or empty) with no metafield, and the edited one is a conflict. `--force` restores it too.

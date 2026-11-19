@@ -10,6 +10,15 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## « Prix soldés »: the sale screen as the app's home page in Shopify Admin (2026-11-19)
+
+The same sales as `npm run sale:*`, from Apps › Qiriness Email Agent in Shopify Admin (`extensions/sale-prices`, App Home UI extension; `DECISIONS.md` § Sale prices).
+
+- **Promotions en cours:** every variant still carrying a sale marker, grouped by promotion (collection, %, date; on sale / edited by hand / back at original), each with « Restaurer les prix »: the rows, the conflicts, a « restore hand-edited prices too » box, confirm.
+- **Nouvelle promotion:** collection select, %, drafts box → preview (current, sale and compare-at price per variant; skipped variants with the reason) → « Appliquer » → confirm → product-by-product progress. A banner says when the app still lacks `write_products`.
+- **Shared code:** `scripts/lib/sale-prices/` now holds the reads (`shopify-sale-reads.mjs`, moved out of `shopify-admin-client.mjs`) and a `runner.mjs`, all transport-free; the CLI uses them too.
+- **Checked:** 21 sale tests (3 new for the runner against a fake Shopify: one call per product, prices before markers, failures counted); 4,037 pass in all. The page type-checks against `@shopify/ui-extensions` 2026.7.4 (a deliberately wrong prop is caught) and `shopify app build` bundles it. The CLI re-run read-only against the live shop. **Not yet seen in Shopify Admin:** it needs `shopify app dev` or `shopify app deploy` (VALIDATION_LOG item 68).
+
 ## Sale prices by collection, from the terminal: `npm run sale:*` (2026-11-19)
 
 So Google Ads shows Black Friday prices: a sale changes the real price and sets the compare-at to the old one, instead of a checkout discount Google never sees (`DECISIONS.md` § Sale prices).

@@ -1,0 +1,18 @@
+# « Prix soldés »: the app's home page in Shopify Admin. Puts a collection on
+# sale by changing the real price + compare-at (Google Ads), and back. Shares
+# its rules, reads and writes with `npm run sale:*` (scripts/lib/sale-prices/).
+# Talks to Shopify through direct API access: needs write_products in
+# shopify.app.toml. Why: docs/decisions/sale-prices.md.
+api_version = "2026-07"
+
+[[extensions]]
+# Merchant-facing name: locales/*.json
+name = "t:name"
+handle = "sale-prices"
+type = "ui_extension"
+uid = "ef56a438-564c-42d9-e392-aa7a2b48b67b2b6e64b6"
+
+# Only 1 target can be specified for each app-home extension
+[[extensions.targeting]]
+module = "./src/AppHome.jsx"
+target = "admin.app.home.render"

@@ -30,12 +30,17 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |   |-- sale-prices.mjs                  # sale:preview|apply|status|restore -- a
 |   |                                    # collection on sale by changing the real
 |   |                                    # price + compare-at (Google Ads), and back.
-|   |                                    # Rules: lib/sale-prices/pricing.mjs; the
-|   |                                    # ONLY Shopify writer: lib/sale-prices/
-|   |                                    # shopify-price-writer.mjs; reads in
-|   |                                    # shopify-admin-client (fetchSaleCollection,
-|   |                                    # fetchSaleMarkedProducts, fetchAccessScopes).
-|   |                                    # Backups: sale-backups/ (gitignored)
+|   |                                    # Adds tables, typed confirmation and the
+|   |                                    # backups (sale-backups/, gitignored) to
+|   |                                    # lib/sale-prices/, which it SHARES with the
+|   |                                    # admin page extensions/sale-prices:
+|   |                                    #   pricing.mjs (pure rules) ·
+|   |                                    #   shopify-sale-reads.mjs (reads) ·
+|   |                                    #   shopify-price-writer.mjs (the ONLY
+|   |                                    #   Shopify writer) · runner.mjs (product by
+|   |                                    #   product). All take graphql(query, vars)
+|   |                                    #   and use no Node APIs (bundled into the
+|   |                                    #   extension)
 |   |-- apply-supabase-migration.mjs     # SQL runner
 |   |-- set-worker-db-password.mjs     # (re)sets qiriness_worker's password (SCRAM verifier),
 |   |                                    # writes WORKER_DB_URL to .env.local
@@ -387,6 +392,16 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 ## extensions/, docs/, data/
 
 ```text
+|-- extensions/sale-prices/      # « Prix soldés »: the app's HOME PAGE in Shopify Admin
+|                                # (App Home UI extension, admin.app.home.render, API
+|                                # 2026-07, Preact + Polaris web components; 2026-11-19).
+|                                # src/AppHome.jsx (page + write_products banner) ·
+|                                # ActiveSales.jsx (markers grouped by promotion, restore)
+|                                # · NewSale.jsx (collection + % -> preview -> confirm ->
+|                                # apply) · shopify-graphql.js (direct API access via
+|                                # shopify.query, throttle retry) · labels.js (French copy,
+|                                # euros). Logic imported from scripts/lib/sale-prices/.
+|                                # Build output (dist/, manifest.json) is gitignored
 |-- extensions/storefront-advisor/  # the support app's theme app extension (2026-11-02):
 |                                # blocks/advisor-embed.liquid (app embed, target body;
 |                                # settings + JSON config) · blocks/advisor-ask.liquid (app

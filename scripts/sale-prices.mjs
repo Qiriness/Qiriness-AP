@@ -4,28 +4,23 @@ import readline from 'node:readline/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { loadConfig, loadEnv } from './lib/sync-config.mjs';
-import {
-  createShopifyClient,
-  fetchAccessScopes,
-  fetchSaleCollection,
-  fetchSaleMarkedProducts
-} from './lib/shopify-admin-client.mjs';
+import { createShopifyClient, shopifyGraphql } from './lib/shopify-admin-client.mjs';
 import {
   SKIP_REASONS,
   campaignId,
   flattenVariants,
   fromCents,
-  groupByProduct,
   parseMarker,
   parsePercent,
   planApply,
   planRestore
 } from './lib/sale-prices/pricing.mjs';
 import {
-  applySalePrices,
-  deleteSaleMarkers,
-  restoreOriginalPrices
-} from './lib/sale-prices/shopify-price-writer.mjs';
+  fetchAccessScopes,
+  fetchSaleCollection,
+  fetchSaleMarkedProducts
+} from './lib/sale-prices/shopify-sale-reads.mjs';
+import { runApply, runRestore } from './lib/sale-prices/runner.mjs';
 
 // Sale prices by collection, from the terminal.
 //
@@ -39,8 +34,10 @@ import {
 // too), --yes (skip the typed confirmation).
 //
 // Why the real price changes, where the original is kept and what a conflict
-// is: docs/decisions/sale-prices.md. The rules themselves:
-// scripts/lib/sale-prices/pricing.mjs.
+// is: docs/decisions/sale-prices.md. The rules, reads, writes and runner live in
+// scripts/lib/sale-prices/ and are shared with the app's admin page
+// (extensions/sale-prices). This CLI adds the tables, the typed confirmation
+// and the local backup files.
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BACKUP_DIR = path.join(REPO_ROOT, 'sale-backups');
@@ -98,20 +95,21 @@ async function main() {
   const args = parseSaleArgs(process.argv.slice(2));
   const config = loadConfig(loadEnv());
   const shopify = await createShopifyClient(config);
+  const graphql = (query, variables) => shopifyGraphql(shopify, query, variables);
 
-  if (args.command === 'preview') return runApply({ args, shopify, write: false });
-  if (args.command === 'apply') return runApply({ args, shopify, write: true });
-  if (args.command === 'status') return runStatus({ shopify });
-  return runRestore({ args, shopify });
+  if (args.command === 'preview') return commandApply({ args, graphql, write: false });
+  if (args.command === 'apply') return commandApply({ args, graphql, write: true });
+  if (args.command === 'status') return commandStatus({ graphql });
+  return commandRestore({ args, graphql });
 }
 
 // --- apply / preview -----------------------------------------------------------
 
-async function runApply({ args, shopify, write }) {
-  const access = await fetchAccessScopes(shopify);
+async function commandApply({ args, graphql, write }) {
+  const access = await fetchAccessScopes(graphql);
   if (write) requireWriteAccess(access);
 
-  const found = await fetchSaleCollection(shopify, args.collection);
+  const found = await fetchSaleCollection(graphql, args.collection);
   if (!found) throw new Error(`No collection with the handle "${args.collection}" on ${access.shopDomain}.`);
 
   const appliedAt = new Date().toISOString();
@@ -176,14 +174,14 @@ async function runApply({ args, shopify, write }) {
   });
   console.log(`Backup written: ${backup.jsonPath}\n`);
 
-  const tally = { applied: 0, failed: 0 };
-  for (const [productId, items] of groupByProduct(changes)) {
-    const result = await applySalePrices(shopify, productId, items);
-    const status = result.ok ? 'applied' : 'failed';
-    tally[status] += items.length;
-    backup.update(items.map((item) => item.variantId), status, result.error);
-    console.log(`${result.ok ? 'OK  ' : 'FAIL'} ${items[0].productTitle} (${items.length} variant${items.length > 1 ? 's' : ''})${result.error ? ` — ${result.error}` : ''}`);
-  }
+  const tally = await runApply({
+    graphql,
+    changes,
+    onProduct: ({ items, ok, error }) => {
+      backup.update(items.map((item) => item.variantId), ok ? 'applied' : 'failed', error);
+      console.log(`${ok ? 'OK  ' : 'FAIL'} ${items[0].productTitle} (${plural(items.length, 'variant')})${error ? ` — ${error}` : ''}`);
+    }
+  });
 
   console.log(`\nDone: ${tally.applied} variants on sale, ${tally.failed} failed.`);
   if (tally.failed > 0) {
@@ -194,9 +192,9 @@ async function runApply({ args, shopify, write }) {
 
 // --- status --------------------------------------------------------------------
 
-async function runStatus({ shopify }) {
-  const access = await fetchAccessScopes(shopify);
-  const rows = flattenVariants(await fetchSaleMarkedProducts(shopify));
+async function commandStatus({ graphql }) {
+  const access = await fetchAccessScopes(graphql);
+  const rows = flattenVariants(await fetchSaleMarkedProducts(graphql));
   console.log(`\nShop: ${access.shopDomain}`);
   if (rows.length === 0) {
     console.log('No variant is on sale (no sale markers found).');
@@ -226,17 +224,17 @@ async function runStatus({ shopify }) {
 
 // --- restore -------------------------------------------------------------------
 
-async function runRestore({ args, shopify }) {
-  const access = await fetchAccessScopes(shopify);
+async function commandRestore({ args, graphql }) {
+  const access = await fetchAccessScopes(graphql);
   requireWriteAccess(access);
 
   let products;
   let scope;
   if (args.all) {
-    products = await fetchSaleMarkedProducts(shopify);
+    products = await fetchSaleMarkedProducts(graphql);
     scope = 'all';
   } else {
-    const found = await fetchSaleCollection(shopify, args.collection);
+    const found = await fetchSaleCollection(graphql, args.collection);
     if (!found) throw new Error(`No collection with the handle "${args.collection}" on ${access.shopDomain}.`);
     products = found.products;
     scope = args.collection;
@@ -297,30 +295,19 @@ async function runRestore({ args, shopify }) {
   });
   console.log(`Backup written: ${backup.jsonPath}\n`);
 
-  const tally = { restored: 0, failed: 0 };
-  const cleanupsByProduct = groupByProduct(cleanups);
-  for (const [productId, items] of groupByProduct([...restores, ...cleanups])) {
-    const toRestore = items.filter((item) => !cleanupsByProduct.get(productId)?.includes(item));
-    const label = `${items[0].productTitle} (${items.length} variant${items.length > 1 ? 's' : ''})`;
-
-    if (toRestore.length > 0) {
-      const result = await restoreOriginalPrices(shopify, productId, toRestore);
-      if (!result.ok) {
-        tally.failed += items.length;
-        backup.update(items.map((item) => item.variantId), 'failed', result.error);
-        console.log(`FAIL ${label} — ${result.error}`);
-        continue;
-      }
+  const tally = await runRestore({
+    graphql,
+    restores,
+    cleanups,
+    onProduct: ({ items, ok, markerLeft, error }) => {
+      const label = `${items[0].productTitle} (${plural(items.length, 'variant')})`;
+      const status = !ok ? 'failed' : markerLeft ? 'restored_marker_left' : 'restored';
+      backup.update(items.map((item) => item.variantId), status, error);
+      if (!ok) console.log(`FAIL ${label} — ${error}`);
+      else if (markerLeft) console.log(`OK   ${label} — price restored, marker not removed: ${error} (re-run restore to clean it)`);
+      else console.log(`OK   ${label}`);
     }
-
-    // Prices are back; now the markers. If this step fails the variant is
-    // already at its original price, and the next restore only cleans up.
-    const cleaned = await deleteSaleMarkers(shopify, items.map((item) => item.variantId));
-    const status = cleaned.ok ? 'restored' : 'restored_marker_left';
-    tally.restored += items.length;
-    backup.update(items.map((item) => item.variantId), status, cleaned.error);
-    console.log(`OK   ${label}${cleaned.ok ? '' : ` — price restored, marker not removed: ${cleaned.error} (re-run restore to clean it)`}`);
-  }
+  });
 
   console.log(`\nDone: ${tally.restored} variants restored, ${tally.failed} failed, ${conflicts.length} conflicts left alone.`);
   console.log('Check with: npm run sale:status');
@@ -390,6 +377,10 @@ function csvCell(value) {
   if (value === null || value === undefined) return '';
   const text = String(value);
   return /[";\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function plural(count, word) {
+  return `${count} ${word}${count > 1 ? 's' : ''}`;
 }
 
 function money(cents) {

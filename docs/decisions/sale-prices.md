@@ -23,3 +23,14 @@ Restore reads the marker, not a file: it works from any machine, and `sale:statu
 ### Writes are isolated, and the scope is checked first (2026-11-19)
 
 The app was read-only until this (`read_*` scopes only). Writing prices needs `write_products`. `scripts/lib/sale-prices/shopify-price-writer.mjs` is the only module that writes to Shopify. `apply` and `restore` read `currentAppInstallation.accessScopes` before anything else and stop with the steps to grant the scope, rather than failing mid-run.
+
+### The page lives in Shopify Admin, as the app's home, with no backend (2026-11-19)
+
+The owner wanted the sale screen inside Shopify (Apps › Qiriness Email Agent), not on the qiriness-ap dashboard. The app had no admin page (`application_url` was Shopify's default placeholder), so it is an **App Home UI extension** (`extensions/sale-prices`, target `admin.app.home.render`, API 2026-07): a Preact module Shopify hosts, not an iframe the app serves.
+
+- **No backend, no token handling.** The page calls GraphQL through Shopify's direct API access (`shopify.query`), authenticated as the staff member using it (online mode) within the app's scopes. Who may use it is therefore Shopify's own staff permissions: someone who cannot edit products gets Shopify's refusal. The dashboard's roles, Vercel and Supabase are not involved.
+- **One set of rules for the page and the CLI.** `scripts/lib/sale-prices/` (pricing, reads, writer, runner) takes `graphql(query, variables)` instead of a client and uses no Node APIs, so the Shopify CLI bundles it into the extension (36.8 KB built). The CLI keeps what only a terminal can do: the local backup files.
+- **The page re-reads before it writes.** Apply re-reads the collection and re-plans from the live prices; restore re-reads the markers. A preview left open while someone edits a price can never write a stale figure.
+- **Confirmation is an inline warning with Confirm / Cancel**, not a modal: simpler state, and nothing to get stuck open.
+- **No collection picker.** The resource picker is not part of the App Home API (only the rendering targets have it), so the page lists the collections (one 250-node page; the shop has ~175) in a select.
+- The generated template pulled `@shopify/ui-extensions` `2027.1.0-rc.6` (a release candidate); it is pinned to `2026.7.4` to match the extension's `api_version`.
