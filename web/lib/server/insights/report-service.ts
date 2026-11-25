@@ -34,7 +34,7 @@ import { orderArgs, rangeArgs, resolveInsightsContext, type InsightsContext } fr
 import { getShopByDomain } from "../shop";
 import { liveChannels, liveFunnel, liveLandingTypes, liveTotals, salesFor, sessionTotalsForWindows } from "./analytics";
 import { getInventoryExceptions } from "./inventory";
-import { getPromotions } from "./marketing-service";
+import { getPromotions } from "./promotions-service";
 import { mapFigures, mapSummary, ordersCoverage } from "./orders";
 import { signalsFor } from "./overview-service";
 import { foldPlatforms, mapProduct } from "./sales-service";

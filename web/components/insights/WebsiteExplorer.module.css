@@ -1,0 +1,169 @@
+/* Funnel & Website: the filter bar, cards in two columns, the funnel steps. */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: flex-end;
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.select {
+  display: grid;
+  gap: 0.2rem;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.select select {
+  min-width: 9rem;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.reset {
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--teal-ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.card {
+  min-width: 0;
+  margin-bottom: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.grid2 > .card {
+  margin-bottom: 0;
+}
+
+.title {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.funnel {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 10rem 1fr 5.5rem;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.stepLabel {
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.stepLabel small {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  color: var(--text-subtle);
+}
+
+.stepBar {
+  height: 1.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--mist-050);
+  overflow: hidden;
+}
+
+.stepBar i {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--chart-1);
+}
+
+.stepValue {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.stepValue b {
+  display: block;
+  color: var(--text-strong);
+}
+
+.stepValue small {
+  color: var(--text-subtle);
+}
+
+.summary {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+}
+
+.note {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.unavailable {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--space-1) var(--space-3);
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.unavailable li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--text-muted);
+}
+
+.unavailable small {
+  color: var(--text-subtle);
+}
+
+.flag {
+  margin-left: var(--space-2);
+  padding: 0 0.4rem;
+  border-radius: var(--radius-pill);
+  background: var(--warning-050);
+  color: var(--warning-ink);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-medium);
+}
+
+@media (max-width: 40rem) {
+  .step {
+    grid-template-columns: 7rem 1fr 4.5rem;
+  }
+}

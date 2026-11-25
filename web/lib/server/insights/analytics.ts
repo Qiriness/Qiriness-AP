@@ -43,9 +43,7 @@ import {
   joinChannels,
   landingTypesQuery,
   platformMix,
-  productPagesQuery,
   readLandingTypes,
-  readProductPages,
   readTotals,
   salesLadderQuery,
   salesSeriesQuery,
@@ -61,7 +59,6 @@ import type {
   StorefrontMoney,
   LandingType,
   LivePart,
-  ProductPage,
   SeriesPoint,
   StorefrontChannel,
   StorefrontSales,
@@ -264,11 +261,6 @@ export function liveChannels(ctx: InsightsContext): Promise<LivePart<StorefrontC
 export function liveLandingTypes(ctx: InsightsContext): Promise<LivePart<LandingType[]>> {
   if (ctx.marketplaces.isMarketplace(ctx.platform)) return Promise.resolve({ blockedReason: BLOCKED_MARKETPLACE, value: [] });
   return part([], async () => readLandingTypes(await shopifyql(ctx.shopDomain, landingTypesQuery(ctx.range), PRIORITY.detail)) as LandingType[]);
-}
-
-export function liveProductPages(ctx: InsightsContext): Promise<LivePart<ProductPage[]>> {
-  if (ctx.marketplaces.isMarketplace(ctx.platform)) return Promise.resolve({ blockedReason: BLOCKED_MARKETPLACE, value: [] });
-  return part([], async () => readProductPages(await shopifyql(ctx.shopDomain, productPagesQuery(ctx.range), PRIORITY.detail)) as ProductPage[]);
 }
 
 /**

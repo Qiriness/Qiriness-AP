@@ -39,9 +39,9 @@ grep -rn "^### <heading>" docs/decisions/
 | Management chat | `docs/decisions/management-chat.md` | 10 | 2,439 |
 | Agent test chat | `docs/decisions/agent-test-chat.md` | 9 | 2,764 |
 | Migrations | `docs/decisions/migrations.md` | 6 | 2,349 |
-| Insights | `docs/decisions/insights.md` | 61 | 45,000 |
+| Insights | `docs/decisions/insights.md` | 62 | 47,000 |
 | Page speed | `docs/decisions/page-speed.md` | 5 | 3,200 |
 | Interface language | `docs/decisions/interface-language.md` | 3 | 1,031 |
 | Storefront advisor | `docs/decisions/storefront-advisor.md` | 59 | 34,000 |
 | Social report (2026-10-09) | `docs/decisions/social-report.md` | 5 | 1,477 |
-| Sale prices (2026-11-19) | `docs/decisions/sale-prices.md` | 5 | 1,500 |
+| Sale prices (2026-11-19) | `docs/decisions/sale-prices.md` | 6 | 2,000 |

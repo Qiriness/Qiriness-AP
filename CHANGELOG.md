@@ -10,6 +10,23 @@ Three sibling files carry the other halves, and this one deliberately does not d
 
 ---
 
+## Insights → Marketing & funnel, redesigned: platforms against Shopify, and the website funnel (2026-11-25)
+
+Two tabs over the same range and platform (`DECISIONS.md` § Insights → « Marketing & funnel, redesigned »; audit and metric map: `docs/marketing-funnel-redesign.md`).
+
+- **Marketing performance:** ad spend, website net sales, MER, Shopify and platform ROAS, new customers, blended CAC vs CPA, new-customer MER, net sales after ads, each with its definition, its change and its state (eMER, contribution, LTV:CAC say « not configured » / « unavailable » instead of a number). One card per provider — Google Ads, Meta Ads, Klaviyo — with the platform's revenue, conversions, ROAS and CPA beside Shopify's for the same channel, and the difference. A channel table with paid and organic separated by our own classifier, an attribution model switch (`?attr=`), the attribution notes and tracking coverage. Paid highlights per platform (spend by campaign type, campaigns against the same-named UTM campaign, link to Social). Klaviyo: Klaviyo vs Shopify email revenue, campaigns and flows as separate sortable tables. The newsletter rows unchanged.
+- **Funnel & website:** the session funnel with device / channel / landing-type filters (in the browser) and country (`?country=`), against the previous period; checkout by device; device and channel tables; landing types; every landing page (search, sort, type tabs, collection categories, product price bands, expandable channel and device breakdown, link to the page); landing page × channel heatmap; opportunities scored against comparable pages; a « Not measured yet » list.
+- **Promotions, discounts and gifts moved to Sales**, unchanged.
+- **Measured on the 30 days to 2026-11-24:** Google Ads claims €2,806, Shopify credits €2,739 (+2.4%); Meta claims €3,751 / 80 conversions, Shopify credits €703 / 9 orders (+434%); 42% of website orders have no recorded channel.
+- **Checked:** 30 new tests (channel classifier, metric definitions and states, query builders and folds, opportunity scoring) and the Klaviyo summary extension; `tsc` and `next lint` clean; the computations run read-only on live Qiriness data. `npm test`: 4,069 of 4,071 pass — the 2 failures read `git ls-files` and trip on the deleted `MarketingChannels.tsx` until the deletion is committed. **Not yet seen in a browser, not deployed.**
+
+## Sale prices: one sale per collection and %, restore follows the markers, added/removed products shown (2026-11-20)
+
+- **Restore by collection** (`sale:restore --collection`) now restores what that collection's sales reduced, read from the markers: products removed from the collection during the sale are included (`no longer in the collection`), products reduced by another sale are listed and not touched.
+- **Grouping:** `sale:status` and « Promotions en cours » show one sale per collection + %, with its first and latest apply dates, instead of one per day.
+- **Page, per sale:** products added to the collection since are listed with « Appliquer -X % à ces produits »; products removed since are flagged with « Restaurer seulement les produits retirés ». Both re-read Shopify right before writing and go through the usual confirm.
+- **Checked:** 25 sale tests (4 new: grouping, restore selection, added/removed, deleted collection); 4,041 in all. Page type-check (now on `src` only, not the build output) and `shopify app build` (42.2 KB). Read-only on the live shop: the four running sales (94 variants) group, compare and select as expected. **The page change is not deployed.**
+
 ## « Prix soldés »: the sale screen as the app's home page in Shopify Admin (2026-11-19)
 
 The same sales as `npm run sale:*`, from Apps › Qiriness Email Agent in Shopify Admin (`extensions/sale-prices`, App Home UI extension; `DECISIONS.md` § Sale prices).

@@ -1,0 +1,172 @@
+/* Marketing & funnel shared pieces: the info tip, the data table's controls, comparison bars. */
+
+.tip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-left: var(--space-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: 0.65rem;
+  font-weight: var(--weight-semibold);
+  font-style: italic;
+  line-height: 1;
+  color: var(--text-subtle);
+  cursor: help;
+  vertical-align: middle;
+}
+
+.tip:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-focus);
+}
+
+.tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  left: 50%;
+  width: max-content;
+  max-width: 22rem;
+  padding: var(--space-2) var(--space-3);
+  transform: translateX(-50%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-xs);
+  font-size: var(--text-sm);
+  font-style: normal;
+  font-weight: var(--weight-regular);
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  color: var(--text-default);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+
+.tip:hover::after,
+.tip:focus-visible::after {
+  opacity: 1;
+}
+
+.search {
+  width: min(100%, 20rem);
+  margin-bottom: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.scroll {
+  max-height: 34rem;
+  overflow: auto;
+}
+
+.sortButton {
+  display: inline-flex;
+  gap: 0.2rem;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sortMark {
+  color: var(--text-subtle);
+  font-size: 0.7em;
+}
+
+.expandCol {
+  width: 1.75rem;
+}
+
+.expandButton {
+  width: 1.4rem;
+  height: 1.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.openRow > * {
+  background: var(--teal-050);
+}
+
+.detailRow > td {
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+}
+
+.more {
+  margin-top: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--teal-ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.bars {
+  display: grid;
+  gap: var(--space-1);
+  margin-top: var(--space-3);
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: 8.5rem 1fr 5.5rem;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--text-sm);
+}
+
+.barLabel {
+  color: var(--text-muted);
+}
+
+.barTrack {
+  height: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--mist-050);
+  overflow: hidden;
+}
+
+.barTrack i {
+  display: block;
+  height: 100%;
+  border-radius: var(--radius-sm);
+}
+
+.bar_spend {
+  background: var(--chart-3);
+}
+
+.bar_provider {
+  background: var(--chart-2);
+}
+
+.bar_shopify {
+  background: var(--chart-1);
+}
+
+.barValue {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}

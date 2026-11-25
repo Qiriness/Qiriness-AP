@@ -4,14 +4,17 @@ import test from 'node:test';
 import {
   buildMarker,
   campaignId,
+  diffSaleCollection,
   flattenVariants,
   fromCents,
   groupByProduct,
+  groupSales,
   parseMarker,
   parsePercent,
   planApply,
   planRestore,
   salePriceCents,
+  selectCollectionSaleRows,
   toCents
 } from './pricing.mjs';
 
@@ -196,4 +199,81 @@ test('flatten + group: one row per variant, grouped by product in order', () => 
   const groups = groupByProduct(rows);
   assert.deepEqual([...groups.keys()], ['p1', 'p2']);
   assert.equal(groups.get('p1').length, 2);
+});
+
+// --- a sale = collection + percent -----------------------------------------------
+
+function markerOn({ handle = 'black-friday', percent = 20, original = 11490, sale = 9192, appliedAt = APPLIED_AT } = {}) {
+  return buildMarker({
+    campaign: `${handle}-${percent}-${appliedAt.slice(0, 10)}`,
+    handle,
+    percent,
+    originalCents: original,
+    originalCompareCents: null,
+    saleCents: sale,
+    appliedAt
+  });
+}
+
+test('groupSales: re-applying the same collection and % on another day is ONE sale', () => {
+  const sales = groupSales([
+    row({ variantId: 'a', price: '91.92', markerValue: markerOn({ appliedAt: '2026-11-26T20:00:00.000Z' }) }),
+    row({ variantId: 'b', price: '91.92', markerValue: markerOn({ appliedAt: '2026-11-27T09:00:00.000Z' }) }),
+    row({ variantId: 'c', price: '80.43', markerValue: markerOn({ percent: 30, sale: 8043 }) }),
+    row({ variantId: 'd', price: '85.00', markerValue: markerOn() }),
+    row({ variantId: 'e', price: '114.90', markerValue: markerOn() }),
+    row({ variantId: 'f', price: '10.00', markerValue: 'not json' }),
+    row({ variantId: 'g' })
+  ]);
+  const bf20 = sales.find((s) => s.key === 'black-friday::20');
+  assert.equal(bf20.rows.length, 4);
+  assert.deepEqual(bf20.campaigns, ['black-friday-20-2026-11-26', 'black-friday-20-2026-11-27']);
+  assert.equal(bf20.firstAppliedAt, '2026-11-26T20:00:00.000Z');
+  assert.equal(bf20.lastAppliedAt, '2026-11-27T09:00:00.000Z');
+  assert.deepEqual(bf20.counts, { onSale: 2, edited: 1, back: 1 });
+  assert.ok(sales.find((s) => s.key === 'black-friday::30'), 'a different % is a different sale');
+  assert.equal(sales.find((s) => s.key === '(unreadable)').rows.length, 1);
+  assert.equal(sales.length, 3, 'unmarked rows are ignored');
+  assert.equal(sales[0].key, 'black-friday::20', 'newest first');
+});
+
+test('selectCollectionSaleRows: restore by collection follows the markers, not the members', () => {
+  const rows = [
+    row({ productId: 'p-in', variantId: 'in', markerValue: markerOn() }),
+    row({ productId: 'p-left', variantId: 'left', markerValue: markerOn() }),
+    row({ productId: 'p-other', variantId: 'other', markerValue: markerOn({ handle: 'soldes-hiver', percent: 30 }) }),
+    row({ productId: 'p-elsewhere', variantId: 'elsewhere', markerValue: markerOn({ handle: 'soldes-hiver' }) })
+  ];
+  const { ofCollection, otherSales } = selectCollectionSaleRows(rows, {
+    handle: 'black-friday',
+    collectionProductIds: ['p-in', 'p-other']
+  });
+  assert.deepEqual(ofCollection.map((r) => [r.variantId, r.removedFromCollection]), [['in', false], ['left', true]]);
+  assert.deepEqual(otherSales.map((r) => [r.variantId, r.otherSale]), [['other', 'soldes-hiver (-30 %)']]);
+});
+
+test('diffSaleCollection: products added since the sale are planned, products removed are listed', () => {
+  const sale = groupSales([
+    row({ productId: 'p1', variantId: 'v1', price: '91.92', markerValue: markerOn() }),
+    row({ productId: 'p-gone', variantId: 'v-gone', price: '91.92', markerValue: markerOn() })
+  ])[0];
+  const collectionProducts = [
+    { id: 'p1', title: 'Old', status: 'ACTIVE', variants: [{ id: 'v1', title: 'S', price: '91.92', compareAtPrice: '114.90', metafield: { id: 'm', value: markerOn() } }] },
+    { id: 'p-new', title: 'New', status: 'ACTIVE', variants: [{ id: 'v-new', title: 'S', price: '50.00', compareAtPrice: null, metafield: null }] },
+    { id: 'p-draft', title: 'Draft', status: 'DRAFT', variants: [{ id: 'v-draft', title: 'S', price: '20.00', compareAtPrice: null, metafield: null }] }
+  ];
+  const diff = diffSaleCollection({ sale, collectionProducts, appliedAt: APPLIED_AT, date: new Date('2026-11-27T10:00:00Z') });
+  assert.equal(diff.collectionMissing, false);
+  assert.deepEqual(diff.added.changes.map((c) => [c.variantId, c.saleCents]), [['v-new', 4000]]);
+  assert.equal(parseMarker(diff.added.changes[0].marker).campaign, 'black-friday-20-2026-11-27');
+  assert.deepEqual(diff.added.skipped.map((s) => [s.variantId, s.reason]), [['v-draft', 'not_active']]);
+  assert.deepEqual(diff.removed.map((r) => r.variantId), ['v-gone']);
+});
+
+test('diffSaleCollection: a deleted collection leaves every product of the sale as removed', () => {
+  const sale = groupSales([row({ variantId: 'v1', price: '91.92', markerValue: markerOn() })])[0];
+  const diff = diffSaleCollection({ sale, collectionProducts: null, appliedAt: APPLIED_AT });
+  assert.equal(diff.collectionMissing, true);
+  assert.equal(diff.added.changes.length, 0);
+  assert.deepEqual(diff.removed.map((r) => r.variantId), ['v1']);
 });

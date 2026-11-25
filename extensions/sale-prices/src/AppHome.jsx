@@ -40,7 +40,7 @@ function App() {
           nouvelle autorisation dans Shopify.
         </s-banner>
       )}
-      <ActiveSales canWrite={canWrite} refreshKey={refreshKey} onRestored={refresh} />
+      <ActiveSales canWrite={canWrite} refreshKey={refreshKey} onChanged={refresh} />
       <NewSale canWrite={canWrite} onApplied={refresh} />
     </s-page>
   );

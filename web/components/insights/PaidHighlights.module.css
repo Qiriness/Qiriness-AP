@@ -1,0 +1,53 @@
+/* Paid media highlights: provider switch, campaign-type tiles, notes. */
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.link {
+  font-size: var(--text-sm);
+  color: var(--teal-ink);
+}
+
+.types {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.type {
+  display: grid;
+  gap: 0.15rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.type span {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+
+.type strong {
+  font-size: var(--text-md);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-strong);
+}
+
+.type small {
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.note {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}

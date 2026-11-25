@@ -1,0 +1,14 @@
+/* Promotions on the Sales panel: the promotion name cell and its « code » tag. */
+
+.promoName {
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kind {
+  margin-left: var(--space-2);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-regular);
+  color: var(--text-subtle);
+}

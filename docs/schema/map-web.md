@@ -212,8 +212,16 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |   |                            # search, country, VIP) + CollectionMix (the six
 |   |   |                            # ranges + what falls outside) · OverviewView +
 |   |   |                            # OverviewTrend (metric switch) + ReportDownload ·
-|   |   |                            # MarketingView + MarketingChannels (Klaviyo
-|   |   |                            # read; Paid/Social blocked) · InventoryCard (stock
+|   |   |                            # MarketingFunnelView (?tab=) + MarketingTabsBar
+|   |   |                            # (tab, ?attr= model) · MarketingPerformanceView
+|   |   |                            # (KPIs, provider vs Shopify, notes) +
+|   |   |                            # ChannelAttributionTable + PaidHighlights +
+|   |   |                            # KlaviyoSectionView · WebsiteExplorer (filters,
+|   |   |                            # funnel, device / channel / landing, checkout) +
+|   |   |                            # LandingPagesSection (table + page x channel
+|   |   |                            # matrix) + OpportunitiesTable · MarketingKit
+|   |   |                            # (DataTable: sort/search/expand, InfoTip) ·
+|   |   |                            # PromotionsSection (on Sales) · InventoryCard (stock
 |   |   |                            # table, Overview + Fulfilment) · FulfilmentView ·
 |   |   |                            # OpenOrders · SupportView + TopicMap · CustomersView +
 |   |   |                            # VipRuleCard + SegmentFinder + CustomerActivityRows · AgentView ·
@@ -342,7 +350,11 @@ The Next.js dashboard: every route, API handler, component and server module. Pa
 |   |                             # activity for the ranged rows, + newsletter
 |   |                             # movement) · agent · overview · marketing ·
 |   |                             # inventory (stock at risk, now) · marketing
-|   |                             # also reads Klaviyo (insights_klaviyo_messages) · analytics
+|   |                             # (?tab= -> marketing-performance-service: ladder +
+|   |                             # attributed sales + traffic + ads (social-service
+|   |                             # getMarketingPaid) + Klaviyo; or website-funnel-
+|   |                             # service: traffic cut, landing pages, opportunities)
+|   |                             # · promotions-service (Sales + monthly report) · analytics
 |   |                             # (ShopifyQL, one promise per card group: the
 |   |                             # money ladder LIVE for the exact window, first;
 |   |                             # sessions = stored closed months + live rest;

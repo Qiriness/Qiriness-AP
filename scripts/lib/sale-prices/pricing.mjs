@@ -279,3 +279,120 @@ export function groupByProduct(rows) {
   }
   return groups;
 }
+
+// --- a sale = collection + percent ----------------------------------------------
+//
+// WHY NOT THE CAMPAIGN ID. The campaign id carries the date it was applied
+// ("black-friday-20-2026-11-26"), so re-applying the same collection and % the
+// next day (to catch products added to the collection) used to show as a second
+// sale with its own Restore button. One sale is one collection at one
+// percentage; the markers keep their campaign ids and dates untouched, this is
+// only how they are grouped.
+
+export const UNREADABLE_SALE_KEY = '(unreadable)';
+
+/** The sale a marker belongs to: "black-friday::20". */
+export function saleKey(marker) {
+  return marker ? `${marker.collection}::${marker.percent}` : UNREADABLE_SALE_KEY;
+}
+
+/**
+ * Marked rows -> one entry per sale, newest first:
+ * [{ key, collection, percent, firstAppliedAt, lastAppliedAt, campaigns, rows, counts }]
+ * counts: { onSale, edited, back } by the variant's current price against its marker.
+ * Rows whose marker cannot be read form one group, key UNREADABLE_SALE_KEY.
+ */
+export function groupSales(rows) {
+  const sales = new Map();
+  for (const row of rows) {
+    if (row.markerValue === null || row.markerValue === undefined) continue;
+    const marker = parseMarker(row.markerValue);
+    const key = saleKey(marker);
+    if (!sales.has(key)) {
+      sales.set(key, {
+        key,
+        collection: marker?.collection ?? null,
+        percent: marker?.percent ?? null,
+        firstAppliedAt: null,
+        lastAppliedAt: null,
+        campaigns: [],
+        rows: [],
+        counts: { onSale: 0, edited: 0, back: 0 }
+      });
+    }
+    const sale = sales.get(key);
+    sale.rows.push(row);
+    if (!marker) continue;
+
+    if (marker.campaign && !sale.campaigns.includes(marker.campaign)) sale.campaigns.push(marker.campaign);
+    if (marker.appliedAt) {
+      if (!sale.firstAppliedAt || marker.appliedAt < sale.firstAppliedAt) sale.firstAppliedAt = marker.appliedAt;
+      if (!sale.lastAppliedAt || marker.appliedAt > sale.lastAppliedAt) sale.lastAppliedAt = marker.appliedAt;
+    }
+    let now = null;
+    try {
+      now = toCents(row.price);
+    } catch {
+      now = null;
+    }
+    if (now === marker.saleCents) sale.counts.onSale += 1;
+    else if (now === marker.originalCents) sale.counts.back += 1;
+    else sale.counts.edited += 1;
+  }
+  return [...sales.values()].sort((a, b) => (b.lastAppliedAt || '').localeCompare(a.lastAppliedAt || ''));
+}
+
+/**
+ * The marked rows a restore of one COLLECTION covers, read from the markers
+ * rather than from the collection's current members:
+ * - `ofCollection`: marked by a sale of this collection (any %), whether or not
+ *   the product is still in it. `removedFromCollection` is set on those that left.
+ * - `otherSales`: in the collection now, but marked by another collection's sale:
+ *   restoring this collection must not end that one.
+ * markedRows: every marked row in the shop; collectionProductIds: the collection's
+ * products now (empty when the collection no longer exists).
+ */
+export function selectCollectionSaleRows(markedRows, { handle, collectionProductIds }) {
+  const inCollection = new Set(collectionProductIds);
+  const ofCollection = [];
+  const otherSales = [];
+  for (const row of markedRows) {
+    const marker = parseMarker(row.markerValue);
+    if (marker && marker.collection === handle) {
+      ofCollection.push({ ...row, removedFromCollection: !inCollection.has(row.productId) });
+    } else if (inCollection.has(row.productId)) {
+      otherSales.push({ ...row, otherSale: marker ? `${marker.collection} (-${marker.percent} %)` : 'unreadable marker' });
+    }
+  }
+  return { ofCollection, otherSales };
+}
+
+/**
+ * A running sale against its collection as it is NOW.
+ * - added:   planApply() of the collection at the sale's % : `changes` are the
+ *            products added since (not reduced yet), `skipped` excludes the ones
+ *            already on this sale, so it only explains why an added product
+ *            would not be reduced (draft, already reduced, another sale...).
+ * - removed: the sale's rows whose product has left the collection: still reduced.
+ * collectionProducts: fetchSaleCollection()'s products, or null when the
+ * collection no longer exists (then every row of the sale counts as removed).
+ */
+export function diffSaleCollection({ sale, collectionProducts, appliedAt, date = new Date() }) {
+  const productIds = new Set((collectionProducts || []).map((product) => product.id));
+  const removed = sale.rows.filter((row) => !productIds.has(row.productId));
+  if (!collectionProducts) {
+    return { collectionMissing: true, added: { changes: [], skipped: [] }, removed };
+  }
+
+  const plan = planApply(flattenVariants(collectionProducts), {
+    handle: sale.collection,
+    percent: sale.percent,
+    campaign: campaignId({ handle: sale.collection, percent: sale.percent, date }),
+    appliedAt
+  });
+  return {
+    collectionMissing: false,
+    added: { changes: plan.changes, skipped: plan.skipped.filter((row) => row.reason !== 'on_this_sale') },
+    removed
+  };
+}

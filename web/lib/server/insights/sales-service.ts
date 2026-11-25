@@ -11,6 +11,7 @@
  * Server-only; see ./shared.ts for why nothing here pages rows.
  */
 
+import { getPromotionsSection } from "./promotions-service";
 import { RPC } from "../../../../scripts/lib/tables.mjs";
 import type { Marketplaces } from "../marketplaces";
 import type {
@@ -74,6 +75,8 @@ export async function getSalesPanel(
   bestProductsRequest: BestProductsRequest = { vipOnly: false }
 ): Promise<SalesPanel> {
   const coverage = ordersCoverage(ctx);
+  // Promotions moved here from Marketing & funnel (2026-11-25); read beside the rest.
+  const promotionsRead = getPromotionsSection(ctx);
   const marketplace = ctx.marketplaces.isMarketplace(ctx.platform);
   const comparable = previousCovered(ctx.range, coverage);
 
@@ -163,8 +166,10 @@ export async function getSalesPanel(
     ),
   ]);
 
+  const promotions = await promotionsRead;
   return {
     summary,
+    promotions,
     days: elapsedDays(ctx),
     revenue: toSeries(ctx.range, seriesRows, (row) => row?.revenue ?? 0, coverage),
     orders: toSeries(ctx.range, seriesRows, (row) => row?.orders ?? 0, coverage),

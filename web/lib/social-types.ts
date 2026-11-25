@@ -259,13 +259,3 @@ export interface SocialPanel {
   paid: PaidPanel | null;
 }
 
-/**
- * The Marketing panel's Paid and Social tabs: the same sums as the Social
- * panel, current range only, no live reach. `connected` false keeps the tab's
- * reason; a total is null when there is nothing honest to sum (no spend, or
- * several currencies).
- */
-export interface MarketingSocial {
-  paid: { connected: boolean; total: PaidTotals | null; rows: { kind: PaidKind; totals: PaidTotals[] }[] };
-  organic: { connected: boolean; total: OrganicTotals | null; rows: { kind: OrganicKind; totals: OrganicTotals }[] };
-}

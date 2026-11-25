@@ -7,13 +7,16 @@ import { loadConfig, loadEnv } from './lib/sync-config.mjs';
 import { createShopifyClient, shopifyGraphql } from './lib/shopify-admin-client.mjs';
 import {
   SKIP_REASONS,
+  UNREADABLE_SALE_KEY,
   campaignId,
   flattenVariants,
   fromCents,
+  groupSales,
   parseMarker,
   parsePercent,
   planApply,
-  planRestore
+  planRestore,
+  selectCollectionSaleRows
 } from './lib/sale-prices/pricing.mjs';
 import {
   fetchAccessScopes,
@@ -201,19 +204,17 @@ async function commandStatus({ graphql }) {
     return;
   }
 
-  const byCampaign = new Map();
-  for (const row of rows) {
-    const marker = parseMarker(row.markerValue);
-    const key = marker?.campaign || '(unreadable marker)';
-    if (!byCampaign.has(key)) byCampaign.set(key, []);
-    byCampaign.get(key).push({ row, marker });
-  }
-
-  for (const [campaign, entries] of byCampaign) {
+  // One table per sale (collection + %), however many days it was applied on.
+  for (const sale of groupSales(rows)) {
+    const title =
+      sale.key === UNREADABLE_SALE_KEY
+        ? `Unreadable markers — ${sale.rows.length} variants (check by hand)`
+        : `${sale.collection} -${sale.percent} % — ${sale.rows.length} variants · applied ${datesLabel(sale)}`;
     printTable(
-      `${campaign} — ${entries.length} variants`,
+      title,
       ['Product', 'Variant', 'Original', 'Sale', 'Now', 'State'],
-      entries.map(({ row, marker }) => {
+      sale.rows.map((row) => {
+        const marker = parseMarker(row.markerValue);
         const now = Math.round(Number(row.price) * 100);
         const state = !marker ? 'check by hand' : now === marker.saleCents ? 'on sale' : now === marker.originalCents ? 'back at original (marker left)' : 'price edited by hand';
         return [row.productTitle, row.variantTitle, money(marker?.originalCents), money(marker?.saleCents), row.price, state];
@@ -222,32 +223,59 @@ async function commandStatus({ graphql }) {
   }
 }
 
+function datesLabel(sale) {
+  const first = (sale.firstAppliedAt || '').slice(0, 10);
+  const last = (sale.lastAppliedAt || '').slice(0, 10);
+  return first === last ? first : `${first} → ${last}`;
+}
+
 // --- restore -------------------------------------------------------------------
 
 async function commandRestore({ args, graphql }) {
   const access = await fetchAccessScopes(graphql);
   requireWriteAccess(access);
 
-  let products;
+  // What to restore comes from the MARKERS, not from the collection's current
+  // members: a product removed from the collection during the sale is still
+  // reduced and must come back too, and a product in the collection that
+  // another collection's sale reduced must be left to that sale.
+  const markedRows = flattenVariants(await fetchSaleMarkedProducts(graphql));
+  let rows;
+  let otherSales = [];
   let scope;
   if (args.all) {
-    products = await fetchSaleMarkedProducts(graphql);
+    rows = markedRows;
     scope = 'all';
   } else {
     const found = await fetchSaleCollection(graphql, args.collection);
-    if (!found) throw new Error(`No collection with the handle "${args.collection}" on ${access.shopDomain}.`);
-    products = found.products;
+    if (!found) console.log(`\nNote: no collection "${args.collection}" any more; restoring what its sales reduced anyway.`);
+    const selected = selectCollectionSaleRows(markedRows, {
+      handle: args.collection,
+      collectionProductIds: found ? found.products.map((product) => product.id) : []
+    });
+    rows = selected.ofCollection;
+    otherSales = selected.otherSales;
     scope = args.collection;
   }
 
-  const { restores, cleanups, conflicts, skipped } = planRestore(flattenVariants(products), { force: args.force });
+  const { restores, cleanups, conflicts, skipped } = planRestore(rows, { force: args.force });
+  const notes = (r) => [r.forced ? 'forced (was edited by hand)' : '', r.removedFromCollection ? 'no longer in the collection' : '']
+    .filter(Boolean)
+    .join('; ');
 
   console.log(`\nShop: ${access.shopDomain}  ·  restore: ${scope}${args.force ? '  ·  --force' : ''}\n`);
   printTable(
     `Back to the original price (${restores.length})`,
     ['Product', 'Variant', 'Now', 'Original price', 'Original compare-at', ''],
-    restores.map((r) => [r.productTitle, r.variantTitle, r.price, money(r.targetCents), money(r.targetCompareCents), r.forced ? 'forced (was edited by hand)' : ''])
+    restores.map((r) => [r.productTitle, r.variantTitle, r.price, money(r.targetCents), money(r.targetCompareCents), notes(r)])
   );
+  if (otherSales.length > 0) {
+    printTable(
+      `In the collection but on another sale, NOT touched (${otherSales.length})`,
+      ['Product', 'Variant', 'Price', 'Sale'],
+      otherSales.map((r) => [r.productTitle, r.variantTitle, r.price, r.otherSale])
+    );
+  }
   printTable(
     `Already at the original price, only the marker is removed (${cleanups.length})`,
     ['Product', 'Variant', 'Price'],

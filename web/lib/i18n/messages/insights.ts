@@ -10,7 +10,8 @@ import { en as e_customers, fr as f_customers } from "./insights-customers";
 import { en as e_agent, fr as f_agent } from "./insights-agent";
 import { en as e_charts, fr as f_charts } from "./insights-charts";
 import { en as e_social, fr as f_social } from "./insights-social";
+import { en as e_mkt, fr as f_mkt } from "./insights-mkt";
 
-export const en = { ...e_kit, ...e_shell, ...e_overview, ...e_sales, ...e_marketing, ...e_fulfilment, ...e_support, ...e_customers, ...e_agent, ...e_charts, ...e_social } as const;
+export const en = { ...e_kit, ...e_shell, ...e_overview, ...e_sales, ...e_marketing, ...e_fulfilment, ...e_support, ...e_customers, ...e_agent, ...e_charts, ...e_social, ...e_mkt } as const;
 
-export const fr: Record<keyof typeof en, string> = { ...f_kit, ...f_shell, ...f_overview, ...f_sales, ...f_marketing, ...f_fulfilment, ...f_support, ...f_customers, ...f_agent, ...f_charts, ...f_social };
+export const fr: Record<keyof typeof en, string> = { ...f_kit, ...f_shell, ...f_overview, ...f_sales, ...f_marketing, ...f_fulfilment, ...f_support, ...f_customers, ...f_agent, ...f_charts, ...f_social, ...f_mkt };

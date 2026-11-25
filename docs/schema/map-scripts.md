@@ -321,6 +321,18 @@ Root package: Shopify syncs, shared `scripts/lib/` modules (used by web and agen
 |       |-- storefront-months.mjs        # pure: which months are stored vs live, the
 |       |                                # plan for a window, combining the pieces
 |       |-- storefront-months-sync.mjs   # the nightly writer of storefront_session_months
+|       |-- storefront-marketing.mjs     # pure: Marketing & funnel ShopifyQL — attributed
+|       |                                # sales (WITH <model>_ATTRIBUTION), new/returning, the
+|       |                                # traffic cut, landing pages (+ x channel, x device),
+|       |                                # path normalising, collection categories
+|       |-- funnel-math.mjs              # pure, import-free: funnel folds and rates, shared
+|       |                                # by the server and the Funnel tab in the browser
+|       |-- marketing-channels.mjs       # pure: channel group of a visit (paid vs organic),
+|       |                                # PROVIDERS (Google Ads, Meta Ads, Klaviyo) and folds
+|       |-- marketing-metrics.mjs        # pure: MER, eMER, ROAS both ways, CAC vs CPA, the
+|       |                                # provider-vs-Shopify comparison; figures carry a state
+|       |-- website-opportunities.mjs    # pure: landing-page opportunity score against
+|       |                                # comparable pages (type, category, price band)
 |       |-- klaviyo-client.mjs           # Klaviyo REST (private key, revision header,
 |       |                                # waits out 429s); the key never leaves it
 |       |-- klaviyo-reports.mjs          # pure: key shape, Placed Order metric, report

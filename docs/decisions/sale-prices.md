@@ -34,3 +34,12 @@ The owner wanted the sale screen inside Shopify (Apps › Qiriness Email Agent),
 - **Confirmation is an inline warning with Confirm / Cancel**, not a modal: simpler state, and nothing to get stuck open.
 - **No collection picker.** The resource picker is not part of the App Home API (only the rendering targets have it), so the page lists the collections (one 250-node page; the shop has ~175) in a select.
 - The generated template pulled `@shopify/ui-extensions` `2027.1.0-rc.6` (a release candidate); it is pinned to `2026.7.4` to match the extension's `api_version`.
+
+### A sale is a collection at a percentage, and it follows its markers (2026-11-20)
+
+A sale is applied once: products added to the collection afterwards are not reduced, and products removed stay reduced. Two consequences were wrong before this entry:
+
+- **Restore by collection read the collection's current members.** It missed products removed during the sale (left reduced) and restored products in the collection that another collection's sale had reduced (ending that sale early). `sale:restore --collection` now restores the variants whose MARKER names that collection, member or not, and lists the other sales' products as not touched (`selectCollectionSaleRows`).
+- **The page grouped by campaign id, which carries the date.** Re-applying the same collection and % the next day (to catch added products) showed as a second sale with its own Restore. Sales are now grouped by collection + percent (`groupSales`); markers keep their campaign id and date unchanged, so nothing is migrated. A different % on the same collection is a different sale.
+
+Each sale on the page is compared with its collection as it is now (`diffSaleCollection`): products added since are offered « Appliquer -X % à ces produits » (same skips as an apply), products removed since are flagged « toujours soldé » with « Restaurer seulement les produits retirés ». Nothing is automatic: a live price change stays a confirmed human action, and syncing on Shopify events would need a backend the page does not have. Measured on the live shop 2026-11-20, read-only: four sales (bf-promo-30/40/50/60, 94 variants), none with added or removed products, restore-by-collection covering every reduced variant.

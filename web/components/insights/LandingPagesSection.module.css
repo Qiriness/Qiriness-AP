@@ -1,0 +1,91 @@
+/* Landing pages: type tabs, the expanded row, the page x channel matrix. */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-bottom: var(--space-3);
+}
+
+.pageName {
+  display: inline-block;
+  max-width: 22rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-4);
+}
+
+.detail h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-strong);
+}
+
+.detailNote {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--text-caption);
+  color: var(--text-subtle);
+}
+
+.miniFunnel {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.miniFunnel li {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr 3.5rem;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.miniFunnel b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.miniBar {
+  height: 0.6rem;
+  border-radius: var(--radius-sm);
+  background: var(--mist-050);
+  overflow: hidden;
+}
+
+.miniBar i {
+  display: block;
+  height: 100%;
+  background: var(--chart-1);
+}
+
+.matrix td {
+  min-width: 5.5rem;
+}
+
+.cell_good {
+  background: var(--success-050);
+}
+
+.cell_bad {
+  background: var(--warning-050);
+}
+
+.cell_flat {
+  background: transparent;
+}
+
+.cell_thin {
+  color: var(--text-subtle);
+}

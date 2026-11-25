@@ -44,7 +44,6 @@ import type {
   BandMetric,
   BandRule,
   EngagementBasis,
-  MarketingSocial,
   Compared,
   LiveReach,
   OrganicKind,
@@ -502,49 +501,28 @@ async function coverageOf(table: string, shopId: string): Promise<Coverage> {
   return { from: rows?.[0]?.day ? `${rows[0].day}T00:00:00Z` : now, through: now };
 }
 
-// --- the Marketing panel's tabs -----------------------------------------------------
-
-/**
- * Paid and organic sums for the Marketing panel's Paid and Social tabs, over the
- * current range. No live reach and no comparison: the Social panel has those.
- * Never throws — a failure reads as not connected, and the Marketing panel is
- * not the place to report a social sync.
- */
-export async function getMarketingSocial(ctx: InsightsContext): Promise<MarketingSocial> {
-  const empty: MarketingSocial = { paid: { connected: false, total: null, rows: [] }, organic: { connected: false, total: null, rows: [] } };
-  try {
-    const { accounts } = (await readSocialStatus(getSupabaseClient(), ctx.shopId)) as { accounts: { kind: string; enabled: boolean }[] };
-    const tracked = new Set(accounts.filter((a) => a.enabled).map((a) => a.kind));
-    const paidKinds = (PAID_KINDS as PaidKind[]).filter((k) => tracked.has(k));
-    const organicKinds = (ORGANIC_KINDS as OrganicKind[]).filter((k) => tracked.has(k));
-
-    const [paidRows, organicRows] = await Promise.all([
-      paidKinds.length
-        ? callRpc<PaidRow>(SOCIAL_RPC.PAID_SERIES, { p_shop: ctx.shopId, p_from: ctx.range.from, p_to: ctx.range.to, p_grain: "month" })
-        : Promise.resolve([] as PaidRow[]),
-      organicKinds.length ? readOrganicRows(ctx, ctx.range) : Promise.resolve(null),
-    ]);
-
-    const paidTotal = paidTotals(paidRows) as PaidTotals[];
-    return {
-      paid: {
-        connected: paidKinds.length > 0,
-        total: paidTotal.length === 1 ? paidTotal[0] : null,
-        rows: paidKinds.map((kind) => ({ kind, totals: paidTotals(paidRows, [kind]) as PaidTotals[] })),
-      },
-      organic: {
-        connected: organicKinds.length > 0,
-        total: organicRows ? organicTotals(organicRows) : null,
-        rows: organicRows ? organicKinds.map((kind) => ({ kind, totals: organicTotals(organicRows, [kind]) })) : [],
-      },
-    };
-  } catch (error) {
-    console.warn("marketing social unreadable", (error as Error).message);
-    return empty;
-  }
-}
+// --- read by other panels ---------------------------------------------------------
 
 /** Exact-period unique figures shared with the calendar report; the same 30-day/provider limits apply. */
 export function getSocialReportReach(shopId: string, from: string, to: string): Promise<LiveReach> {
   return liveReach({ shopId, range: { from, to } });
+}
+
+/**
+ * The paid accounts for the Marketing Performance tab: the same read as the
+ * Social panel's Paid view (totals now and one period earlier, per kind, and
+ * the campaign cut), with each provider's sync state. Null when no paid account
+ * is tracked. Throws on a failed read: the caller blocks its card with the reason.
+ */
+export async function getMarketingPaid(
+  ctx: InsightsContext
+): Promise<{ panel: PaidPanel; providers: { provider: string; lastSyncAt: string | null; lastSyncStatus: string | null }[] } | null> {
+  const connections = await getSocialConnections(ctx.shopId);
+  const tracked = new Set(connections.providers.flatMap((p) => p.accounts).filter((a) => a.enabled).map((a) => a.kind));
+  const kinds = (PAID_KINDS as PaidKind[]).filter((k) => tracked.has(k));
+  if (!kinds.length) return null;
+  return {
+    panel: await readPaid(ctx, kinds, kinds),
+    providers: connections.providers.map((p) => ({ provider: p.provider, lastSyncAt: p.lastSyncAt, lastSyncStatus: p.lastSyncStatus })),
+  };
 }
