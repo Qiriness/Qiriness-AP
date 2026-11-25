@@ -263,16 +263,19 @@ export function summariseKlaviyoMessages(rows) {
     };
   });
 
-  const total = all.reduce(
-    (sum, row) => ({
-      recipients: sum.recipients + row.recipients,
-      delivered: sum.delivered + row.delivered,
-      opens: sum.opens + row.opens,
-      clicks: sum.clicks + row.clicks,
-      revenue: sum.revenue + row.revenue
-    }),
-    { recipients: 0, delivered: 0, opens: 0, clicks: 0, revenue: 0 }
-  );
+  const totalOf = (rows) =>
+    rows.reduce(
+      (sum, row) => ({
+        recipients: sum.recipients + row.recipients,
+        delivered: sum.delivered + row.delivered,
+        opens: sum.opens + row.opens,
+        clicks: sum.clicks + row.clicks,
+        conversions: sum.conversions + row.conversions,
+        revenue: sum.revenue + row.revenue
+      }),
+      { recipients: 0, delivered: 0, opens: 0, clicks: 0, conversions: 0, revenue: 0 }
+    );
+  const total = totalOf(all);
 
   const withoutClicks = all.filter((row) => row.clicks === 0).length;
   const tooSmall = all.filter((row) => row.clicks > 0 && row.recipients < MIN_LISTED_RECIPIENTS).length;
@@ -287,8 +290,13 @@ export function summariseKlaviyoMessages(rows) {
       recipients: total.recipients,
       openRate: ratio(total.opens, total.delivered),
       clickRate: ratio(total.clicks, total.delivered),
-      revenuePerRecipient: ratio(total.revenue, total.recipients)
+      revenuePerRecipient: ratio(total.revenue, total.recipients),
+      conversions: total.conversions,
+      delivered: total.delivered,
+      clicks: total.clicks
     },
+    // Every send in the range, listed or not: campaign and flow revenue add up to the summary's.
+    byKind: { campaign: totalOf(all.filter((r) => r.kind === 'campaign')), flow: totalOf(all.filter((r) => r.kind === 'flow')) },
     rows: listed,
     hiddenWithoutClicks: withoutClicks,
     hiddenTooSmall: tooSmall

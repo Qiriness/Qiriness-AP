@@ -1,116 +1,66 @@
 /**
- * The Marketing & funnel panel.
+ * The Marketing & funnel panel: two tabs over one range, chosen by `?tab=`.
  *
- * WHAT IS MEASURED: sessions, conversion and traffic by source, live from
- * Shopify Analytics (./analytics.ts); purchases; the promotions every order
- * recorded (insights_promotions); the basket split with and without one
- * (insights_sales_overview); and the newsletter list (the Customers panel's
- * reads, Shopify customers only).
+ *  - Marketing Performance (default): the executive figures, provider against
+ *    Shopify attribution per channel, paid highlights, Klaviyo and the
+ *    newsletter. ./marketing-performance-service.ts
+ *  - Funnel & Website (`?tab=funnel`): the session funnel with its filters,
+ *    landing pages, collections, products, devices, checkout and the
+ *    optimisation list. ./website-funnel-service.ts
  *
- * WHAT IS NOT, AND WHY IT IS NOT A PERMISSION: the funnel between a session and
- * a purchase — product views, add to cart, reached checkout. ShopifyQL has no
- * cart or checkout dataset (measured 2026-09-23; see DECISIONS.md § Insights),
- * so those steps stay blocked with the reason rather than drawn as zeros.
- * Klaviyo is read from the nightly sync's tables (klaviyo_flow_days,
- * klaviyo_campaigns) through insights_klaviyo_messages. Paid and social come
- * from the Meta / Google Ads sync (70_social.sql) through social-service.ts —
- * the same sums the Social media panel prints; the revenue each acquisition
- * channel is credited with still comes from Shopify's own attribution.
+ * Only the open tab is read: each costs ShopifyQL points, and the other tab
+ * is one click (one render) away. Promotions and discounting moved to Sales
+ * (./promotions-service.ts).
  *
  * Server-only; see ./shared.ts for why nothing here pages rows.
  */
 
-import { KLAVIYO_RPC, RPC, T } from "../../../../scripts/lib/tables.mjs";
+import { KLAVIYO_RPC } from "../../../../scripts/lib/tables.mjs";
 import { readKlaviyoConnection } from "../../../../scripts/lib/klaviyo-sync.mjs";
 import { summariseKlaviyoMessages } from "../../../../scripts/lib/klaviyo-reports.mjs";
-import { getMarketingSocial } from "./social-service";
-import { supabaseSelect } from "../../../../scripts/lib/supabase-rest-client.mjs";
-import type { KlaviyoMessageRow, KlaviyoPerformance, MarketingPanel, PromotionRow } from "../../types";
-import { orderArgs, rangeArgs, type InsightsContext } from "./context";
-import { liveChannels, liveFunnel, liveLandingTypes, liveProductPages, liveTotals } from "./analytics";
+import { parseAttributionModel } from "../../../../scripts/lib/storefront-marketing.mjs";
+import type { AttributionModel, KlaviyoSection, MarketingFunnelPanel, MarketingTab } from "../../marketing-types";
+import type { KlaviyoMessageRow } from "../../types";
+import { rangeArgs, type InsightsContext, type SearchParams } from "./context";
 import { getNewsletterActivity } from "./customer-activity-service";
-import { getOrdersSummary, getSalesOverviewFigures } from "./orders";
-import { callRpc, count, getSupabaseClient } from "./shared";
+import { readMarketingPerformance } from "./marketing-performance-service";
+import { readWebsitePerformance } from "./website-funnel-service";
+import { callRpc, getSupabaseClient } from "./shared";
 
-/** How many promotions the table lists before full price. */
-const PROMOTIONS = 12;
+export interface MarketingParams {
+  tab: MarketingTab;
+  model: AttributionModel;
+  country: string | null;
+}
 
-export async function getMarketingPanel(ctx: InsightsContext): Promise<MarketingPanel> {
-  // Shopify's cards, started first and awaited card by card by the view. The
-  // panel shows no comparison for traffic, so the earlier period is not asked.
-  const totals = liveTotals(ctx, { compare: false });
-  const landingTypes = liveLandingTypes(ctx);
-  const titles = productTitlesByHandle(ctx.shopId).catch(() => new Map<string, string>());
-  const live = {
-    totals,
-    funnel: liveFunnel(totals, landingTypes),
-    channels: liveChannels(ctx),
-    landingTypes,
-    // The traffic rows name a URL; the catalogue names the product. Matching on
-    // handle is exact — every one of this shop's 116 products has one — and a
-    // page whose handle no longer exists keeps its path rather than going blank.
-    productPages: Promise.all([liveProductPages(ctx), titles]).then(([pages, byHandle]) => ({
-      ...pages,
-      value: pages.value.map((page) => ({ ...page, title: page.handle ? byHandle.get(page.handle) ?? null : null })),
-    })),
+const first = (value: string | string[] | undefined) => (Array.isArray(value) ? value[0] : value);
+
+export function parseMarketingParams(searchParams: SearchParams): MarketingParams {
+  return {
+    tab: first(searchParams.tab) === "funnel" ? "funnel" : "marketing",
+    model: parseAttributionModel(first(searchParams.attr)) as AttributionModel,
+    country: first(searchParams.country)?.trim() || null,
   };
-
-  const [summary, figures, promotions, newsletter, klaviyo, social] = await Promise.all([
-    getOrdersSummary(ctx),
-    getSalesOverviewFigures(ctx),
-    getPromotions(ctx),
-    getNewsletterActivity(ctx),
-    getKlaviyoPerformance(ctx),
-    getMarketingSocial(ctx),
-  ]);
-
-  return { summary, live, figures, promotions, newsletter, klaviyo, social };
 }
 
-/**
- * Handle -> title for the whole catalogue: 116 rows on this shop, two columns,
- * one read. Small enough to take whole, unlike anything customer- or
- * order-sized (see ./shared.ts on why nothing here pages).
- */
-async function productTitlesByHandle(shopId: string): Promise<Map<string, string>> {
-  const rows = (await supabaseSelect(getSupabaseClient(), T.PRODUCTS, { shop_id: shopId }, "handle,title", {
-    limit: 500,
-  })) as { handle: string | null; title: string | null }[];
-  const titles = new Map<string, string>();
-  for (const row of rows ?? []) {
-    if (row.handle && row.title) titles.set(row.handle, row.title);
+export async function getMarketingPanel(ctx: InsightsContext, params: MarketingParams): Promise<MarketingFunnelPanel> {
+  if (params.tab === "funnel") {
+    return { tab: "funnel", performance: readWebsitePerformance(ctx, params.country) };
   }
-  return titles;
+  const [klaviyo, newsletter] = await Promise.all([getKlaviyoSection(ctx), getNewsletterActivity(ctx)]);
+  const own = klaviyo.blockedReason || !klaviyo.summary ? null : { revenue: klaviyo.summary.revenue, conversions: klaviyo.conversions ?? 0 };
+  return {
+    tab: "marketing",
+    model: params.model,
+    // Not awaited: the view streams it in while the database figures render.
+    performance: readMarketingPerformance(ctx, params.model, own, klaviyo.lastSyncAt, klaviyo.blockedReason),
+    klaviyo,
+    newsletter,
+  };
 }
 
-/**
- * Promotions in the range, full price last. On a marketplace the new-customer
- * column is null: every marketplace buyer is a new record per order.
- */
-export async function getPromotions(ctx: InsightsContext, window = ctx.range): Promise<PromotionRow[]> {
-  const rows = await callRpc<Record<string, unknown>>(RPC.INSIGHTS_PROMOTIONS, {
-    ...orderArgs(ctx, window),
-    p_people_not_channels: [...ctx.marketplaces.handles],
-    p_limit: PROMOTIONS,
-  });
-  const marketplace = ctx.marketplaces.isMarketplace(ctx.platform);
-  const mapped = rows.map(
-    (row): PromotionRow => ({
-      name: (row.promotion as string | null) ?? null,
-      kind: (row.kind as string | null) ?? null,
-      target: (row.target as string | null) ?? null,
-      orders: count(row.orders),
-      revenue: count(row.revenue),
-      discount: count(row.discount),
-      newCustomerOrders: marketplace ? null : count(row.new_customer_orders),
-    })
-  );
-  // SQL returns full price last already; kept explicit so a reorder there cannot move it.
-  return [...mapped.filter((p) => p.name !== null), ...mapped.filter((p) => p.name === null)];
-}
-
-function klaviyoBlocked(blockedReason: string, lastSyncAt: string | null = null): KlaviyoPerformance {
-  return { blockedReason, lastSyncAt, summary: null, rows: [], hiddenWithoutClicks: 0, hiddenTooSmall: 0 };
+function klaviyoBlocked(blockedReason: string, lastSyncAt: string | null = null): KlaviyoSection {
+  return { blockedReason, lastSyncAt, summary: null, rows: [], hiddenWithoutClicks: 0, hiddenTooSmall: 0, byKind: null, conversions: null };
 }
 
 /**
@@ -118,7 +68,7 @@ function klaviyoBlocked(blockedReason: string, lastSyncAt: string | null = null)
  * online-store orders only, so on a marketplace platform there is nothing of
  * Klaviyo's to show. A failed read blocks this card alone, never the panel.
  */
-async function getKlaviyoPerformance(ctx: InsightsContext): Promise<KlaviyoPerformance> {
+async function getKlaviyoSection(ctx: InsightsContext): Promise<KlaviyoSection> {
   if (ctx.marketplaces.isMarketplace(ctx.platform)) {
     return klaviyoBlocked("insights.marketing.klaviyoMarketplace");
   }
@@ -129,7 +79,7 @@ async function getKlaviyoPerformance(ctx: InsightsContext): Promise<KlaviyoPerfo
     if (!lastSyncAt) return klaviyoBlocked("insights.marketing.klaviyoNoSync");
 
     const rows = await callRpc<Record<string, unknown>>(KLAVIYO_RPC.MESSAGES, rangeArgs(ctx));
-    const { summary, rows: clicked, hiddenWithoutClicks, hiddenTooSmall } = summariseKlaviyoMessages(rows);
+    const { summary, byKind, rows: clicked, hiddenWithoutClicks, hiddenTooSmall } = summariseKlaviyoMessages(rows);
     // Dates leave here as YYYY-MM-DD on the SHOP's clock: a campaign sent at
     // 00:00 Paris is 22:00 UTC the day before, and the card slices the date.
     const local = (iso: string | null) => (iso ? shopDate(iso, ctx.tz) : null);
@@ -140,6 +90,8 @@ async function getKlaviyoPerformance(ctx: InsightsContext): Promise<KlaviyoPerfo
       rows: clicked.map((row: KlaviyoMessageRow) => ({ ...row, sentAt: local(row.sentAt) })),
       hiddenWithoutClicks,
       hiddenTooSmall,
+      byKind,
+      conversions: summary.conversions,
     };
   } catch (error) {
     return klaviyoBlocked(`Klaviyo figures could not be read: ${error instanceof Error ? error.message : "unknown error"}`);

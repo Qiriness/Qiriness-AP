@@ -139,6 +139,8 @@ below. `llm_usage` holds 2174 calls.
 
 ## Next Steps
 
+**Marketing & funnel (2026-11-25):** deploy the web app and run VALIDATION_LOG item 69. The next pieces, each with its source in `docs/marketing-funnel-redesign.md` § 3: the web pixel (new scopes `write_pixels`, `read_customer_events`, owner approval), the annotations and cost-assumption tables (migrations), the Klaviyo sync additions (bounces, flow messages, forms), per-order acquisition for cohorts and revenue per landing page.
+
 **Storefront Agent dashboard (2026-10-30):** migration 07 is applied and the history backfilled; deploy the web app and `shopify app deploy` the widget from the repo root; then VALIDATION_LOG → Storefront Agent dashboard.
 
 **Barbara Gould in Insights (2026-10-26):** app installed (`gurkk8-er.myshopify.com`); set `DASHBOARD_SHOPS` on Vercel and as a GitHub variable. Run the nightly once, then work through VALIDATION_LOG → Barbara Gould in Insights.

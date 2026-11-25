@@ -18,6 +18,7 @@ Conventions: `*.test.mjs` sits next to its source (`npm test` = `node --test`); 
 | `docs/schema/surfaces.md` | what a page shows, which roles see it, which services feed it |
 | `docs/schema/worker.md` | the poll's pass order (load-bearing) and the agent CLIs |
 | `docs/database-refactor-plan.md` | the database refactor in progress (started 2026-10-12) |
+| `docs/marketing-funnel-redesign.md` | Marketing & funnel: every requested metric mapped to its source, and what remains (pixel, Klaviyo, costs, cohorts) |
 
 ## Top level
 

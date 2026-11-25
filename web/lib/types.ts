@@ -1919,23 +1919,6 @@ export interface LandingType {
 }
 
 /**
- * One product page sessions ARRIVED on. Entries, not views: Shopify keeps no
- * product-view metric, so a session that landed elsewhere and then browsed to
- * this product is not counted. A floor per page, and not a funnel stage.
- */
-export interface ProductPage {
-  path: string;
-  /** The Shopify handle out of the path, for naming it from our catalogue. */
-  handle: string | null;
-  /** The product's title once matched on handle; the path is shown when it is not. */
-  title: string | null;
-  sessions: number | null;
-  visitors: number | null;
-  cartSessions: number | null;
-  cartRate: number | null;
-}
-
-/**
  * One Shopify-backed part of a panel, resolved on its own so a card waiting on
  * the rate limit holds up nothing else. `value` is always present — empty when
  * blocked — and `blockedReason` is what the card prints instead of a figure.
@@ -1977,16 +1960,6 @@ export interface SalesSeries {
   netSales: SeriesPoint[];
   orders: SeriesPoint[];
   aov: SeriesPoint[];
-}
-
-/** The Marketing panel's Shopify cards, each a promise of its own. */
-export interface MarketingLive {
-  totals: Promise<LivePart<Compared<StorefrontTotals>>>;
-  funnel: Promise<LivePart<FunnelStep[]>>;
-  channels: Promise<LivePart<StorefrontChannel[]>>;
-  landingTypes: Promise<LivePart<LandingType[]>>;
-  /** Busiest first, named from our catalogue by handle. */
-  productPages: Promise<LivePart<ProductPage[]>>;
 }
 
 // --- Overview, Marketing & funnel, the monthly report ------------------------
@@ -2063,19 +2036,6 @@ export interface PromotionRow {
   discount: number;
   /** Null on a marketplace, where every buyer is a new customer record. */
   newCustomerOrders: number | null;
-}
-
-export interface MarketingPanel {
-  summary: Compared<OrdersSummary>;
-  live: MarketingLive;
-  figures: Compared<SalesOverviewFigures>;
-  promotions: PromotionRow[];
-  /** The list's movement and what it captured — moved here from Customers. */
-  newsletter: NewsletterActivity;
-  /** Klaviyo flows and campaigns in the range, from the nightly sync. */
-  klaviyo: KlaviyoPerformance;
-  /** Meta / Google Ads and Instagram / Facebook in the range (social-service.ts). */
-  social: import("./social-types").MarketingSocial;
 }
 
 /** One flow or campaign on the Marketing card. Rates are null when their denominator is 0. */
@@ -2263,6 +2223,8 @@ export interface SegmentFinderResult {
 
 export interface SalesPanel {
   summary: Compared<OrdersSummary>;
+  /** Promotions, discounts and gifts (moved from Marketing & funnel, 2026-11-25). */
+  promotions: import("./server/insights/promotions-service").PromotionsSection;
   /** Days of the range elapsed so far — the divisor behind "per day". */
   days: number;
   revenue: SeriesPoint[];

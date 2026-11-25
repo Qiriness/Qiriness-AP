@@ -1,3 +1,4 @@
+import { PromotionsSection } from "./PromotionsSection";
 import type { SalesPanel } from "@/lib/types";
 import { CollectionMix } from "./CollectionMix";
 import { CountrySales } from "./CountrySales";
@@ -160,6 +161,8 @@ export function SalesView({ panel, compareLabel }: { panel: SalesPanel; compareL
           <ProductCustomerMixCard mix={panel.productCustomerMix} />
         </Card>
       </Grid>
+
+      <PromotionsSection section={panel.promotions} summary={panel.summary} compareLabel={compareLabel} />
     </>
   );
 }

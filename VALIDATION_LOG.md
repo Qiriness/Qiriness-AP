@@ -42,6 +42,15 @@ as its own item: `llm_usage` (item 14), `categorisation_review` (item 15), and
 
 Closed items (a struck-through heading) are archived verbatim in `docs/archive/VALIDATION_LOG-closed.md`; move an item there when its check has been run.
 
+## 69. Marketing & funnel redesign: computed on live data in a script, never rendered — 2026-11-25
+
+Deploy, then on Qiriness, Last 30 days:
+- **Marketing tab.** Website net sales equals the Overview's net sales with the platform on Shopify. Ad spend per platform equals Social media → Paid. Open Shopify admin → Analytics → Marketing (last non-direct click) for the same days: Google paid search and Meta paid social orders and sales match the provider cards' Shopify column to the order. Switch `?attr=first`: the totals do not move, the split does.
+- **Klaviyo:** the tiles' Klaviyo revenue equals the old card's total for the range; campaigns and flows tables sum (with the hidden sends) to it.
+- **Funnel tab.** All filters off: sessions and conversion equal the Overview's. Mobile + paid social on the LED mask page: the expanded row and the matrix agree. A country from the list re-renders. The landing pages' sessions sum to the funnel's sessions minus the tail past 400 pages.
+- **Sales:** the promotions table and the three discount tiles show what Marketing showed before for the same range.
+- **Wording:** read every tooltip in French and in English once.
+
 ## 67. Egress: agent fingerprint, customer index delta and cart-code reads built, not deployed — 2026-11-08
 
 **Check after deploy** (web for the agent, the worker for the index):
